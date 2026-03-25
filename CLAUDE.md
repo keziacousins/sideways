@@ -21,6 +21,21 @@ pnpm --filter @sideways/web dev      # Web on :4000
 - `shared/` — shared libraries (`@sideways/types`, `@sideways/markdown`)
 - `packages/` — apps (`@sideways/server`, `@sideways/web`, plus stubs for `cli`, `mcp`, `pdf`)
 
+## Infrastructure
+
+Backing services (Postgres, SeaweedFS, Ory Hydra) run in a Tart VM called `localhost` on `host-machine`, reachable via Tailscale MagicDNS. See `infra-plan.md` for the general VM pattern.
+
+- VM config: `infra/compose.yml`, `infra/init-db.sql`
+- General VM tooling lives on host-machine at `~/vm-infra/`
+
+```bash
+# Deploy/update services
+scp infra/compose.yml infra/init-db.sql $DEPLOY_HOST:~/
+ssh $DEPLOY_HOST "docker compose up -d"
+```
+
+Services are at `localhost:<port>` — use this hostname in `.env`.
+
 ## Notes
 
 - Astro is v5 with `@astrojs/node@9` — the v10 adapter requires Astro v6.

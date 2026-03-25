@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: sideways
+      POSTGRES_PASSWORD: sideways
+      POSTGRES_DB: sideways
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+
+  seaweedfs-master:
+    image: chrislusf/seaweedfs
+    command: master -ip=seaweedfs-master
+    ports:
+      - "9333:9333"
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs
+    command: volume -mserver=seaweedfs-master:9333 -port=8080 -ip=seaweedfs-volume
+    ports:
+      - "8080:8080"
+    depends_on:
+      - seaweedfs-master
+    volumes:
+      - swdata:/data
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs
+    command: filer -master=seaweedfs-master:9333
+    ports:
+      - "8888:8888"
+    depends_on:
+      - seaweedfs-master
+      - seaweedfs-volume
+
+  hydra:
+    image: oryd/hydra:v2.2
+    command: serve all --dev
+    ports:
+      - "4444:4444"   # public (token endpoint)
+      - "4445:4445"   # admin
+    environment:
+      DSN: postgres://sideways:sideways@postgres:5432/hydra?sslmode=disable
+      URLS_SELF_ISSUER: http://localhost:4444
+      URLS_LOGIN: http://localhost:4000/login
+      URLS_CONSENT: http://localhost:4000/consent
+    depends_on:
+      - postgres
+
+  hydra-migrate:
+    image: oryd/hydra:v2.2
+    command: migrate sql --yes postgres://sideways:sideways@postgres:5432/hydra?sslmode=disable
+    depends_on:
+      - postgres
+    restart: "no"
+
+volumes:
+  pgdata:
+  swdata:
