@@ -15,6 +15,13 @@
       "when": 1774476000000,
       "tag": "0001_add_spaces_sections",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774480000000,
+      "tag": "0002_add_api_keys",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     testTimeout: 10000,
+    exclude: ["**/node_modules/**", "**/references/**", "**/dist/**"],
     env: {
       DATABASE_URL:
         "postgres://sideways:sideways@localhost:5432/sideways_test",

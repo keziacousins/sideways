@@ -1,0 +1,132 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+const HYDRA_PUBLIC = import.meta.env.HYDRA_PUBLIC_URL || "http://localhost:4444";
+
+// Check if this is a Hydra login_challenge redirect (user needs to log in via form)
+const loginChallenge = Astro.url.searchParams.get("login_challenge");
+const error = Astro.url.searchParams.get("error");
+---
+
+<BaseLayout title="Sign in">
+  <div class="sw-auth-page">
+    <h1>Sign in to Sideways</h1>
+
+    {error && <p class="sw-error">{error}</p>}
+
+    <form id="login-form" class="sw-auth-form">
+      <input type="email" name="email" placeholder="Email" required autofocus />
+      <input type="password" name="password" placeholder="Password" required />
+      <button type="submit">Sign in</button>
+    </form>
+
+    <p class="sw-auth-alt">
+      Don't have an account? <a href="/auth/signup">Sign up</a>
+    </p>
+  </div>
+</BaseLayout>
+
+<script define:vars={{ API_URL, HYDRA_PUBLIC, loginChallenge }}>
+  const form = document.getElementById("login-form");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
+    const email = formData.get("email");
+    const password = formData.get("password");
+
+    try {
+      // Authenticate via Kratos (through our API proxy)
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Login failed");
+        return;
+      }
+
+      // Got a nonce — initiate OAuth2 flow with it as login_hint
+      const state = crypto.randomUUID() + crypto.randomUUID();
+      const authUrl = new URL(`${HYDRA_PUBLIC}/oauth2/auth`);
+      authUrl.searchParams.set("client_id", "sideways-web");
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", "openid offline_access");
+      authUrl.searchParams.set("redirect_uri", "http://localhost:4000/auth/callback");
+      authUrl.searchParams.set("state", state);
+      authUrl.searchParams.set("login_hint", data.nonce);
+
+      // Store state for CSRF validation
+      sessionStorage.setItem("oauth_state", state);
+
+      window.location.href = authUrl.toString();
+    } catch (err) {
+      alert("Connection error. Is the API server running?");
+    }
+  });
+</script>
+
+<style>
+  .sw-auth-page {
+    max-width: 400px;
+    margin: 4rem auto;
+    padding: 0 2rem;
+  }
+
+  .sw-auth-page h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+  }
+
+  .sw-auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .sw-auth-form input {
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 1rem;
+  }
+
+  .sw-auth-form button {
+    padding: 0.75rem;
+    background: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  .sw-auth-form button:hover {
+    background: #4f46e5;
+  }
+
+  .sw-auth-alt {
+    margin-top: 1.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+  }
+
+  .sw-auth-alt a {
+    color: #6366f1;
+    text-decoration: none;
+  }
+
+  .sw-error {
+    color: #dc2626;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background: #fef2f2;
+    border-radius: 6px;
+    font-size: 0.9rem;
+  }
+</style>

@@ -1,0 +1,116 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+const HYDRA_PUBLIC = import.meta.env.HYDRA_PUBLIC_URL || "http://localhost:4444";
+---
+
+<BaseLayout title="Sign up">
+  <div class="sw-auth-page">
+    <h1>Create your Sideways account</h1>
+
+    <form id="signup-form" class="sw-auth-form">
+      <input type="text" name="name" placeholder="Name" required autofocus />
+      <input type="email" name="email" placeholder="Email" required />
+      <input type="password" name="password" placeholder="Password" required minlength="8" />
+      <button type="submit">Create account</button>
+    </form>
+
+    <p class="sw-auth-alt">
+      Already have an account? <a href="/auth/login">Sign in</a>
+    </p>
+  </div>
+</BaseLayout>
+
+<script define:vars={{ API_URL, HYDRA_PUBLIC }}>
+  const form = document.getElementById("signup-form");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
+    const name = formData.get("name");
+    const email = formData.get("email");
+    const password = formData.get("password");
+
+    try {
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Registration failed");
+        return;
+      }
+
+      // Got a nonce — initiate OAuth2 flow
+      const state = crypto.randomUUID() + crypto.randomUUID();
+      const authUrl = new URL(`${HYDRA_PUBLIC}/oauth2/auth`);
+      authUrl.searchParams.set("client_id", "sideways-web");
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", "openid offline_access");
+      authUrl.searchParams.set("redirect_uri", "http://localhost:4000/auth/callback");
+      authUrl.searchParams.set("state", state);
+      authUrl.searchParams.set("login_hint", data.nonce);
+
+      sessionStorage.setItem("oauth_state", state);
+      window.location.href = authUrl.toString();
+    } catch (err) {
+      alert("Connection error. Is the API server running?");
+    }
+  });
+</script>
+
+<style>
+  .sw-auth-page {
+    max-width: 400px;
+    margin: 4rem auto;
+    padding: 0 2rem;
+  }
+
+  .sw-auth-page h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+  }
+
+  .sw-auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .sw-auth-form input {
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 1rem;
+  }
+
+  .sw-auth-form button {
+    padding: 0.75rem;
+    background: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  .sw-auth-form button:hover {
+    background: #4f46e5;
+  }
+
+  .sw-auth-alt {
+    margin-top: 1.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+  }
+
+  .sw-auth-alt a {
+    color: #6366f1;
+    text-decoration: none;
+  }
+</style>

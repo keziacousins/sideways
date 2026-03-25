@@ -6,6 +6,7 @@ import { createStorage } from "@sideways/storage";
 import { createDocumentRoutes } from "./routes/documents.js";
 import { createSpaceRoutes } from "./routes/spaces.js";
 import { createAuthRoutes } from "./routes/auth.js";
+import { createKeyRoutes } from "./routes/keys.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { env } from "./env.js";
 
@@ -27,6 +28,7 @@ app.route("/auth", createAuthRoutes(db));
 // API routes
 app.route("/api/spaces", createSpaceRoutes(db));
 app.route("/api/documents", createDocumentRoutes(db, storage));
+app.route("/api/keys", createKeyRoutes(db));
 
 serve({ fetch: app.fetch, port: env.port }, () => {
   console.log(`Sideways API running on http://localhost:${env.port}`);

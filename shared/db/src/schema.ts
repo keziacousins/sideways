@@ -137,6 +137,23 @@ export const assets = pgTable("assets", {
   index("assets_space_idx").on(t.spaceId),
 ]);
 
+/** Personal access tokens for API/CLI auth */
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  /** SHA-256 hash of the key — the raw key is only shown once at creation */
+  keyHash: text("key_hash").notNull(),
+  /** First 8 chars of the key for display (e.g. "sk-a1b2c3d4...") */
+  prefix: text("prefix").notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("api_keys_hash_idx").on(t.keyHash),
+  index("api_keys_user_idx").on(t.userId),
+]);
+
 /** Explicit share grants for spaces */
 export const spaceMembers = pgTable("space_members", {
   id: uuid("id").primaryKey().defaultRandom(),
