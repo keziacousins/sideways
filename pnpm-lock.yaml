@@ -11,6 +11,9 @@ importers:
       postgres:
         specifier: ^3.4.8
         version: 3.4.8
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       vitest:
         specifier: ^4.1.1
         version: 4.1.1(@types/node@22.19.15)(vite@6.4.1(@types/node@22.19.15)(tsx@4.21.0)(yaml@2.8.3))

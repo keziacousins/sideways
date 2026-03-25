@@ -10,6 +10,8 @@ import {
   users,
 } from "@sideways/db";
 import type { Storage } from "@sideways/storage";
+import type { AuthUser } from "../middleware/auth.js";
+import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -24,12 +26,38 @@ async function ensureSystemUser(db: Database): Promise<string> {
   return user.id;
 }
 
+/** Get the current user's ID, or fall back to system user */
+async function getUserId(
+  c: { get: (key: string) => any },
+  db: Database,
+): Promise<string> {
+  const user = c.get("user") as AuthUser | null;
+  if (user) return user.id;
+  return ensureSystemUser(db);
+}
+
 function contentHash(content: string): string {
   return createHash("sha256").update(content).digest("hex").slice(0, 16);
 }
 
 export function createDocumentRoutes(db: Database, storage: Storage) {
   const router = new Hono();
+
+  /** Find a space and check read access. Returns space or error response. */
+  async function resolveSpace(c: any, spaceSlug: string) {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, spaceSlug),
+    });
+    if (!space) return { error: c.json({ error: "Space not found" }, 404) };
+
+    const user = c.get("user") as AuthUser | null;
+    const allowed = await canAccessSpace(
+      db, space.id, space.visibility, space.ownerId, user,
+    );
+    if (!allowed) return { error: c.json({ error: "Forbidden" }, 403) };
+
+    return { space };
+  }
 
   /** List all documents, optionally filtered by space */
   router.get("/", async (c) => {
@@ -56,10 +84,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
   /** Get a document by space/slug */
   router.get("/:space/:slug", async (c) => {
-    const space = await db.query.spaces.findFirst({
-      where: eq(spaces.slug, c.req.param("space")),
-    });
-    if (!space) return c.json({ error: "Space not found" }, 404);
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
 
     const doc = await db.query.documents.findFirst({
       where: and(
@@ -79,10 +106,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
   /** Get a document rendered as HTML */
   router.get("/:space/:slug/render", async (c) => {
-    const space = await db.query.spaces.findFirst({
-      where: eq(spaces.slug, c.req.param("space")),
-    });
-    if (!space) return c.json({ error: "Space not found" }, 404);
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
 
     const doc = await db.query.documents.findFirst({
       where: and(
@@ -136,7 +162,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       sectionSlug?: string;
     }>();
 
-    const systemUserId = await ensureSystemUser(db);
+    const userId = await getUserId(c, db);
     const content = body.content ?? "";
     const hash = contentHash(content);
 
@@ -151,7 +177,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
           slug: spaceSlug,
           name: spaceSlug,
           visibility: "private",
-          ownerId: systemUserId,
+          ownerId: userId,
         })
         .returning();
     }
@@ -186,7 +212,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
           title: body.title ?? existing.title,
           content,
           contentHash: hash,
-          createdBy: systemUserId,
+          createdBy: userId,
         });
       }
 
@@ -209,18 +235,21 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       title: doc.title,
       content,
       contentHash: hash,
-      createdBy: systemUserId,
+      createdBy: userId,
     });
 
     return c.json(doc, 201);
   });
 
-  /** Delete a document */
+  /** Delete a document — requires write access */
   router.delete("/:space/:slug", async (c) => {
-    const space = await db.query.spaces.findFirst({
-      where: eq(spaces.slug, c.req.param("space")),
-    });
-    if (!space) return c.json({ error: "Space not found" }, 404);
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const user = c.get("user") as AuthUser | null;
+    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user);
+    if (!canWrite) return c.json({ error: "Forbidden" }, 403);
 
     const doc = await db.query.documents.findFirst({
       where: and(
@@ -236,10 +265,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
   /** List versions */
   router.get("/:space/:slug/versions", async (c) => {
-    const space = await db.query.spaces.findFirst({
-      where: eq(spaces.slug, c.req.param("space")),
-    });
-    if (!space) return c.json({ error: "Space not found" }, 404);
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
 
     const doc = await db.query.documents.findFirst({
       where: and(

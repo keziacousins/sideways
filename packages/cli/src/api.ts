@@ -1,13 +1,22 @@
+import { getStoredToken } from "./auth.js";
+
 /**
  * Thin API client for the Sideways server.
  */
 
 export function createClient(baseUrl: string) {
   async function request(path: string, options?: RequestInit) {
+    const token = getStoredToken();
+    const authHeaders: Record<string, string> = {};
+    if (token) {
+      authHeaders["Authorization"] = `Bearer ${token.access_token}`;
+    }
+
     const res = await fetch(`${baseUrl}${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
         ...options?.headers,
       },
     });

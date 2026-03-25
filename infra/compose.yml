@@ -49,9 +49,11 @@ services:
       - "4445:4445"   # admin
     environment:
       DSN: postgres://sideways:sideways@postgres:5432/hydra?sslmode=disable
+      SECRETS_SYSTEM: localhost-secret-change-in-prod
       URLS_SELF_ISSUER: http://localhost:4444
-      URLS_LOGIN: http://localhost:4000/login
-      URLS_CONSENT: http://localhost:4000/consent
+      URLS_LOGIN: http://localhost:4000/auth/login
+      URLS_CONSENT: http://localhost:4000/auth/consent
+      URLS_LOGOUT: http://localhost:4000/auth/logout
     depends_on:
       - postgres
 

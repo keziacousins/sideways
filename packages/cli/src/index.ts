@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { basename, resolve, dirname } from "node:path";
 import { findConfig, createConfig, requireConfig } from "./config.js";
 import { createClient } from "./api.js";
+import { login, clearToken, getStoredToken } from "./auth.js";
 
 const program = new Command();
 
@@ -144,6 +145,54 @@ program
     for (const v of versions) {
       const date = new Date(v.createdAt).toLocaleString();
       console.log(`  v${v.version}  ${v.contentHash}  ${date}`);
+    }
+  });
+
+// ── login ─────────────────────────────────────────────────────────────
+
+program
+  .command("login")
+  .description("Authenticate with the Sideways server")
+  .option(
+    "--hydra <url>",
+    "Hydra public URL",
+    "http://localhost:4444",
+  )
+  .action(async (opts: { hydra: string }) => {
+    try {
+      await login(opts.hydra);
+      console.log("Logged in successfully.");
+    } catch (err: any) {
+      console.error(`Login failed: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// ── logout ────────────────────────────────────────────────────────────
+
+program
+  .command("logout")
+  .description("Clear stored authentication token")
+  .action(() => {
+    clearToken();
+    console.log("Logged out.");
+  });
+
+// ── whoami ────────────────────────────────────────────────────────────
+
+program
+  .command("whoami")
+  .description("Show current authentication status")
+  .action(() => {
+    const token = getStoredToken();
+    if (!token) {
+      console.log("Not logged in. Run `sideways login` to authenticate.");
+      return;
+    }
+    console.log("Authenticated.");
+    if (token.expires_at) {
+      const remaining = Math.round((token.expires_at - Date.now()) / 1000 / 60);
+      console.log(`Token expires in ${remaining} minutes.`);
     }
   });
 

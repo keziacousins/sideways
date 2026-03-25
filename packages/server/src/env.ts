@@ -5,4 +5,8 @@ export const env = {
     "postgres://sideways:sideways@localhost:5432/sideways",
   seaweedFilerUrl:
     process.env.SEAWEEDFS_FILER_URL || "http://localhost:8888",
+  hydraPublicUrl:
+    process.env.HYDRA_PUBLIC_URL || "http://localhost:4444",
+  hydraAdminUrl:
+    process.env.HYDRA_ADMIN_URL || "http://localhost:4445",
 };

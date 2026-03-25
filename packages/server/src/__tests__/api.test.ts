@@ -38,7 +38,7 @@ describe("API integration", () => {
         body: JSON.stringify({
           name: "Test Space",
           description: "Integration test space",
-          visibility: "private",
+          visibility: "public",
         }),
       });
       expect(status).toBe(201);
@@ -167,17 +167,12 @@ describe("API integration", () => {
       expect(status).toBe(404);
     });
 
-    it("deletes a document", async () => {
-      const { body } = await api(
+    it("rejects anonymous delete (requires write access)", async () => {
+      const { status } = await api(
         `/api/documents/${TEST_SPACE}/${TEST_SLUG}`,
         { method: "DELETE" },
       );
-      expect(body.deleted).toBe(true);
-
-      const { status } = await api(
-        `/api/documents/${TEST_SPACE}/${TEST_SLUG}`,
-      );
-      expect(status).toBe(404);
+      expect(status).toBe(403);
     });
   });
 });

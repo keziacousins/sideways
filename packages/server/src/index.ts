@@ -5,6 +5,8 @@ import { createDb } from "@sideways/db";
 import { createStorage } from "@sideways/storage";
 import { createDocumentRoutes } from "./routes/documents.js";
 import { createSpaceRoutes } from "./routes/spaces.js";
+import { createAuthRoutes } from "./routes/auth.js";
+import { authMiddleware } from "./middleware/auth.js";
 import { env } from "./env.js";
 
 const db = createDb(env.databaseUrl);
@@ -14,8 +16,15 @@ const app = new Hono();
 
 app.use("*", cors());
 
+// Auth middleware on all routes — sets user if token present, null otherwise
+app.use("*", authMiddleware(db));
+
 app.get("/health", (c) => c.json({ status: "ok" }));
 
+// Auth flow routes (login, consent, callback) — no auth required
+app.route("/auth", createAuthRoutes(db));
+
+// API routes
 app.route("/api/spaces", createSpaceRoutes(db));
 app.route("/api/documents", createDocumentRoutes(db, storage));
 
