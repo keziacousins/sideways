@@ -5,6 +5,7 @@
 set -e
 
 HYDRA_ADMIN_URL="${HYDRA_ADMIN_URL:-http://hydra:4445}"
+PUBLIC_URL="${PUBLIC_URL:-http://localhost:4000}"
 
 register_client() {
   CLIENT_ID="$1"
@@ -41,7 +42,7 @@ register_client "sideways-web" '{
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "scope": "openid offline_access",
-  "redirect_uris": ["http://localhost:4000/auth/callback"],
+  "redirect_uris": ["'"${PUBLIC_URL}"'/auth/callback"],
   "token_endpoint_auth_method": "none",
   "skip_consent": true
 }'

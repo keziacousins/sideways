@@ -22,10 +22,59 @@ app.use("*", authMiddleware(db));
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-// Auth flow routes (login, consent, callback) — no auth required
-app.route("/auth", createAuthRoutes(db));
+// Hydra public proxy — browser hits localhost, we forward to Hydra.
+// Preserves cookies/CSRF because the browser stays on localhost.
+// In production, nginx handles this instead.
+app.all("/oauth2/*", async (c) => {
+  const path = c.req.path;
+  const url = new URL(path, env.hydraPublicUrl);
+  url.search = new URL(c.req.url).search;
+
+  const headers = new Headers();
+  // Forward relevant headers
+  for (const key of ["cookie", "content-type", "authorization"]) {
+    const val = c.req.header(key);
+    if (val) headers.set(key, val);
+  }
+
+  const res = await fetch(url.toString(), {
+    method: c.req.method,
+    headers,
+    body: ["GET", "HEAD"].includes(c.req.method) ? undefined : await c.req.blob(),
+    redirect: "manual",
+  });
+
+  // Forward response headers, rewriting Hydra's domain to localhost
+  const responseHeaders = new Headers();
+  res.headers.forEach((value, key) => {
+    // Rewrite Location header to keep browser on localhost
+    if (key.toLowerCase() === "location") {
+      value = value.replace(env.hydraPublicUrl, `http://localhost:${env.port}`);
+    }
+    // Rewrite Set-Cookie domain
+    if (key.toLowerCase() === "set-cookie") {
+      value = value.replace(/domain=[^;]*/gi, "");
+    }
+    responseHeaders.append(key, value);
+  });
+
+  return new Response(res.body, {
+    status: res.status,
+    headers: responseHeaders,
+  });
+});
+
+app.get("/.well-known/*", async (c) => {
+  const url = new URL(c.req.path, env.hydraPublicUrl);
+  const res = await fetch(url.toString());
+  return new Response(res.body, {
+    status: res.status,
+    headers: { "content-type": res.headers.get("content-type") || "application/json" },
+  });
+});
 
 // API routes
+app.route("/api/auth", createAuthRoutes(db));
 app.route("/api/spaces", createSpaceRoutes(db));
 app.route("/api/documents", createDocumentRoutes(db, storage));
 app.route("/api/keys", createKeyRoutes(db));

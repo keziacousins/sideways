@@ -18,13 +18,14 @@ if (!code) {
 }
 
 // Exchange code for tokens via our API proxy
-const tokenRes = await fetch(`${API_URL}/auth/token`, {
+const redirectUri = `${Astro.url.origin}/auth/callback`;
+const tokenRes = await fetch(`${API_URL}/api/auth/token`, {
   method: "POST",
   headers: { "Content-Type": "application/x-www-form-urlencoded" },
   body: new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    redirect_uri: "http://localhost:4000/auth/callback",
+    redirect_uri: redirectUri,
     client_id: "sideways-web",
   }),
 });

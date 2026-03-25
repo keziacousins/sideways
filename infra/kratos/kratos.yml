@@ -1,10 +1,7 @@
 version: v1.3.0
 
-dsn: postgres://sideways:sideways@postgres:5432/kratos?sslmode=disable
-
 serve:
   public:
-    base_url: http://localhost:4433/
     cors:
       enabled: true
       allowed_origins:
@@ -23,8 +20,6 @@ serve:
       exposed_headers:
         - Set-Cookie
       allow_credentials: true
-  admin:
-    base_url: http://localhost:4434/
 
 identity:
   default_schema_id: user
@@ -44,7 +39,7 @@ selfservice:
           hooks:
             - hook: web_hook
               config:
-                url: http://host.docker.internal:4100/auth/hooks/registration
+                url: http://host.docker.internal:4100/api/auth/hooks/registration
                 method: POST
                 body: file:///etc/kratos/webhook.registration.jsonnet
                 response:
@@ -75,12 +70,6 @@ selfservice:
 log:
   level: info
   format: text
-
-secrets:
-  cookie:
-    - localhost-kratos-cookie-secret-change-in-prod
-  cipher:
-    - localhost-kratos-cipher-key!!
 
 hashers:
   argon2:

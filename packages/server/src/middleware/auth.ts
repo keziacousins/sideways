@@ -47,7 +47,7 @@ export function authMiddleware(db: Database) {
       // JWT path
       try {
         const { payload } = await jwtVerify(token, JWKS, {
-          issuer: env.hydraPublicUrl,
+          issuer: env.hydraIssuerUrl,
         });
 
         // Custom claims injected at consent

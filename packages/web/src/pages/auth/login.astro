@@ -2,7 +2,6 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
-const HYDRA_PUBLIC = import.meta.env.HYDRA_PUBLIC_URL || "http://localhost:4444";
 
 // Check if this is a Hydra login_challenge redirect (user needs to log in via form)
 const loginChallenge = Astro.url.searchParams.get("login_challenge");
@@ -27,7 +26,7 @@ const error = Astro.url.searchParams.get("error");
   </div>
 </BaseLayout>
 
-<script define:vars={{ API_URL, HYDRA_PUBLIC, loginChallenge }}>
+<script define:vars={{ API_URL, loginChallenge }}>
   const form = document.getElementById("login-form");
 
   form.addEventListener("submit", async (e) => {
@@ -38,7 +37,7 @@ const error = Astro.url.searchParams.get("error");
 
     try {
       // Authenticate via Kratos (through our API proxy)
-      const res = await fetch(`${API_URL}/auth/login`, {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -52,7 +51,7 @@ const error = Astro.url.searchParams.get("error");
 
       // Got a nonce — redirect to API authorize endpoint
       // This initiates the OAuth2 flow server-side (handles state, CSRF)
-      window.location.href = `${API_URL}/auth/authorize?nonce=${data.nonce}`;
+      window.location.href = `${API_URL}/api/auth/authorize?nonce=${data.nonce}`;
     } catch (err) {
       alert("Connection error. Is the API server running?");
     }

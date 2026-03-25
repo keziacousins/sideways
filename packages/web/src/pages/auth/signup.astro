@@ -2,7 +2,6 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
-const HYDRA_PUBLIC = import.meta.env.HYDRA_PUBLIC_URL || "http://localhost:4444";
 ---
 
 <BaseLayout title="Sign up">
@@ -22,7 +21,7 @@ const HYDRA_PUBLIC = import.meta.env.HYDRA_PUBLIC_URL || "http://localhost:4444"
   </div>
 </BaseLayout>
 
-<script define:vars={{ API_URL, HYDRA_PUBLIC }}>
+<script define:vars={{ API_URL }}>
   const form = document.getElementById("signup-form");
 
   form.addEventListener("submit", async (e) => {
@@ -33,7 +32,7 @@ const HYDRA_PUBLIC = import.meta.env.HYDRA_PUBLIC_URL || "http://localhost:4444"
     const password = formData.get("password");
 
     try {
-      const res = await fetch(`${API_URL}/auth/register`, {
+      const res = await fetch(`${API_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
@@ -46,7 +45,7 @@ const HYDRA_PUBLIC = import.meta.env.HYDRA_PUBLIC_URL || "http://localhost:4444"
       }
 
       // Got a nonce — redirect to API authorize endpoint
-      window.location.href = `${API_URL}/auth/authorize?nonce=${data.nonce}`;
+      window.location.href = `${API_URL}/api/auth/authorize?nonce=${data.nonce}`;
     } catch (err) {
       alert("Connection error. Is the API server running?");
     }

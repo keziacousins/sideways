@@ -1,7 +1,5 @@
 version: v2.3.0
 
-dsn: postgres://sideways:sideways@postgres:5432/hydra?sslmode=disable
-
 serve:
   public:
     cors:
@@ -19,23 +17,12 @@ serve:
         - Content-Type
       allow_credentials: true
 
-urls:
-  self:
-    issuer: http://localhost:4444
-  login: http://localhost:4100/auth/login
-  consent: http://localhost:4100/auth/consent
-  logout: http://localhost:4100/auth/logout
-
 strategies:
   access_token: jwt
 
 log:
   level: info
   format: text
-
-secrets:
-  system:
-    - localhost-hydra-system-secret-change-in-prod!
 
 ttl:
   access_token: 15m

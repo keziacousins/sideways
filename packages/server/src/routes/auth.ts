@@ -235,7 +235,7 @@ export function createAuthRoutes(db: Database) {
     }
 
     // No valid nonce — redirect to web login page
-    return c.redirect(`http://localhost:4000/auth/login?login_challenge=${challenge}`);
+    return c.redirect(`${env.publicUrl}/auth/login?login_challenge=${challenge}`);
   });
 
   /**
@@ -247,11 +247,12 @@ export function createAuthRoutes(db: Database) {
     const nonce = c.req.query("nonce") || "";
     const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
 
-    const authUrl = new URL(`${env.hydraPublicUrl}/oauth2/auth`);
+    // Redirect to our own Hydra proxy (keeps browser on localhost)
+    const authUrl = new URL(`${env.publicApiUrl}/oauth2/auth`);
     authUrl.searchParams.set("client_id", "sideways-web");
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("scope", "openid offline_access");
-    authUrl.searchParams.set("redirect_uri", "http://localhost:4000/auth/callback");
+    authUrl.searchParams.set("redirect_uri", `${env.publicUrl}/auth/callback`);
     authUrl.searchParams.set("state", state);
     if (nonce) authUrl.searchParams.set("login_hint", nonce);
 
