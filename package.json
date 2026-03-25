@@ -2,8 +2,18 @@
   "name": "sideways",
   "private": true,
   "description": "Neither markup nor markdown, but something else entirely.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "packageManager": "pnpm@10.33.0",
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "sharp"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
+  },
+  "devDependencies": {
+    "vitest": "^4.1.1"
   }
 }

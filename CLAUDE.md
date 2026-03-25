@@ -10,6 +10,15 @@ pnpm --filter @sideways/server dev   # API on :4100
 pnpm --filter @sideways/web dev      # Web on :4000
 ```
 
+## Tests
+
+```bash
+pnpm test              # run all tests once
+pnpm test:watch        # watch mode
+```
+
+Integration tests require the API server running on :4100 with Postgres on localhost.
+
 ## Ports
 
 - 4000: Astro web app (SSR)
