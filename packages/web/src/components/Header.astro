@@ -1,0 +1,82 @@
+---
+const userName = await Astro.session?.get("user_name");
+const isLoggedIn = !!userName;
+---
+
+<header class="sw-site-header">
+  <div class="sw-header-inner">
+    <a href="/" class="sw-logo">Sideways</a>
+    <nav class="sw-header-nav">
+      {isLoggedIn ? (
+        <div class="sw-user-menu">
+          <span class="sw-user-name">{userName}</span>
+          <a href="/auth/logout" class="sw-auth-link">Sign out</a>
+        </div>
+      ) : (
+        <a href="/auth/login" class="sw-auth-link sw-sign-in">Sign in</a>
+      )}
+    </nav>
+  </div>
+</header>
+
+<style>
+  .sw-site-header {
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+  }
+
+  .sw-header-inner {
+    max-width: 72ch;
+    margin: 0 auto;
+    padding: 0.75rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .sw-logo {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1a1a2e;
+    text-decoration: none;
+    letter-spacing: -0.02em;
+  }
+
+  .sw-header-nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .sw-user-menu {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .sw-user-name {
+    font-size: 0.85rem;
+    color: #64748b;
+  }
+
+  .sw-auth-link {
+    font-size: 0.85rem;
+    color: #6366f1;
+    text-decoration: none;
+  }
+
+  .sw-auth-link:hover {
+    text-decoration: underline;
+  }
+
+  .sw-sign-in {
+    padding: 0.4rem 1rem;
+    border: 1px solid #6366f1;
+    border-radius: 6px;
+  }
+
+  .sw-sign-in:hover {
+    background: #6366f1;
+    color: white;
+  }
+</style>
