@@ -1,14 +1,26 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { Hono } from "hono";
+import { createDb } from "@sideways/db";
+import { createStorage } from "@sideways/storage";
+import { createDocumentRoutes } from "../routes/documents.js";
+import { createSpaceRoutes } from "../routes/spaces.js";
 
 /**
- * Integration tests against the running API server.
- * Requires: API running on localhost:4100, backed by real Postgres.
+ * Integration tests against a real Postgres (sideways_test database).
+ * Uses Hono's test client — no HTTP server needed.
  */
 
-const API = "http://localhost:4100";
+const db = createDb(process.env.DATABASE_URL!);
+const storage = createStorage({
+  filerUrl: process.env.SEAWEEDFS_FILER_URL || "http://localhost:8888",
+});
+
+const app = new Hono();
+app.route("/api/spaces", createSpaceRoutes(db));
+app.route("/api/documents", createDocumentRoutes(db, storage));
 
 async function api(path: string, options?: RequestInit) {
-  const res = await fetch(`${API}${path}`, {
+  const res = await app.request(path, {
     ...options,
     headers: { "Content-Type": "application/json", ...options?.headers },
   });
@@ -19,12 +31,6 @@ const TEST_SPACE = `test-${Date.now()}`;
 const TEST_SLUG = "test-doc";
 
 describe("API integration", () => {
-  beforeAll(async () => {
-    // Verify API is reachable
-    const { body } = await api("/health");
-    expect(body.status).toBe("ok");
-  });
-
   describe("spaces", () => {
     it("creates a space", async () => {
       const { status, body } = await api(`/api/spaces/${TEST_SPACE}`, {
@@ -116,7 +122,6 @@ describe("API integration", () => {
     });
 
     it("deduplicates identical content", async () => {
-      // Push same content again
       await api(`/api/documents/${TEST_SPACE}/${TEST_SLUG}`, {
         method: "PUT",
         body: JSON.stringify({
@@ -127,7 +132,7 @@ describe("API integration", () => {
       const { body: versions } = await api(
         `/api/documents/${TEST_SPACE}/${TEST_SLUG}/versions`,
       );
-      expect(versions.length).toBe(2); // still 2, not 3
+      expect(versions.length).toBe(2);
     });
 
     it("auto-creates space on document PUT", async () => {
@@ -144,14 +149,8 @@ describe("API integration", () => {
       );
       expect(status).toBe(201);
 
-      // Space should exist now
       const { body: space } = await api(`/api/spaces/${autoSpace}`);
       expect(space.slug).toBe(autoSpace);
-
-      // Clean up
-      await api(`/api/documents/${autoSpace}/some-doc`, {
-        method: "DELETE",
-      });
     });
 
     it("returns 404 for non-existent document", async () => {
