@@ -1,23 +1,22 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { renderMarkdown } from "@sideways/markdown";
 import "../../styles/document.css";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const { slug } = Astro.params;
 
-let doc: { title: string; content: string; tags: string[] } | null = null;
-let html = "";
+let doc: { title: string; html: string; tags: string[] } | null = null;
 
 try {
-  const res = await fetch(`${API_URL}/api/documents/${slug}`);
+  const res = await fetch(`${API_URL}/api/documents/${slug}/render`);
   if (res.ok) {
     doc = await res.json();
-    html = await renderMarkdown(doc!.content, { target: "web" });
   }
 } catch {
   // API not available
 }
+
+const html = doc?.html ?? "";
 ---
 
 <BaseLayout title={doc?.title ?? "Not Found"}>

@@ -1,9 +1,9 @@
 /* Sideways document theme — default */
 
 :root {
-  --sw-font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --sw-font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
-  --sw-font-serif: "Newsreader", "Georgia", serif;
+  --sw-font-sans: "Inter Variable", system-ui, -apple-system, sans-serif;
+  --sw-font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", monospace;
+  --sw-font-serif: "Newsreader Variable", "Georgia", serif;
 
   --sw-text: #1a1a2e;
   --sw-text-muted: #64748b;
