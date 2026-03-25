@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { basename, resolve, dirname } from "node:path";
 import { findConfig, createConfig, requireConfig } from "./config.js";
 import { createClient } from "./api.js";
-import { login, clearToken, getStoredToken } from "./auth.js";
+import { login, clearCredentials, getStoredCredentials } from "./auth.js";
 
 const program = new Command();
 
@@ -159,8 +159,9 @@ program
     "http://localhost:4444",
   )
   .action(async (opts: { hydra: string }) => {
+    const config = findConfig() ?? { api: "http://localhost:4100" };
     try {
-      await login(opts.hydra);
+      await login(opts.hydra, config.api);
       console.log("Logged in successfully.");
     } catch (err: any) {
       console.error(`Login failed: ${err.message}`);
@@ -172,10 +173,10 @@ program
 
 program
   .command("logout")
-  .description("Clear stored authentication token")
+  .description("Clear stored API key")
   .action(() => {
-    clearToken();
-    console.log("Logged out.");
+    clearCredentials();
+    console.log("Logged out. API key cleared.");
   });
 
 // ── whoami ────────────────────────────────────────────────────────────
@@ -184,15 +185,38 @@ program
   .command("whoami")
   .description("Show current authentication status")
   .action(() => {
-    const token = getStoredToken();
-    if (!token) {
+    const creds = getStoredCredentials();
+    if (!creds?.api_key) {
       console.log("Not logged in. Run `sideways login` to authenticate.");
       return;
     }
-    console.log("Authenticated.");
-    if (token.expires_at) {
-      const remaining = Math.round((token.expires_at - Date.now()) / 1000 / 60);
-      console.log(`Token expires in ${remaining} minutes.`);
+    console.log(`Authenticated with API key: ${creds.api_key.slice(0, 11)}...`);
+    console.log(`API: ${creds.api_url}`);
+  });
+
+// ── keys ──────────────────────────────────────────────────────────────
+
+program
+  .command("keys")
+  .description("List your API keys")
+  .action(async () => {
+    const config = findConfig() ?? { api: "http://localhost:4100" };
+    const client = createClient(config.api);
+
+    try {
+      const keys = await client.listKeys();
+      if (keys.length === 0) {
+        console.log("No API keys.");
+        return;
+      }
+      for (const k of keys) {
+        const lastUsed = k.lastUsedAt
+          ? new Date(k.lastUsedAt).toLocaleDateString()
+          : "never";
+        console.log(`  ${k.prefix}...  ${k.name}  (last used: ${lastUsed})`);
+      }
+    } catch (err: any) {
+      console.error(`Failed to list keys: ${err.message}`);
     }
   });
 

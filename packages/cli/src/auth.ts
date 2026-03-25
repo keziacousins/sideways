@@ -7,29 +7,26 @@ import { randomBytes, createHash } from "node:crypto";
 const TOKEN_DIR = join(homedir(), ".sideways");
 const TOKEN_FILE = join(TOKEN_DIR, "token.json");
 
-interface StoredToken {
-  access_token: string;
-  refresh_token?: string;
-  expires_at?: number;
+interface StoredCredentials {
+  api_key: string;
+  api_url: string;
 }
 
-export function getStoredToken(): StoredToken | null {
+export function getStoredCredentials(): StoredCredentials | null {
   if (!existsSync(TOKEN_FILE)) return null;
   try {
-    const data = JSON.parse(readFileSync(TOKEN_FILE, "utf-8"));
-    if (data.expires_at && Date.now() > data.expires_at) return null;
-    return data;
+    return JSON.parse(readFileSync(TOKEN_FILE, "utf-8"));
   } catch {
     return null;
   }
 }
 
-export function storeToken(token: StoredToken): void {
+export function storeCredentials(creds: StoredCredentials): void {
   mkdirSync(TOKEN_DIR, { recursive: true });
-  writeFileSync(TOKEN_FILE, JSON.stringify(token, null, 2), { mode: 0o600 });
+  writeFileSync(TOKEN_FILE, JSON.stringify(creds, null, 2), { mode: 0o600 });
 }
 
-export function clearToken(): void {
+export function clearCredentials(): void {
   if (existsSync(TOKEN_FILE)) {
     writeFileSync(TOKEN_FILE, "");
   }
@@ -37,9 +34,12 @@ export function clearToken(): void {
 
 /**
  * OAuth2 authorization code flow with PKCE.
- * Opens a local server to receive the callback, then exchanges the code.
+ * After getting a JWT, immediately creates an API key and stores it.
  */
-export async function login(hydraPublicUrl: string): Promise<StoredToken> {
+export async function login(
+  hydraPublicUrl: string,
+  apiUrl: string,
+): Promise<void> {
   const clientId = "sideways-cli";
   const redirectPort = 19876;
   const redirectUri = `http://localhost:${redirectPort}/callback`;
@@ -125,14 +125,22 @@ export async function login(hydraPublicUrl: string): Promise<StoredToken> {
 
   const tokens = await tokenRes.json();
 
-  const stored: StoredToken = {
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
-    expires_at: tokens.expires_in
-      ? Date.now() + tokens.expires_in * 1000
-      : undefined,
-  };
+  // Use the JWT to create an API key
+  const keyRes = await fetch(`${apiUrl}/api/keys`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${tokens.access_token}`,
+    },
+    body: JSON.stringify({ name: `CLI (${new Date().toISOString()})` }),
+  });
 
-  storeToken(stored);
-  return stored;
+  if (!keyRes.ok) {
+    throw new Error(`Failed to create API key: ${await keyRes.text()}`);
+  }
+
+  const { key } = await keyRes.json();
+
+  storeCredentials({ api_key: key, api_url: apiUrl });
+  console.log("API key created and stored in ~/.sideways/token.json");
 }

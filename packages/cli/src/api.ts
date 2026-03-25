@@ -1,4 +1,4 @@
-import { getStoredToken } from "./auth.js";
+import { getStoredCredentials } from "./auth.js";
 
 /**
  * Thin API client for the Sideways server.
@@ -6,10 +6,10 @@ import { getStoredToken } from "./auth.js";
 
 export function createClient(baseUrl: string) {
   async function request(path: string, options?: RequestInit) {
-    const token = getStoredToken();
+    const creds = getStoredCredentials();
     const authHeaders: Record<string, string> = {};
-    if (token) {
-      authHeaders["Authorization"] = `Bearer ${token.access_token}`;
+    if (creds?.api_key) {
+      authHeaders["Authorization"] = `Bearer ${creds.api_key}`;
     }
 
     const res = await fetch(`${baseUrl}${path}`, {
@@ -65,6 +65,14 @@ export function createClient(baseUrl: string) {
 
     getVersions(space: string, slug: string) {
       return request(`/api/documents/${space}/${slug}/versions`);
+    },
+
+    listKeys() {
+      return request("/api/keys");
+    },
+
+    deleteKey(id: string) {
+      return request(`/api/keys/${id}`, { method: "DELETE" });
     },
   };
 }
