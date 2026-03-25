@@ -1,0 +1,97 @@
+version: v1.3.0
+
+dsn: postgres://sideways:sideways@postgres:5432/kratos?sslmode=disable
+
+serve:
+  public:
+    base_url: http://localhost:4433/
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:4000
+      allowed_methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+      allowed_headers:
+        - Authorization
+        - Content-Type
+        - Cookie
+        - X-Session-Token
+      exposed_headers:
+        - Set-Cookie
+      allow_credentials: true
+  admin:
+    base_url: http://localhost:4434/
+
+identity:
+  default_schema_id: user
+  schemas:
+    - id: user
+      url: file:///etc/kratos/identity.schema.json
+
+selfservice:
+  default_browser_return_url: http://localhost:4000/
+
+  flows:
+    registration:
+      enabled: true
+      ui_url: http://localhost:4000/auth/signup
+      after:
+        password:
+          hooks:
+            - hook: web_hook
+              config:
+                url: http://host.docker.internal:4100/auth/hooks/registration
+                method: POST
+                body: file:///etc/kratos/webhook.registration.jsonnet
+                response:
+                  ignore: true
+                can_interrupt: false
+
+    login:
+      ui_url: http://localhost:4000/auth/login
+
+    recovery:
+      enabled: true
+      ui_url: http://localhost:4000/auth/forgot-password
+      use: code
+
+    verification:
+      enabled: false
+
+    settings:
+      ui_url: http://localhost:4000/auth/settings
+
+    error:
+      ui_url: http://localhost:4000/auth/error
+
+    logout:
+      after:
+        default_browser_return_url: http://localhost:4000/auth/login
+
+log:
+  level: info
+  format: text
+
+secrets:
+  cookie:
+    - localhost-kratos-cookie-secret-change-in-prod
+  cipher:
+    - localhost-kratos-cipher-key!!
+
+hashers:
+  argon2:
+    parallelism: 1
+    memory: 128MB
+    iterations: 2
+    salt_length: 16
+    key_length: 16
+
+courier:
+  smtp:
+    connection_uri: smtp://mailhog:1025/?disable_starttls=true
+    from_address: noreply@sideways.dev
+    from_name: Sideways

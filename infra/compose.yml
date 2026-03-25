@@ -11,6 +11,73 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sideways"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --- Ory Kratos (Identity) ---
+
+  kratos-migrate:
+    build: ./kratos
+    command: migrate sql -e --yes
+    environment:
+      DSN: postgres://sideways:sideways@postgres:5432/kratos?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  kratos:
+    build: ./kratos
+    command: serve -c /etc/kratos/kratos.yml --dev --watch-courier
+    restart: unless-stopped
+    ports:
+      - "4433:4433"
+      - "4434:4434"
+    environment:
+      DSN: postgres://sideways:sideways@postgres:5432/kratos?sslmode=disable
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # --- Ory Hydra (OAuth2 / JWT) ---
+
+  hydra-migrate:
+    build: ./hydra
+    command: migrate sql -e --yes
+    environment:
+      DSN: postgres://sideways:sideways@postgres:5432/hydra?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  hydra:
+    build: ./hydra
+    command: serve all -c /etc/hydra/hydra.yml --dev
+    restart: unless-stopped
+    ports:
+      - "4444:4444"
+      - "4445:4445"
+    environment:
+      DSN: postgres://sideways:sideways@postgres:5432/hydra?sslmode=disable
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  hydra-init:
+    build: ./scripts
+    depends_on:
+      - hydra
+    restart: "no"
+
+  # --- SeaweedFS ---
 
   seaweedfs-master:
     image: chrislusf/seaweedfs
@@ -40,29 +107,13 @@ services:
       - seaweedfs-master
       - seaweedfs-volume
 
-  hydra:
-    image: oryd/hydra:v2.2
-    restart: unless-stopped
-    command: serve all --dev
-    ports:
-      - "4444:4444"   # public (token endpoint)
-      - "4445:4445"   # admin
-    environment:
-      DSN: postgres://sideways:sideways@postgres:5432/hydra?sslmode=disable
-      SECRETS_SYSTEM: localhost-secret-change-in-prod
-      URLS_SELF_ISSUER: http://localhost:4444
-      URLS_LOGIN: http://localhost:4000/auth/login
-      URLS_CONSENT: http://localhost:4000/auth/consent
-      URLS_LOGOUT: http://localhost:4000/auth/logout
-    depends_on:
-      - postgres
+  # --- Mail (dev only) ---
 
-  hydra-migrate:
-    image: oryd/hydra:v2.2
-    command: migrate sql --yes postgres://sideways:sideways@postgres:5432/hydra?sslmode=disable
-    depends_on:
-      - postgres
-    restart: "no"
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
 volumes:
   pgdata:
