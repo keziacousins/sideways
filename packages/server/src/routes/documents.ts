@@ -1,19 +1,16 @@
 import { Hono } from "hono";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { renderMarkdown } from "@sideways/markdown";
 import {
   type Database,
   documents,
   documentVersions,
+  spaces,
   users,
 } from "@sideways/db";
 import type { Storage } from "@sideways/storage";
 
-/**
- * Ensure a "system" user exists for unseeded/anonymous operations.
- * Returns the system user's ID.
- */
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
     where: eq(users.email, "system@sideways.local"),
@@ -34,18 +31,41 @@ function contentHash(content: string): string {
 export function createDocumentRoutes(db: Database, storage: Storage) {
   const router = new Hono();
 
-  /** List all documents (metadata only) */
+  /** List all documents, optionally filtered by space */
   router.get("/", async (c) => {
+    const spaceSlug = c.req.query("space");
+
+    if (spaceSlug) {
+      const space = await db.query.spaces.findFirst({
+        where: eq(spaces.slug, spaceSlug),
+      });
+      if (!space) return c.json({ error: "Space not found" }, 404);
+
+      const docs = await db.query.documents.findMany({
+        where: eq(documents.spaceId, space.id),
+        orderBy: desc(documents.updatedAt),
+      });
+      return c.json(docs);
+    }
+
     const docs = await db.query.documents.findMany({
       orderBy: desc(documents.updatedAt),
     });
     return c.json(docs);
   });
 
-  /** Get a document by slug (includes latest version content) */
-  router.get("/:slug", async (c) => {
+  /** Get a document by space/slug */
+  router.get("/:space/:slug", async (c) => {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("space")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
     const doc = await db.query.documents.findFirst({
-      where: eq(documents.slug, c.req.param("slug")),
+      where: and(
+        eq(documents.spaceId, space.id),
+        eq(documents.slug, c.req.param("slug")),
+      ),
     });
     if (!doc) return c.json({ error: "Not found" }, 404);
 
@@ -58,9 +78,17 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
   });
 
   /** Get a document rendered as HTML */
-  router.get("/:slug/render", async (c) => {
+  router.get("/:space/:slug/render", async (c) => {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("space")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
     const doc = await db.query.documents.findFirst({
-      where: eq(documents.slug, c.req.param("slug")),
+      where: and(
+        eq(documents.spaceId, space.id),
+        eq(documents.slug, c.req.param("slug")),
+      ),
     });
     if (!doc) return c.json({ error: "Not found" }, 404);
 
@@ -70,7 +98,6 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     });
     if (!latestVersion) return c.json({ error: "No versions" }, 404);
 
-    // Check render cache in SeaweedFS
     const cacheKey = `/rendered/${doc.id}/${latestVersion.contentHash}.html`;
     if (latestVersion.renderedKey) {
       try {
@@ -82,11 +109,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       }
     }
 
-    // Render and cache
     const target = c.req.query("target") === "pdf" ? "pdf" : "web";
     const html = await renderMarkdown(latestVersion.content, { target });
 
-    // Store in SeaweedFS (fire and forget for speed)
     storage
       .upload(cacheKey, Buffer.from(html), "text/html")
       .then(() =>
@@ -100,46 +125,60 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     return c.json({ ...doc, html, content: undefined });
   });
 
-  /** Create or update a document */
-  router.put("/:slug", async (c) => {
+  /** Create or update a document in a space */
+  router.put("/:space/:slug", async (c) => {
+    const spaceSlug = c.req.param("space");
     const slug = c.req.param("slug");
     const body = await c.req.json<{
       title?: string;
       content?: string;
-      visibility?: "private" | "shared" | "org" | "public";
       tags?: string[];
-      parentId?: string | null;
+      sectionSlug?: string;
     }>();
 
     const systemUserId = await ensureSystemUser(db);
     const content = body.content ?? "";
     const hash = contentHash(content);
 
+    // Find or create space
+    let space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, spaceSlug),
+    });
+    if (!space) {
+      [space] = await db
+        .insert(spaces)
+        .values({
+          slug: spaceSlug,
+          name: spaceSlug,
+          visibility: "private",
+          ownerId: systemUserId,
+        })
+        .returning();
+    }
+
     const existing = await db.query.documents.findFirst({
-      where: eq(documents.slug, slug),
+      where: and(
+        eq(documents.spaceId, space.id),
+        eq(documents.slug, slug),
+      ),
     });
 
     if (existing) {
-      // Update document metadata
       const [updated] = await db
         .update(documents)
         .set({
           title: body.title ?? existing.title,
-          visibility: body.visibility ?? existing.visibility,
           tags: body.tags ?? existing.tags,
-          parentId: body.parentId !== undefined ? body.parentId : existing.parentId,
           updatedAt: new Date(),
         })
         .where(eq(documents.id, existing.id))
         .returning();
 
-      // Get current version number
       const latest = await db.query.documentVersions.findFirst({
         where: eq(documentVersions.documentId, existing.id),
         orderBy: desc(documentVersions.version),
       });
 
-      // Only create new version if content changed
       if (!latest || latest.contentHash !== hash) {
         await db.insert(documentVersions).values({
           documentId: existing.id,
@@ -154,20 +193,16 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       return c.json(updated, 200);
     }
 
-    // Create new document
     const [doc] = await db
       .insert(documents)
       .values({
+        spaceId: space.id,
         slug,
         title: body.title ?? slug,
-        visibility: body.visibility ?? "private",
-        ownerId: systemUserId,
-        parentId: body.parentId ?? null,
         tags: body.tags ?? [],
       })
       .returning();
 
-    // Create first version
     await db.insert(documentVersions).values({
       documentId: doc.id,
       version: 1,
@@ -181,9 +216,17 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
   });
 
   /** Delete a document */
-  router.delete("/:slug", async (c) => {
+  router.delete("/:space/:slug", async (c) => {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("space")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
     const doc = await db.query.documents.findFirst({
-      where: eq(documents.slug, c.req.param("slug")),
+      where: and(
+        eq(documents.spaceId, space.id),
+        eq(documents.slug, c.req.param("slug")),
+      ),
     });
     if (!doc) return c.json({ error: "Not found" }, 404);
 
@@ -191,10 +234,18 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     return c.json({ deleted: true });
   });
 
-  /** List versions of a document */
-  router.get("/:slug/versions", async (c) => {
+  /** List versions */
+  router.get("/:space/:slug/versions", async (c) => {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("space")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
     const doc = await db.query.documents.findFirst({
-      where: eq(documents.slug, c.req.param("slug")),
+      where: and(
+        eq(documents.spaceId, space.id),
+        eq(documents.slug, c.req.param("slug")),
+      ),
     });
     if (!doc) return c.json({ error: "Not found" }, 404);
 

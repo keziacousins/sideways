@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { createDb } from "@sideways/db";
 import { createStorage } from "@sideways/storage";
 import { createDocumentRoutes } from "./routes/documents.js";
+import { createSpaceRoutes } from "./routes/spaces.js";
 import { env } from "./env.js";
 
 const db = createDb(env.databaseUrl);
@@ -15,6 +16,7 @@ app.use("*", cors());
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
+app.route("/api/spaces", createSpaceRoutes(db));
 app.route("/api/documents", createDocumentRoutes(db, storage));
 
 serve({ fetch: app.fetch, port: env.port }, () => {

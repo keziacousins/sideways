@@ -1,0 +1,132 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+const { space: spaceSlug } = Astro.params;
+
+let space: { name: string; slug: string; description: string | null } | null = null;
+let documents: { slug: string; title: string; tags: string[] }[] = [];
+
+try {
+  const spaceRes = await fetch(`${API_URL}/api/spaces/${spaceSlug}`);
+  if (spaceRes.ok) {
+    space = await spaceRes.json();
+    const docsRes = await fetch(`${API_URL}/api/documents?space=${spaceSlug}`);
+    documents = await docsRes.json();
+  }
+} catch {
+  // API not available
+}
+---
+
+<BaseLayout title={space?.name ?? "Not Found"}>
+  {space ? (
+    <div class="sw-space">
+      <nav class="sw-breadcrumb">
+        <a href="/">Spaces</a> / <span>{space.name}</span>
+      </nav>
+      {space.description && <p class="sw-description">{space.description}</p>}
+      <div class="sw-doc-list">
+        {documents.length === 0 && (
+          <p class="sw-empty">No documents in this space yet.</p>
+        )}
+        {documents.map((doc) => (
+          <a href={`/s/${spaceSlug}/${doc.slug}`} class="sw-doc-card">
+            <h2>{doc.title}</h2>
+            {doc.tags?.length > 0 && (
+              <div class="sw-tags">
+                {doc.tags.map((tag) => (
+                  <span class="sw-tag">{tag}</span>
+                ))}
+              </div>
+            )}
+          </a>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <div class="sw-not-found">
+      <h1>Space not found</h1>
+      <a href="/">Back to spaces</a>
+    </div>
+  )}
+</BaseLayout>
+
+<style>
+  .sw-space {
+    max-width: 72ch;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .sw-breadcrumb {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 2rem;
+  }
+
+  .sw-breadcrumb a {
+    color: #6366f1;
+    text-decoration: none;
+  }
+
+  .sw-description {
+    color: #64748b;
+    margin-bottom: 2rem;
+  }
+
+  .sw-doc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .sw-doc-card {
+    display: block;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .sw-doc-card:hover {
+    border-color: #6366f1;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
+  }
+
+  .sw-doc-card h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+  }
+
+  .sw-tags {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .sw-tag {
+    font-size: 0.75rem;
+    background: #f1f5f9;
+    color: #64748b;
+    padding: 0.15em 0.6em;
+    border-radius: 4px;
+  }
+
+  .sw-empty {
+    color: #94a3b8;
+  }
+
+  .sw-not-found {
+    max-width: 72ch;
+    margin: 0 auto;
+    padding: 4rem 2rem;
+    text-align: center;
+  }
+
+  .sw-not-found a {
+    color: #6366f1;
+  }
+</style>

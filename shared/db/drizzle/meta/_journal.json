@@ -8,6 +8,13 @@
       "when": 1774473619005,
       "tag": "0000_outgoing_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774476000000,
+      "tag": "0001_add_spaces_sections",
+      "breakpoints": true
     }
   ]
 }

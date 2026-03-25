@@ -1,18 +1,41 @@
-/** Visibility levels for documents */
+/** Visibility levels */
 export type Visibility = "private" | "shared" | "org" | "public";
 
-/** A document in the system */
-export interface Document {
+/** A space is a top-level container: project, team, or personal area */
+export interface Space {
   id: string;
   slug: string;
-  title: string;
-  content: string;
+  name: string;
+  description: string | null;
   visibility: Visibility;
   ownerId: string;
+  themeId: string | null;
+  personal: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A section is a navigation/organisation node within a space (no content) */
+export interface Section {
+  id: string;
+  spaceId: string;
   parentId: string | null;
+  slug: string;
+  title: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A document within a space */
+export interface Document {
+  id: string;
+  spaceId: string;
+  sectionId: string | null;
+  slug: string;
+  title: string;
   position: number;
   tags: string[];
-  themeId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,10 +45,12 @@ export interface DocumentVersion {
   id: string;
   documentId: string;
   version: number;
-  content: string;
   title: string;
-  createdAt: string;
+  content: string;
+  contentHash: string;
+  renderedKey: string | null;
   createdBy: string;
+  createdAt: string;
 }
 
 /** A comment on a document */
@@ -36,7 +61,6 @@ export interface Comment {
   parentId: string | null;
   authorId: string;
   body: string;
-  /** For inline comments: character offset range in the document */
   anchorStart: number | null;
   anchorEnd: number | null;
   resolved: boolean;
@@ -48,25 +72,31 @@ export interface Comment {
 export interface Theme {
   id: string;
   name: string;
-  orgId: string;
-  /** Design tokens (colors, spacing, fonts) */
+  orgId: string | null;
   tokens: Record<string, string>;
-  /** SeaweedFS references for logo assets */
   logoAssets: string[];
-  /** Google Font family names — font files stored in SeaweedFS */
   fonts: string[];
   createdAt: string;
   updatedAt: string;
 }
 
-/** An uploaded asset (image, file, font, etc.) */
+/** An uploaded asset */
 export interface Asset {
   id: string;
   filename: string;
   mimeType: string;
-  /** SeaweedFS file ID */
   storageKey: string;
   ownerId: string;
+  spaceId: string | null;
   documentId: string | null;
+  createdAt: string;
+}
+
+/** Space membership */
+export interface SpaceMember {
+  id: string;
+  spaceId: string;
+  userId: string;
+  role: "viewer" | "editor" | "admin";
   createdAt: string;
 }

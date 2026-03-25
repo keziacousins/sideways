@@ -22,24 +22,55 @@ export const users = pgTable("users", {
   uniqueIndex("users_email_idx").on(t.email),
 ]);
 
-export const documents = pgTable("documents", {
+/** A space is a top-level container: project, team, or personal area */
+export const spaces = pgTable("spaces", {
   id: uuid("id").primaryKey().defaultRandom(),
   slug: text("slug").notNull(),
-  title: text("title").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
   visibility: text("visibility", {
     enum: ["private", "shared", "org", "public"],
   }).notNull().default("private"),
   ownerId: uuid("owner_id").notNull().references(() => users.id),
-  parentId: uuid("parent_id").references((): any => documents.id),
-  position: integer("position").notNull().default(0),
-  tags: text("tags").array().notNull().default([]),
   themeId: uuid("theme_id").references(() => themes.id),
+  /** True for auto-created personal "My Documents" spaces */
+  personal: boolean("personal").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex("documents_slug_idx").on(t.slug),
-  index("documents_owner_idx").on(t.ownerId),
-  index("documents_parent_idx").on(t.parentId),
+  uniqueIndex("spaces_slug_idx").on(t.slug),
+  index("spaces_owner_idx").on(t.ownerId),
+]);
+
+/** Sections are navigation/organisation nodes within a space (no content) */
+export const sections = pgTable("sections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
+  parentId: uuid("parent_id").references((): any => sections.id),
+  slug: text("slug").notNull(),
+  title: text("title").notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("sections_space_slug_idx").on(t.spaceId, t.slug),
+  index("sections_parent_idx").on(t.parentId),
+]);
+
+export const documents = pgTable("documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
+  sectionId: uuid("section_id").references(() => sections.id, { onDelete: "set null" }),
+  slug: text("slug").notNull(),
+  title: text("title").notNull(),
+  position: integer("position").notNull().default(0),
+  tags: text("tags").array().notNull().default([]),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("documents_space_slug_idx").on(t.spaceId, t.slug),
+  index("documents_space_idx").on(t.spaceId),
+  index("documents_section_idx").on(t.sectionId),
 ]);
 
 export const documentVersions = pgTable("document_versions", {
@@ -97,19 +128,22 @@ export const assets = pgTable("assets", {
   /** SeaweedFS file ID */
   storageKey: text("storage_key").notNull(),
   ownerId: uuid("owner_id").notNull().references(() => users.id),
+  spaceId: uuid("space_id").references(() => spaces.id, { onDelete: "set null" }),
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [
   index("assets_doc_idx").on(t.documentId),
   index("assets_owner_idx").on(t.ownerId),
+  index("assets_space_idx").on(t.spaceId),
 ]);
 
-/** Explicit share grants for documents */
-export const documentShares = pgTable("document_shares", {
+/** Explicit share grants for spaces */
+export const spaceMembers = pgTable("space_members", {
   id: uuid("id").primaryKey().defaultRandom(),
-  documentId: uuid("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["viewer", "editor", "admin"] }).notNull().default("viewer"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex("doc_share_unique").on(t.documentId, t.userId),
+  uniqueIndex("space_member_unique").on(t.spaceId, t.userId),
 ]);

@@ -1,14 +1,21 @@
 ---
-import BaseLayout from "../../layouts/BaseLayout.astro";
-import "../../styles/document.css";
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import "../../../styles/document.css";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
-const { slug } = Astro.params;
+const { space: spaceSlug, slug } = Astro.params;
 
 let doc: { title: string; html: string; tags: string[] } | null = null;
+let spaceName = spaceSlug;
 
 try {
-  const res = await fetch(`${API_URL}/api/documents/${slug}/render`);
+  const spaceRes = await fetch(`${API_URL}/api/spaces/${spaceSlug}`);
+  if (spaceRes.ok) {
+    const space = await spaceRes.json();
+    spaceName = space.name;
+  }
+
+  const res = await fetch(`${API_URL}/api/documents/${spaceSlug}/${slug}/render`);
   if (res.ok) {
     doc = await res.json();
   }
@@ -23,14 +30,14 @@ const html = doc?.html ?? "";
   {doc ? (
     <article class="sw-document">
       <nav class="sw-breadcrumb">
-        <a href="/">Documents</a> / <span>{doc.title}</span>
+        <a href="/">Spaces</a> / <a href={`/s/${spaceSlug}`}>{spaceName}</a> / <span>{doc.title}</span>
       </nav>
       <div set:html={html} />
     </article>
   ) : (
     <div class="sw-not-found">
       <h1>Document not found</h1>
-      <a href="/">Back to documents</a>
+      <a href={`/s/${spaceSlug}`}>Back to space</a>
     </div>
   )}
 </BaseLayout>
