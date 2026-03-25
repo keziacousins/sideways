@@ -18,6 +18,7 @@ export async function setup() {
     documents,
     sections,
     space_members,
+    api_keys,
     spaces,
     themes,
     users

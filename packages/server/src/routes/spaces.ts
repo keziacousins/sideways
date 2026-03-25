@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc } from "drizzle-orm";
 import { type Database, spaces, sections, users } from "@sideways/db";
+import type { AuthUser } from "../middleware/auth.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -13,6 +14,12 @@ async function ensureSystemUser(db: Database): Promise<string> {
     .values({ email: "system@sideways.local", name: "System" })
     .returning();
   return user.id;
+}
+
+async function getUserId(c: any, db: Database): Promise<string> {
+  const user = c.get("user") as AuthUser | null;
+  if (user) return user.id;
+  return ensureSystemUser(db);
 }
 
 export function createSpaceRoutes(db: Database) {
@@ -45,7 +52,7 @@ export function createSpaceRoutes(db: Database) {
       personal?: boolean;
     }>();
 
-    const systemUserId = await ensureSystemUser(db);
+    const ownerId = await getUserId(c, db);
 
     const existing = await db.query.spaces.findFirst({
       where: eq(spaces.slug, slug),
@@ -72,7 +79,7 @@ export function createSpaceRoutes(db: Database) {
         name: body.name ?? slug,
         description: body.description ?? null,
         visibility: body.visibility ?? "private",
-        ownerId: systemUserId,
+        ownerId,
         personal: body.personal ?? false,
       })
       .returning();

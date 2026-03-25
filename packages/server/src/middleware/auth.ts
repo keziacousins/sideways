@@ -1,7 +1,8 @@
 import { createMiddleware } from "hono/factory";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { eq } from "drizzle-orm";
-import { type Database, users } from "@sideways/db";
+import { createHash } from "node:crypto";
+import { type Database, users, apiKeys } from "@sideways/db";
 import { env } from "../env.js";
 
 export interface AuthUser {
@@ -88,37 +89,35 @@ async function resolveApiKey(
   db: Database,
   key: string,
 ): Promise<AuthUser | null> {
-  // Import dynamically to avoid circular deps
-  const { createHash } = await import("node:crypto");
   const keyHash = createHash("sha256").update(key).digest("hex");
 
-  // Query the api_keys table (will be created in the next step)
   try {
-    const result = await db.execute(
-      `SELECT u.id, u.email, u.name
-       FROM api_keys k JOIN users u ON k.user_id = u.id
-       WHERE k.key_hash = $1 AND (k.expires_at IS NULL OR k.expires_at > NOW())`,
-      [keyHash],
-    ) as any;
+    const apiKey = await db.query.apiKeys.findFirst({
+      where: eq(apiKeys.keyHash, keyHash),
+    });
 
-    if (result.length > 0) {
-      // Update last_used_at
-      db.execute(
-        `UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1`,
-        [keyHash],
-      ).catch(() => {});
+    if (!apiKey) return null;
 
-      return {
-        id: result[0].id,
-        email: result[0].email,
-        name: result[0].name,
-      };
-    }
+    // Check expiry
+    if (apiKey.expiresAt && apiKey.expiresAt < new Date()) return null;
+
+    // Look up user
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, apiKey.userId),
+    });
+
+    if (!user) return null;
+
+    // Update last_used_at (fire and forget)
+    db.update(apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiKeys.id, apiKey.id))
+      .catch(() => {});
+
+    return { id: user.id, email: user.email, name: user.name };
   } catch {
-    // api_keys table might not exist yet
+    return null;
   }
-
-  return null;
 }
 
 /**
