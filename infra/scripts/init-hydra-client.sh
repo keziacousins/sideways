@@ -34,7 +34,7 @@ until curl -sf "${HYDRA_ADMIN_URL}/health/ready" > /dev/null 2>&1; do
 done
 echo "Hydra is ready."
 
-# Web app client (confidential)
+# Web app client (public — no secret, same as CLI)
 register_client "sideways-web" '{
   "client_id": "sideways-web",
   "client_name": "Sideways Web App",
@@ -42,7 +42,7 @@ register_client "sideways-web" '{
   "response_types": ["code"],
   "scope": "openid offline_access",
   "redirect_uris": ["http://localhost:4000/auth/callback"],
-  "token_endpoint_auth_method": "client_secret_post",
+  "token_endpoint_auth_method": "none",
   "skip_consent": true
 }'
 

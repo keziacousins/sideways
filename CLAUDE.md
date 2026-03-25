@@ -13,11 +13,13 @@ pnpm --filter @sideways/web dev      # Web on :4000
 ## Tests
 
 ```bash
-pnpm test              # run all tests once
-pnpm test:watch        # watch mode
+pnpm test              # unit + integration tests (vitest)
+pnpm test:watch        # vitest watch mode
+pnpm test:e2e          # browser tests (playwright, needs servers running)
+pnpm test:e2e:ui       # playwright with UI
 ```
 
-Integration tests require the API server running on :4100 with Postgres on localhost.
+Integration tests require Postgres on localhost. E2e tests require API (:4100), web (:4000), Kratos, and Hydra all running.
 
 ## Ports
 

@@ -239,6 +239,26 @@ export function createAuthRoutes(db: Database) {
   });
 
   /**
+   * GET /auth/authorize — Initiates the OAuth2 flow.
+   * Called by the frontend after Kratos login to bridge to Hydra.
+   * Query params: nonce (from Kratos login)
+   */
+  router.get("/authorize", (c) => {
+    const nonce = c.req.query("nonce") || "";
+    const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+
+    const authUrl = new URL(`${env.hydraPublicUrl}/oauth2/auth`);
+    authUrl.searchParams.set("client_id", "sideways-web");
+    authUrl.searchParams.set("response_type", "code");
+    authUrl.searchParams.set("scope", "openid offline_access");
+    authUrl.searchParams.set("redirect_uri", "http://localhost:4000/auth/callback");
+    authUrl.searchParams.set("state", state);
+    if (nonce) authUrl.searchParams.set("login_hint", nonce);
+
+    return c.redirect(authUrl.toString());
+  });
+
+  /**
    * GET /auth/consent — Hydra redirects here after login.
    * Auto-accepts all scopes (first-party app).
    * Injects custom claims into the JWT.
@@ -247,66 +267,71 @@ export function createAuthRoutes(db: Database) {
     const challenge = c.req.query("consent_challenge");
     if (!challenge) return c.text("Missing consent_challenge", 400);
 
-    const consentRequest = await hydraAdmin(
-      `/admin/oauth2/auth/requests/consent?consent_challenge=${challenge}`,
-    );
+    try {
+      const consentRequest = await hydraAdmin(
+        `/admin/oauth2/auth/requests/consent?consent_challenge=${challenge}`,
+      );
 
-    const subject = consentRequest.subject;
+      const subject = consentRequest.subject;
 
-    // Look up or create local user
-    let user = await db.query.users.findFirst({
-      where: eq(users.hydraSubject, subject),
-    });
+      // Look up or create local user
+      let user = await db.query.users.findFirst({
+        where: eq(users.hydraSubject, subject),
+      });
 
-    if (!user) {
-      // Fetch identity from Kratos to get traits
-      try {
-        const identityRes = await fetch(
-          `${KRATOS_ADMIN}/admin/identities/${subject}`,
-        );
-        if (identityRes.ok) {
-          const identity = await identityRes.json();
-          const [created] = await db
-            .insert(users)
-            .values({
-              email: identity.traits.email,
-              name: identity.traits.name || identity.traits.email,
-              hydraSubject: subject,
-            })
-            .returning();
-          user = created;
+      if (!user) {
+        // Fetch identity from Kratos to get traits
+        try {
+          const identityRes = await fetch(
+            `${KRATOS_ADMIN}/admin/identities/${subject}`,
+          );
+          if (identityRes.ok) {
+            const identity = await identityRes.json();
+            const [created] = await db
+              .insert(users)
+              .values({
+                email: identity.traits.email,
+                name: identity.traits.name || identity.traits.email,
+                hydraSubject: subject,
+              })
+              .returning();
+            user = created;
+          }
+        } catch (e) {
+          console.error("Kratos identity lookup failed:", e);
         }
-      } catch {
-        // Fall through — user might not exist yet
       }
+
+      const completion = await hydraAdmin(
+        `/admin/oauth2/auth/requests/consent/accept?consent_challenge=${challenge}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            grant_scope: consentRequest.requested_scope,
+            grant_access_token_audience:
+              consentRequest.requested_access_token_audience,
+            remember: true,
+            remember_for: 3600,
+            session: {
+              access_token: {
+                user_id: user?.id,
+                email: user?.email,
+                name: user?.name,
+              },
+              id_token: {
+                email: user?.email,
+                name: user?.name,
+              },
+            },
+          }),
+        },
+      );
+
+      return c.redirect(completion.redirect_to);
+    } catch (e: any) {
+      console.error("Consent error:", e.message);
+      return c.text(`Consent failed: ${e.message}`, 500);
     }
-
-    const completion = await hydraAdmin(
-      `/admin/oauth2/auth/requests/consent/accept?consent_challenge=${challenge}`,
-      {
-        method: "PUT",
-        body: JSON.stringify({
-          grant_scope: consentRequest.requested_scope,
-          grant_access_token_audience:
-            consentRequest.requested_access_token_audience,
-          remember: true,
-          remember_for: 3600,
-          session: {
-            access_token: {
-              user_id: user?.id,
-              email: user?.email,
-              name: user?.name,
-            },
-            id_token: {
-              email: user?.email,
-              name: user?.name,
-            },
-          },
-        }),
-      },
-    );
-
-    return c.redirect(completion.redirect_to);
   });
 
   /**

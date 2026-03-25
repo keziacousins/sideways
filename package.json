@@ -4,7 +4,9 @@
   "description": "Neither markup nor markdown, but something else entirely.",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "packageManager": "pnpm@10.33.0",
   "pnpm": {
@@ -14,6 +16,7 @@
     ]
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "postgres": "^3.4.8",
     "tsx": "^4.21.0",
     "vitest": "^4.1.1"

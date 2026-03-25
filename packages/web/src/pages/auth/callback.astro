@@ -9,7 +9,8 @@ const code = Astro.url.searchParams.get("code");
 const error = Astro.url.searchParams.get("error");
 
 if (error) {
-  return Astro.redirect(`/auth/login?error=${encodeURIComponent(error)}`);
+  const errorDesc = Astro.url.searchParams.get("error_description") || "";
+  return Astro.redirect(`/auth/login?error=${encodeURIComponent(error)}&desc=${encodeURIComponent(errorDesc)}`);
 }
 
 if (!code) {
@@ -25,7 +26,6 @@ const tokenRes = await fetch(`${API_URL}/auth/token`, {
     code,
     redirect_uri: "http://localhost:4000/auth/callback",
     client_id: "sideways-web",
-    client_secret: import.meta.env.HYDRA_CLIENT_SECRET || "znuld0L9Z6hKYSwcjYr0uSm5ll",
   }),
 });
 
