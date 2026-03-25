@@ -1,103 +1,217 @@
 import { Hono } from "hono";
+import { eq, desc } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { renderMarkdown } from "@sideways/markdown";
-import type { Document } from "@sideways/types";
-
-const documents = new Hono();
+import {
+  type Database,
+  documents,
+  documentVersions,
+  users,
+} from "@sideways/db";
+import type { Storage } from "@sideways/storage";
 
 /**
- * In-memory store for development. Will be replaced with Postgres.
+ * Ensure a "system" user exists for unseeded/anonymous operations.
+ * Returns the system user's ID.
  */
-const docs = new Map<string, Document>();
+async function ensureSystemUser(db: Database): Promise<string> {
+  const existing = await db.query.users.findFirst({
+    where: eq(users.email, "system@sideways.local"),
+  });
+  if (existing) return existing.id;
 
-// Seed a sample document
-docs.set("hello-world", {
-  id: "1",
-  slug: "hello-world",
-  title: "Hello World",
-  content: `# Hello World
+  const [user] = await db
+    .insert(users)
+    .values({ email: "system@sideways.local", name: "System" })
+    .returning();
+  return user.id;
+}
 
-Welcome to **Sideways** — neither markup nor markdown, but something else entirely.
+function contentHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex").slice(0, 16);
+}
 
-## Features
+export function createDocumentRoutes(db: Database, storage: Storage) {
+  const router = new Hono();
 
-- Markdown rendering with full GFM support
-- Syntax highlighting
-- Math: $E = mc^2$
-- Diagrams (coming soon)
+  /** List all documents (metadata only) */
+  router.get("/", async (c) => {
+    const docs = await db.query.documents.findMany({
+      orderBy: desc(documents.updatedAt),
+    });
+    return c.json(docs);
+  });
 
-\`\`\`typescript
-const greeting = "Hello from Sideways!";
-console.log(greeting);
-\`\`\`
+  /** Get a document by slug (includes latest version content) */
+  router.get("/:slug", async (c) => {
+    const doc = await db.query.documents.findFirst({
+      where: eq(documents.slug, c.req.param("slug")),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
 
-## What's Next
+    const latestVersion = await db.query.documentVersions.findFirst({
+      where: eq(documentVersions.documentId, doc.id),
+      orderBy: desc(documentVersions.version),
+    });
 
-This is a seed document. Replace it with your own content via the API.
-`,
-  visibility: "public",
-  ownerId: "system",
-  parentId: null,
-  position: 0,
-  tags: ["welcome"],
-  themeId: null,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-});
+    return c.json({ ...doc, content: latestVersion?.content ?? "" });
+  });
 
-/** List all documents */
-documents.get("/", (c) => {
-  const all = Array.from(docs.values()).map(({ content: _, ...meta }) => meta);
-  return c.json(all);
-});
+  /** Get a document rendered as HTML */
+  router.get("/:slug/render", async (c) => {
+    const doc = await db.query.documents.findFirst({
+      where: eq(documents.slug, c.req.param("slug")),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
 
-/** Get a document by slug (raw markdown) */
-documents.get("/:slug", (c) => {
-  const doc = docs.get(c.req.param("slug"));
-  if (!doc) return c.json({ error: "Not found" }, 404);
-  return c.json(doc);
-});
+    const latestVersion = await db.query.documentVersions.findFirst({
+      where: eq(documentVersions.documentId, doc.id),
+      orderBy: desc(documentVersions.version),
+    });
+    if (!latestVersion) return c.json({ error: "No versions" }, 404);
 
-/** Get a document rendered as HTML */
-documents.get("/:slug/render", async (c) => {
-  const doc = docs.get(c.req.param("slug"));
-  if (!doc) return c.json({ error: "Not found" }, 404);
+    // Check render cache in SeaweedFS
+    const cacheKey = `/rendered/${doc.id}/${latestVersion.contentHash}.html`;
+    if (latestVersion.renderedKey) {
+      try {
+        const cached = await storage.download(latestVersion.renderedKey);
+        const html = await cached.text();
+        return c.json({ ...doc, html, content: undefined });
+      } catch {
+        // Cache miss, re-render
+      }
+    }
 
-  const target = c.req.query("target") === "pdf" ? "pdf" : "web";
-  const html = await renderMarkdown(doc.content, { target });
-  return c.json({ ...doc, html, content: undefined });
-});
+    // Render and cache
+    const target = c.req.query("target") === "pdf" ? "pdf" : "web";
+    const html = await renderMarkdown(latestVersion.content, { target });
 
-/** Create or update a document */
-documents.put("/:slug", async (c) => {
-  const slug = c.req.param("slug");
-  const body = await c.req.json<Partial<Document>>();
-  const existing = docs.get(slug);
+    // Store in SeaweedFS (fire and forget for speed)
+    storage
+      .upload(cacheKey, Buffer.from(html), "text/html")
+      .then(() =>
+        db
+          .update(documentVersions)
+          .set({ renderedKey: cacheKey })
+          .where(eq(documentVersions.id, latestVersion.id)),
+      )
+      .catch(() => {});
 
-  const doc: Document = {
-    id: existing?.id ?? crypto.randomUUID(),
-    slug,
-    title: body.title ?? slug,
-    content: body.content ?? "",
-    visibility: body.visibility ?? "private",
-    ownerId: body.ownerId ?? "anonymous",
-    parentId: body.parentId ?? null,
-    position: body.position ?? 0,
-    tags: body.tags ?? [],
-    themeId: body.themeId ?? null,
-    createdAt: existing?.createdAt ?? new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+    return c.json({ ...doc, html, content: undefined });
+  });
 
-  docs.set(slug, doc);
-  return c.json(doc, existing ? 200 : 201);
-});
+  /** Create or update a document */
+  router.put("/:slug", async (c) => {
+    const slug = c.req.param("slug");
+    const body = await c.req.json<{
+      title?: string;
+      content?: string;
+      visibility?: "private" | "shared" | "org" | "public";
+      tags?: string[];
+      parentId?: string | null;
+    }>();
 
-/** Delete a document */
-documents.delete("/:slug", (c) => {
-  const slug = c.req.param("slug");
-  if (!docs.has(slug)) return c.json({ error: "Not found" }, 404);
-  docs.delete(slug);
-  return c.json({ deleted: true });
-});
+    const systemUserId = await ensureSystemUser(db);
+    const content = body.content ?? "";
+    const hash = contentHash(content);
 
-export { documents };
+    const existing = await db.query.documents.findFirst({
+      where: eq(documents.slug, slug),
+    });
+
+    if (existing) {
+      // Update document metadata
+      const [updated] = await db
+        .update(documents)
+        .set({
+          title: body.title ?? existing.title,
+          visibility: body.visibility ?? existing.visibility,
+          tags: body.tags ?? existing.tags,
+          parentId: body.parentId !== undefined ? body.parentId : existing.parentId,
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, existing.id))
+        .returning();
+
+      // Get current version number
+      const latest = await db.query.documentVersions.findFirst({
+        where: eq(documentVersions.documentId, existing.id),
+        orderBy: desc(documentVersions.version),
+      });
+
+      // Only create new version if content changed
+      if (!latest || latest.contentHash !== hash) {
+        await db.insert(documentVersions).values({
+          documentId: existing.id,
+          version: (latest?.version ?? 0) + 1,
+          title: body.title ?? existing.title,
+          content,
+          contentHash: hash,
+          createdBy: systemUserId,
+        });
+      }
+
+      return c.json(updated, 200);
+    }
+
+    // Create new document
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        slug,
+        title: body.title ?? slug,
+        visibility: body.visibility ?? "private",
+        ownerId: systemUserId,
+        parentId: body.parentId ?? null,
+        tags: body.tags ?? [],
+      })
+      .returning();
+
+    // Create first version
+    await db.insert(documentVersions).values({
+      documentId: doc.id,
+      version: 1,
+      title: doc.title,
+      content,
+      contentHash: hash,
+      createdBy: systemUserId,
+    });
+
+    return c.json(doc, 201);
+  });
+
+  /** Delete a document */
+  router.delete("/:slug", async (c) => {
+    const doc = await db.query.documents.findFirst({
+      where: eq(documents.slug, c.req.param("slug")),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
+
+    await db.delete(documents).where(eq(documents.id, doc.id));
+    return c.json({ deleted: true });
+  });
+
+  /** List versions of a document */
+  router.get("/:slug/versions", async (c) => {
+    const doc = await db.query.documents.findFirst({
+      where: eq(documents.slug, c.req.param("slug")),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
+
+    const versions = await db.query.documentVersions.findMany({
+      where: eq(documentVersions.documentId, doc.id),
+      orderBy: desc(documentVersions.version),
+      columns: {
+        id: true,
+        version: true,
+        title: true,
+        contentHash: true,
+        createdAt: true,
+      },
+    });
+
+    return c.json(versions);
+  });
+
+  return router;
+}

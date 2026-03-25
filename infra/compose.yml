@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
@@ -13,12 +14,14 @@ services:
 
   seaweedfs-master:
     image: chrislusf/seaweedfs
+    restart: unless-stopped
     command: master -ip=seaweedfs-master
     ports:
       - "9333:9333"
 
   seaweedfs-volume:
     image: chrislusf/seaweedfs
+    restart: unless-stopped
     command: volume -mserver=seaweedfs-master:9333 -port=8080 -ip=seaweedfs-volume
     ports:
       - "8080:8080"
@@ -29,6 +32,7 @@ services:
 
   seaweedfs-filer:
     image: chrislusf/seaweedfs
+    restart: unless-stopped
     command: filer -master=seaweedfs-master:9333
     ports:
       - "8888:8888"
@@ -38,6 +42,7 @@ services:
 
   hydra:
     image: oryd/hydra:v2.2
+    restart: unless-stopped
     command: serve all --dev
     ports:
       - "4444:4444"   # public (token endpoint)
