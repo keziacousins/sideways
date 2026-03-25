@@ -1,0 +1,107 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+
+let documents: { slug: string; title: string; tags: string[] }[] = [];
+try {
+  const res = await fetch(`${API_URL}/api/documents`);
+  documents = await res.json();
+} catch {
+  // API not available
+}
+---
+
+<BaseLayout title="Documents">
+  <div class="sw-home">
+    <header class="sw-header">
+      <h1>Sideways</h1>
+      <p class="sw-tagline">Neither markup nor markdown, but something else entirely.</p>
+    </header>
+    <main class="sw-doc-list">
+      {documents.length === 0 && (
+        <p class="sw-empty">No documents yet. Push one via the API or CLI.</p>
+      )}
+      {documents.map((doc) => (
+        <a href={`/doc/${doc.slug}`} class="sw-doc-card">
+          <h2>{doc.title}</h2>
+          {doc.tags?.length > 0 && (
+            <div class="sw-tags">
+              {doc.tags.map((tag) => (
+                <span class="sw-tag">{tag}</span>
+              ))}
+            </div>
+          )}
+        </a>
+      ))}
+    </main>
+  </div>
+</BaseLayout>
+
+<style>
+  .sw-home {
+    max-width: 72ch;
+    margin: 0 auto;
+    padding: 3rem 2rem;
+  }
+
+  .sw-header {
+    margin-bottom: 3rem;
+  }
+
+  .sw-header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.25rem;
+  }
+
+  .sw-tagline {
+    color: #64748b;
+    font-style: italic;
+  }
+
+  .sw-doc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .sw-doc-card {
+    display: block;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .sw-doc-card:hover {
+    border-color: #6366f1;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
+  }
+
+  .sw-doc-card h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+  }
+
+  .sw-tags {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .sw-tag {
+    font-size: 0.75rem;
+    background: #f1f5f9;
+    color: #64748b;
+    padding: 0.15em 0.6em;
+    border-radius: 4px;
+  }
+
+  .sw-empty {
+    color: #94a3b8;
+  }
+</style>

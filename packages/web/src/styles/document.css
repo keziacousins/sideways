@@ -1,0 +1,195 @@
+/* Sideways document theme — default */
+
+:root {
+  --sw-font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --sw-font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+  --sw-font-serif: "Newsreader", "Georgia", serif;
+
+  --sw-text: #1a1a2e;
+  --sw-text-muted: #64748b;
+  --sw-bg: #ffffff;
+  --sw-bg-subtle: #f8fafc;
+  --sw-border: #e2e8f0;
+  --sw-accent: #6366f1;
+  --sw-accent-light: #e0e7ff;
+
+  --sw-content-width: 72ch;
+  --sw-page-padding: 2rem;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--sw-font-sans);
+  color: var(--sw-text);
+  background: var(--sw-bg);
+  line-height: 1.7;
+}
+
+/* Document content area */
+.sw-document {
+  max-width: var(--sw-content-width);
+  margin: 0 auto;
+  padding: var(--sw-page-padding);
+}
+
+/* Typography */
+.sw-document h1,
+.sw-document h2,
+.sw-document h3,
+.sw-document h4,
+.sw-document h5,
+.sw-document h6 {
+  font-family: var(--sw-font-sans);
+  font-weight: 650;
+  line-height: 1.25;
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+  letter-spacing: -0.02em;
+}
+
+.sw-document h1 {
+  font-size: 2.25rem;
+  margin-top: 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--sw-border);
+}
+
+.sw-document h2 {
+  font-size: 1.625rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--sw-border);
+}
+
+.sw-document h3 { font-size: 1.25rem; }
+.sw-document h4 { font-size: 1.1rem; }
+
+.sw-document p {
+  margin-bottom: 1.25em;
+}
+
+.sw-document a {
+  color: var(--sw-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--sw-accent-light);
+  text-underline-offset: 2px;
+  transition: text-decoration-color 0.15s;
+}
+
+.sw-document a:hover {
+  text-decoration-color: var(--sw-accent);
+}
+
+/* Lists */
+.sw-document ul,
+.sw-document ol {
+  margin-bottom: 1.25em;
+  padding-left: 1.5em;
+}
+
+.sw-document li {
+  margin-bottom: 0.35em;
+}
+
+.sw-document li > ul,
+.sw-document li > ol {
+  margin-top: 0.35em;
+  margin-bottom: 0;
+}
+
+/* Code */
+.sw-document code {
+  font-family: var(--sw-font-mono);
+  font-size: 0.875em;
+  background: var(--sw-bg-subtle);
+  border: 1px solid var(--sw-border);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+}
+
+.sw-document pre {
+  margin-bottom: 1.5em;
+  background: var(--sw-bg-subtle);
+  border: 1px solid var(--sw-border);
+  border-radius: 8px;
+  padding: 1em 1.25em;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+.sw-document pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+/* Blockquotes */
+.sw-document blockquote {
+  margin: 0 0 1.25em;
+  padding: 0.75em 1.25em;
+  border-left: 3px solid var(--sw-accent);
+  background: var(--sw-accent-light);
+  border-radius: 0 6px 6px 0;
+}
+
+.sw-document blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Tables */
+.sw-document table {
+  width: 100%;
+  margin-bottom: 1.5em;
+  border-collapse: collapse;
+}
+
+.sw-document th,
+.sw-document td {
+  padding: 0.6em 1em;
+  border: 1px solid var(--sw-border);
+  text-align: left;
+}
+
+.sw-document th {
+  background: var(--sw-bg-subtle);
+  font-weight: 600;
+}
+
+.sw-document tr:nth-child(even) {
+  background: var(--sw-bg-subtle);
+}
+
+/* Horizontal rule */
+.sw-document hr {
+  border: none;
+  border-top: 1px solid var(--sw-border);
+  margin: 2em 0;
+}
+
+/* Images */
+.sw-document img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 1em 0;
+}
+
+/* Task lists (GFM) */
+.sw-document ul:has(input[type="checkbox"]) {
+  list-style: none;
+  padding-left: 0;
+}
+
+.sw-document input[type="checkbox"] {
+  margin-right: 0.5em;
+}

@@ -1,0 +1,9 @@
+{
+  "name": "sideways",
+  "private": true,
+  "description": "Neither markup nor markdown, but something else entirely.",
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp"]
+  }
+}
