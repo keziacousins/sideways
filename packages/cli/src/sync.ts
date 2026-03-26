@@ -182,18 +182,22 @@ export function computeDiff(
       // File exists locally and remotely but never synced — treat as modified
       diffs.push({ filename, slug, status: "modified" });
     } else if (tracked) {
-      const localChanged = localHash !== tracked.localHash;
-      const remoteChanged = remote && remote.contentHash !== tracked.remoteHash;
-
-      if (localChanged && remoteChanged) {
-        diffs.push({ filename, slug, status: "conflict" });
-      } else if (localChanged) {
-        diffs.push({ filename, slug, status: "modified" });
-      } else if (remoteChanged) {
-        // Remote changed, local didn't — pull will update
-        diffs.push({ filename, slug, status: "modified" });
+      if (!remote) {
+        // Tracked locally but not on remote — needs push
+        diffs.push({ filename, slug, status: "new" });
       } else {
-        diffs.push({ filename, slug, status: "unchanged" });
+        const localChanged = localHash !== tracked.localHash;
+        const remoteChanged = remote.contentHash !== tracked.remoteHash;
+
+        if (localChanged && remoteChanged) {
+          diffs.push({ filename, slug, status: "conflict" });
+        } else if (localChanged) {
+          diffs.push({ filename, slug, status: "modified" });
+        } else if (remoteChanged) {
+          diffs.push({ filename, slug, status: "modified" });
+        } else {
+          diffs.push({ filename, slug, status: "unchanged" });
+        }
       }
     }
   }
