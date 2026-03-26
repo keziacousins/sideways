@@ -570,7 +570,7 @@ const navItems = documents.map((d) => ({
     const previewPane = document.querySelector(".editor-preview");
 
     /** Find the topmost visible heading in rendered content */
-    function getTopmostVisibleHeading(): string | null {
+    function getTopmostVisibleHeading() {
       const headings = docView.querySelectorAll("h1, h2, h3, h4, h5, h6");
       const headerOffset = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sw-header-height")) || 56;
       for (const h of headings) {
@@ -585,7 +585,7 @@ const navItems = documents.map((d) => ({
     }
 
     /** Find the line number of a heading in the textarea */
-    function findHeadingLine(headingText: string): number {
+    function findHeadingLine(headingText) {
       const lines = textarea.value.split("\n");
       for (let i = 0; i < lines.length; i++) {
         const match = lines[i].match(/^#{1,6}\s+(.+)/);
@@ -595,13 +595,13 @@ const navItems = documents.map((d) => ({
     }
 
     /** Scroll textarea to a line number */
-    function scrollTextareaToLine(lineNum: number) {
+    function scrollTextareaToLine(lineNum) {
       const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24;
       textarea.scrollTop = lineNum * lineHeight;
     }
 
     /** Get the heading nearest the cursor position in the textarea */
-    function getHeadingNearCursor(): string | null {
+    function getHeadingNearCursor() {
       const pos = textarea.selectionStart;
       const textBefore = textarea.value.slice(0, pos);
       const lines = textBefore.split("\n");
@@ -613,7 +613,7 @@ const navItems = documents.map((d) => ({
     }
 
     /** Scroll preview pane to a heading by text */
-    function scrollPreviewToHeading(headingText: string) {
+    function scrollPreviewToHeading(headingText) {
       if (!previewPane) return;
       const headings = previewPane.querySelectorAll("h1, h2, h3, h4, h5, h6");
       for (const h of headings) {
@@ -625,7 +625,7 @@ const navItems = documents.map((d) => ({
     }
 
     /** Scroll rendered view to a heading by text */
-    function scrollViewToHeading(headingText: string) {
+    function scrollViewToHeading(headingText) {
       const headings = docView.querySelectorAll("h1, h2, h3, h4, h5, h6");
       for (const h of headings) {
         if (h.textContent?.trim() === headingText) {
