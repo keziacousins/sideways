@@ -210,6 +210,12 @@ const navItems = documents.map((d) => ({
     margin-bottom: 2rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid var(--sw-border);
+    position: sticky;
+    top: var(--sw-header-height);
+    background: var(--sw-ink-deep);
+    z-index: 10;
+    padding-top: 0.5rem;
+    margin-top: -0.5rem;
   }
 
   .doc-toolbar-left {
