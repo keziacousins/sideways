@@ -7,6 +7,7 @@ import { findConfig, createConfig, requireConfig } from "./config.js";
 import { resolveSyncTargets } from "./mappings.js";
 import { createClient } from "./api.js";
 import { login, clearCredentials, getStoredCredentials, storeCredentials } from "./auth.js";
+import { requireSpace, ensureSpace } from "./preflight.js";
 import { embedComments, extractComments, type SerializedComment } from "@sideways/markdown";
 import {
   readSyncState,
@@ -65,6 +66,8 @@ program
       const client = createClient(config.api);
       const targets = resolveSyncTargets(config, path);
 
+      await requireSpace(client, space, { createHint: true });
+
       let totalPulled = 0;
       let totalSkipped = 0;
 
@@ -72,7 +75,6 @@ program
         const { localDir, section } = target;
         mkdirSync(localDir, { recursive: true });
 
-        // Ensure section exists on remote if specified
         if (section) {
           await client.createSection(space, section).catch(() => {});
         }
@@ -210,8 +212,7 @@ program
       // Push all changed files across sync targets
       const targets = resolveSyncTargets(config, path?.endsWith(".md") ? undefined : path);
 
-      // Ensure space exists on remote
-      await client.createSpace(space, config.spaceName || undefined).catch(() => {});
+      await ensureSpace(client, space, config.spaceName || undefined);
 
       let totalPushed = 0;
       for (const target of targets) {
@@ -311,11 +312,13 @@ program
     const client = createClient(config.api);
     const targets = resolveSyncTargets(config);
 
+    await requireSpace(client, space, { createHint: true });
+
     let anyFiles = false;
     for (const target of targets) {
       const { localDir, section } = target;
-      const syncState = readSyncState(localDir, space, section);
       const remoteFiles = await client.getSyncInfo(space, section || undefined);
+      const syncState = readSyncState(localDir, space, section);
       const diffs = computeDiff(localDir, syncState, remoteFiles);
 
       if (diffs.length === 0) continue;

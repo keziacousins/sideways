@@ -105,14 +105,21 @@ export function createClient(baseUrl: string) {
       });
     },
 
-    async getSyncInfo(space: string, section?: string) {
+    /** Check if a space exists. Returns false on 404, throws on other errors. */
+    async spaceExists(space: string): Promise<boolean> {
+      const creds = getStoredCredentials();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (creds?.api_key) headers["Authorization"] = `Bearer ${creds.api_key}`;
+
+      const res = await fetch(`${baseUrl}/api/spaces/${space}`, { headers });
+      if (res.status === 404) return false;
+      if (!res.ok) return false;
+      return true;
+    },
+
+    getSyncInfo(space: string, section?: string) {
       const qs = section ? `?section=${section}` : "";
-      try {
-        return await request(`/api/documents/${space}/_sync${qs}`);
-      } catch (e: any) {
-        if (e.message?.includes("404")) return [];
-        throw e;
-      }
+      return request(`/api/documents/${space}/_sync${qs}`);
     },
 
     createSpace(slug: string, name?: string, visibility: string = "private") {
