@@ -164,8 +164,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     }>();
 
     const userId = await getUserId(c, db);
+    const hasContent = body.content !== undefined;
     const content = body.content ?? "";
-    const hash = contentHash(content);
+    const hash = hasContent ? contentHash(content) : null;
 
     // Find or create space
     let space = await db.query.spaces.findFirst({
@@ -202,20 +203,23 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         .where(eq(documents.id, existing.id))
         .returning();
 
-      const latest = await db.query.documentVersions.findFirst({
-        where: eq(documentVersions.documentId, existing.id),
-        orderBy: desc(documentVersions.version),
-      });
-
-      if (!latest || latest.contentHash !== hash) {
-        await db.insert(documentVersions).values({
-          documentId: existing.id,
-          version: (latest?.version ?? 0) + 1,
-          title: body.title ?? existing.title,
-          content,
-          contentHash: hash,
-          createdBy: userId,
+      // Only create a new version if content was explicitly provided
+      if (hasContent) {
+        const latest = await db.query.documentVersions.findFirst({
+          where: eq(documentVersions.documentId, existing.id),
+          orderBy: desc(documentVersions.version),
         });
+
+        if (!latest || latest.contentHash !== hash) {
+          await db.insert(documentVersions).values({
+            documentId: existing.id,
+            version: (latest?.version ?? 0) + 1,
+            title: body.title ?? existing.title,
+            content,
+            contentHash: hash!,
+            createdBy: userId,
+          });
+        }
       }
 
       return c.json(updated, 200);
@@ -237,7 +241,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       version: 1,
       title: doc.title,
       content,
-      contentHash: hash,
+      contentHash: hash || contentHash(content),
       createdBy: userId,
     });
 
