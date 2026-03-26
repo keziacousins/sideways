@@ -191,23 +191,17 @@ program
         const slug =
           frontmatter.slug ||
           slugFromFilename(basename(path));
-        const title = frontmatter.title || titleFromSlug(slug);
         const tags = frontmatter.tags || [];
 
         if (opts.dryRun) {
-          console.log(`  would push: ${slug} (${title})`);
+          console.log(`  would push: ${slug}`);
           return;
         }
 
-        const result = await client.putDocument(space, slug, {
-          title,
-          content,
-          tags,
-        });
+        const body: Record<string, any> = { content, tags };
+        if (frontmatter.title) body.title = frontmatter.title;
 
-        if (embeddedComments.length > 0) {
-          console.log(`  ${embeddedComments.length} comment(s) extracted`);
-        }
+        const result = await client.putDocument(space, slug, body as any);
 
         console.log(`Pushed ${space}/${slug} (${result.id})`);
         return;
@@ -256,10 +250,13 @@ program
           const { clean } = extractComments(raw);
           const { frontmatter, content } = parseFrontmatter(clean);
 
-          const title = frontmatter.title || titleFromSlug(diff.slug);
           const tags = frontmatter.tags || [];
+          const body: Record<string, any> = { content, tags };
+          // Only send title if explicitly set in frontmatter — otherwise let
+          // the server extract it from the first # heading
+          if (frontmatter.title) body.title = frontmatter.title;
 
-          await client.putDocument(space, diff.slug, { title, content, tags });
+          await client.putDocument(space, diff.slug, body);
 
           const h = hashLocalFile(raw);
           syncState.files[diff.filename] = {
