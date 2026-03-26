@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { basename, resolve, join } from "node:path";
 import { findConfig, createConfig, requireConfig } from "./config.js";
 import { resolveSyncTargets } from "./mappings.js";
@@ -356,7 +356,20 @@ program
     const client = createClient(config.api);
 
     const filePath = resolve(file);
-    const raw = readFileSync(filePath, "utf-8");
+    if (!filePath.endsWith(".md")) {
+      // Treat as a slug — look for the file locally
+      const slugFile = resolve(`${file}.md`);
+      if (existsSync(slugFile)) {
+        file = `${file}.md`;
+      } else {
+        console.error(`File not found: ${filePath}\nDid you mean: sideways diff ${file}.md`);
+        process.exit(1);
+      }
+    } else if (!existsSync(filePath)) {
+      console.error(`File not found: ${filePath}`);
+      process.exit(1);
+    }
+    const raw = readFileSync(resolve(file), "utf-8");
     const { clean } = extractComments(raw);
     const { frontmatter, content: localContent } = parseFrontmatter(clean);
 
