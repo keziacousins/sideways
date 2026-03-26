@@ -179,5 +179,114 @@ export function createSpaceRoutes(db: Database) {
     return c.json(section, 201);
   });
 
+  /** List members of a space */
+  router.get("/:slug/members", async (c) => {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("slug")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
+    const members = await db.query.spaceMembers.findMany({
+      where: eq(spaceMembers.spaceId, space.id),
+    });
+
+    // Fetch user info for each member
+    const memberIds = members.map((m) => m.userId);
+    const memberUsers = memberIds.length
+      ? await db.query.users.findMany({
+          where: (u, { inArray }) => inArray(u.id, memberIds),
+          columns: { id: true, name: true, email: true },
+        })
+      : [];
+    const userMap = new Map(memberUsers.map((u) => [u.id, u]));
+
+    // Include owner
+    const owner = await db.query.users.findFirst({
+      where: eq(users.id, space.ownerId),
+      columns: { id: true, name: true, email: true },
+    });
+
+    const result = [
+      ...(owner ? [{ ...owner, role: "owner" }] : []),
+      ...members.map((m) => ({
+        ...userMap.get(m.userId),
+        role: m.role,
+        memberId: m.id,
+      })),
+    ];
+
+    return c.json(result);
+  });
+
+  /** Add or update a space member */
+  router.put("/:slug/members", async (c) => {
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("slug")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
+    // Only owner can manage members
+    if (space.ownerId !== user.id) {
+      return c.json({ error: "Only the space owner can manage members" }, 403);
+    }
+
+    const body = await c.req.json<{
+      email: string;
+      role: "viewer" | "editor" | "admin";
+    }>();
+
+    // Find user by email
+    const targetUser = await db.query.users.findFirst({
+      where: eq(users.email, body.email),
+    });
+    if (!targetUser) return c.json({ error: "User not found" }, 404);
+    if (targetUser.id === space.ownerId) return c.json({ error: "Cannot add owner as member" }, 400);
+
+    // Upsert member
+    const existing = await db.query.spaceMembers.findFirst({
+      where: and(eq(spaceMembers.spaceId, space.id), eq(spaceMembers.userId, targetUser.id)),
+    });
+
+    if (existing) {
+      const [updated] = await db
+        .update(spaceMembers)
+        .set({ role: body.role })
+        .where(eq(spaceMembers.id, existing.id))
+        .returning();
+      return c.json({ ...updated, name: targetUser.name, email: targetUser.email });
+    }
+
+    const [member] = await db
+      .insert(spaceMembers)
+      .values({
+        spaceId: space.id,
+        userId: targetUser.id,
+        role: body.role,
+      })
+      .returning();
+    return c.json({ ...member, name: targetUser.name, email: targetUser.email }, 201);
+  });
+
+  /** Remove a space member */
+  router.delete("/:slug/members/:memberId", async (c) => {
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("slug")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
+    if (space.ownerId !== user.id) {
+      return c.json({ error: "Only the space owner can manage members" }, 403);
+    }
+
+    await db.delete(spaceMembers).where(eq(spaceMembers.id, c.req.param("memberId")));
+    return c.json({ deleted: true });
+  });
+
   return router;
 }

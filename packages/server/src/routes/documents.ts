@@ -333,7 +333,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const { space } = result;
 
     const user = c.get("user") as AuthUser | null;
-    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user, space.visibility);
+    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user);
     if (!canWrite) return c.json({ error: "Forbidden" }, 403);
 
     const doc = await db.query.documents.findFirst({
@@ -387,7 +387,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const { space } = result;
 
     const user = c.get("user") as AuthUser | null;
-    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user, space.visibility);
+    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user);
     if (!canWrite) return c.json({ error: "Forbidden" }, 403);
 
     const doc = await db.query.documents.findFirst({
@@ -444,7 +444,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       });
       if (!targetSpace) return c.json({ error: "Target space not found" }, 404);
 
-      const targetCanWrite = await canWriteSpace(db, targetSpace.id, targetSpace.ownerId, user, targetSpace.visibility);
+      const targetCanWrite = await canWriteSpace(db, targetSpace.id, targetSpace.ownerId, user);
       if (!targetCanWrite) return c.json({ error: "Forbidden: no write access to target space" }, 403);
 
       // Check slug uniqueness in target
@@ -564,7 +564,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const { space } = result;
 
     const user = c.get("user") as AuthUser | null;
-    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user, space.visibility);
+    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user);
     if (!canWrite) return c.json({ error: "Forbidden" }, 403);
 
     const items = await c.req.json<{ slug: string; position: number }[]>();

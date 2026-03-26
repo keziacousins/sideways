@@ -1,0 +1,256 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { apiFetch } from "../../../lib/api.ts";
+
+const { space: spaceSlug } = Astro.params;
+const { accessToken } = Astro.locals;
+const userName = await Astro.session?.get("user_name");
+
+if (!userName) {
+  return Astro.redirect(`/auth/login?returnTo=/s/${spaceSlug}/settings`);
+}
+
+let space: any = null;
+let members: any[] = [];
+
+try {
+  const spaceRes = await apiFetch(`/api/spaces/${spaceSlug}`, accessToken);
+  if (spaceRes.ok) space = await spaceRes.json();
+
+  const membersRes = await apiFetch(`/api/spaces/${spaceSlug}/members`, accessToken);
+  if (membersRes.ok) members = await membersRes.json();
+} catch {}
+
+if (!space) return Astro.redirect("/");
+---
+
+<BaseLayout title={`${space.name} — Settings`}>
+  <div class="settings-page">
+    <nav class="breadcrumbs">
+      <a href="/">Spaces</a>
+      <span class="bc-sep">/</span>
+      <a href={`/s/${spaceSlug}`}>{space.name}</a>
+      <span class="bc-sep">/</span>
+      <span>Settings</span>
+    </nav>
+
+    <h1>Space Settings</h1>
+
+    <section class="settings-section">
+      <h2>General</h2>
+      <div class="settings-form">
+        <div class="form-field">
+          <label>Name</label>
+          <input type="text" id="space-name" value={space.name} />
+        </div>
+        <div class="form-field">
+          <label>Description</label>
+          <input type="text" id="space-desc" value={space.description || ""} placeholder="Optional description" />
+        </div>
+        <div class="form-field">
+          <label>Visibility</label>
+          <select id="space-visibility">
+            <option value="public" selected={space.visibility === "public"}>Public — anyone can read</option>
+            <option value="private" selected={space.visibility === "private"}>Private — members only</option>
+          </select>
+        </div>
+        <button type="button" id="save-general" class="btn-save">Save changes</button>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2>Members</h2>
+      <p class="settings-hint">Members with editor or admin role can create and edit documents. Viewers can only read (relevant for private spaces).</p>
+
+      <div class="add-member">
+        <input type="email" id="member-email" placeholder="Email address" />
+        <select id="member-role">
+          <option value="editor">Editor</option>
+          <option value="viewer">Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button type="button" id="add-member-btn" class="btn-add">Add</button>
+      </div>
+
+      <table class="member-table" id="member-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {members.map((m) => (
+            <tr data-member-id={m.memberId}>
+              <td>
+                <span class="member-name">{m.name}</span>
+                <span class="member-email">{m.email}</span>
+              </td>
+              <td><span class="role-badge">{m.role}</span></td>
+              <td>
+                {m.role !== "owner" && (
+                  <button type="button" class="btn-remove" data-member-id={m.memberId}>Remove</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="settings-section danger-zone">
+      <h2>Danger Zone</h2>
+      <div class="danger-action">
+        <div>
+          <strong>Delete this space</strong>
+          <p>Permanently delete this space and all its documents.</p>
+        </div>
+        <button type="button" id="delete-space" class="btn-danger">Delete space</button>
+      </div>
+    </section>
+  </div>
+</BaseLayout>
+
+<script define:vars={{ spaceSlug }}>
+  // Save general settings
+  document.getElementById("save-general")?.addEventListener("click", async () => {
+    const name = document.getElementById("space-name").value;
+    const description = document.getElementById("space-desc").value;
+    const visibility = document.getElementById("space-visibility").value;
+
+    const res = await fetch(`/s/${spaceSlug}/settings/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description, visibility }),
+    });
+
+    if (res.ok) {
+      const btn = document.getElementById("save-general");
+      btn.textContent = "Saved!";
+      setTimeout(() => { btn.textContent = "Save changes"; }, 2000);
+    } else {
+      alert("Failed to save.");
+    }
+  });
+
+  // Add member
+  document.getElementById("add-member-btn")?.addEventListener("click", async () => {
+    const email = document.getElementById("member-email").value;
+    const role = document.getElementById("member-role").value;
+    if (!email) return;
+
+    const res = await fetch(`/s/${spaceSlug}/settings/members`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, role }),
+    });
+
+    if (res.ok) {
+      window.location.reload();
+    } else {
+      const data = await res.json();
+      alert(data.error || "Failed to add member.");
+    }
+  });
+
+  // Remove member
+  document.querySelectorAll(".btn-remove").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const memberId = e.target.dataset.memberId;
+      if (!confirm("Remove this member?")) return;
+
+      const res = await fetch(`/s/${spaceSlug}/settings/members/${memberId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        e.target.closest("tr")?.remove();
+      } else {
+        alert("Failed to remove member.");
+      }
+    });
+  });
+
+  // Delete space
+  document.getElementById("delete-space")?.addEventListener("click", async () => {
+    const confirm1 = confirm("Delete this space and ALL its documents? This cannot be undone.");
+    if (!confirm1) return;
+    const confirm2 = prompt(`Type "${spaceSlug}" to confirm deletion:`);
+    if (confirm2 !== spaceSlug) { alert("Cancelled."); return; }
+
+    const res = await fetch(`/s/${spaceSlug}/settings/delete`, {
+      method: "DELETE",
+    });
+
+    if (res.ok) {
+      window.location.href = "/";
+    } else {
+      alert("Failed to delete space.");
+    }
+  });
+</script>
+
+<style>
+  .settings-page {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  .breadcrumbs { display: flex; gap: 0.4rem; font-size: var(--sw-text-sm); color: var(--sw-text-tertiary); margin-bottom: 1.5rem; }
+  .breadcrumbs a { color: var(--sw-text-tertiary); text-decoration: none; }
+  .breadcrumbs a:hover { color: var(--sw-accent); }
+  .bc-sep { color: var(--sw-text-ghost); }
+
+  h1 { font-family: var(--sw-font-display); font-size: var(--sw-text-2xl); font-weight: 400; margin-bottom: 2rem; }
+
+  .settings-section { margin-bottom: 2.5rem; }
+  .settings-section h2 { font-family: var(--sw-font-display); font-size: var(--sw-text-lg); font-weight: 500; margin-bottom: 0.75rem; }
+  .settings-hint { font-size: var(--sw-text-sm); color: var(--sw-text-tertiary); margin-bottom: 1rem; }
+
+  .settings-form { display: flex; flex-direction: column; gap: 0.75rem; }
+  .form-field { display: flex; flex-direction: column; gap: 0.3rem; }
+  .form-field label { font-size: var(--sw-text-sm); font-weight: 500; color: var(--sw-text-secondary); }
+  .form-field input, .form-field select {
+    padding: 0.5rem 0.75rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    color: var(--sw-text-primary);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm);
+  }
+  .form-field input:focus, .form-field select:focus { outline: none; border-color: var(--sw-accent); }
+  .form-field select { cursor: pointer; }
+
+  .btn-save {
+    align-self: flex-start;
+    padding: 0.45rem 1rem;
+    background: var(--sw-accent); color: var(--sw-ink-deepest);
+    border: none; border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-body); font-size: var(--sw-text-sm); font-weight: 600;
+    cursor: pointer; margin-top: 0.5rem;
+  }
+  .btn-save:hover { background: var(--sw-accent-strong); }
+
+  .add-member { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .add-member input { flex: 1; padding: 0.45rem 0.65rem; background: var(--sw-ink); border: 1px solid var(--sw-border-strong); border-radius: var(--sw-radius-md); color: var(--sw-text-primary); font-size: var(--sw-text-sm); font-family: var(--sw-font-body); }
+  .add-member input:focus { outline: none; border-color: var(--sw-accent); }
+  .add-member select { padding: 0.45rem 0.5rem; background: var(--sw-ink); border: 1px solid var(--sw-border-strong); border-radius: var(--sw-radius-md); color: var(--sw-text-secondary); font-size: var(--sw-text-sm); }
+  .btn-add { padding: 0.45rem 0.85rem; background: var(--sw-accent); color: var(--sw-ink-deepest); border: none; border-radius: var(--sw-radius-md); font-size: var(--sw-text-sm); font-weight: 600; cursor: pointer; }
+
+  .member-table { width: 100%; border-collapse: collapse; font-size: var(--sw-text-sm); }
+  .member-table th { text-align: left; padding: 0.5rem 0.75rem; color: var(--sw-text-tertiary); font-size: var(--sw-text-xs); text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid var(--sw-border); font-weight: 500; }
+  .member-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--sw-border); }
+  .member-name { color: var(--sw-text-primary); display: block; }
+  .member-email { color: var(--sw-text-tertiary); font-size: var(--sw-text-xs); }
+  .role-badge { font-size: var(--sw-text-xs); padding: 0.15em 0.5em; background: var(--sw-ink-surface); border-radius: var(--sw-radius-sm); color: var(--sw-text-secondary); }
+  .btn-remove { padding: 0.2rem 0.5rem; background: none; border: 1px solid var(--sw-border); border-radius: var(--sw-radius-sm); color: var(--sw-text-tertiary); font-size: var(--sw-text-xs); cursor: pointer; }
+  .btn-remove:hover { border-color: var(--sw-error); color: var(--sw-error); }
+
+  .danger-zone h2 { color: var(--sw-error); }
+  .danger-action { display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid rgba(248, 113, 113, 0.2); border-radius: var(--sw-radius-md); }
+  .danger-action p { font-size: var(--sw-text-sm); color: var(--sw-text-tertiary); margin-top: 0.25rem; }
+  .btn-danger { padding: 0.4rem 1rem; background: none; border: 1px solid var(--sw-error); border-radius: var(--sw-radius-md); color: var(--sw-error); font-size: var(--sw-text-sm); cursor: pointer; white-space: nowrap; }
+  .btn-danger:hover { background: rgba(248, 113, 113, 0.08); }
+</style>
