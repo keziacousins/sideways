@@ -71,13 +71,13 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
       const docs = await db.query.documents.findMany({
         where: eq(documents.spaceId, space.id),
-        orderBy: desc(documents.updatedAt),
+        orderBy: [documents.position, documents.title],
       });
       return c.json(docs);
     }
 
     const docs = await db.query.documents.findMany({
-      orderBy: desc(documents.updatedAt),
+      orderBy: [documents.position, documents.title],
     });
     return c.json(docs);
   });
@@ -159,6 +159,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       title?: string;
       content?: string;
       tags?: string[];
+      position?: number;
       sectionSlug?: string;
     }>();
 
@@ -195,6 +196,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         .set({
           title: body.title ?? existing.title,
           tags: body.tags ?? existing.tags,
+          position: body.position ?? existing.position,
           updatedAt: new Date(),
         })
         .where(eq(documents.id, existing.id))
@@ -226,6 +228,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         slug,
         title: body.title ?? slug,
         tags: body.tags ?? [],
+        position: body.position ?? 0,
       })
       .returning();
 
