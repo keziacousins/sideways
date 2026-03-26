@@ -5,6 +5,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 
 const loginChallenge = Astro.url.searchParams.get("login_challenge");
 const error = Astro.url.searchParams.get("error");
+const returnTo = Astro.url.searchParams.get("returnTo") || "/";
 ---
 
 <BaseLayout title="Sign in">
@@ -31,13 +32,13 @@ const error = Astro.url.searchParams.get("error");
       </form>
 
       <p class="auth-alt">
-        Don't have an account? <a href="/auth/signup">Create one</a>
+        Don't have an account? <a href={`/auth/signup?returnTo=${encodeURIComponent(returnTo)}`}>Create one</a>
       </p>
     </div>
   </div>
 </BaseLayout>
 
-<script define:vars={{ API_URL, loginChallenge }}>
+<script define:vars={{ API_URL, loginChallenge, returnTo }}>
   const form = document.getElementById("login-form");
 
   form.addEventListener("submit", async (e) => {
@@ -64,7 +65,7 @@ const error = Astro.url.searchParams.get("error");
         return;
       }
 
-      window.location.href = `${API_URL}/api/auth/authorize?nonce=${data.nonce}`;
+      window.location.href = `${API_URL}/api/auth/authorize?nonce=${data.nonce}&returnTo=${encodeURIComponent(returnTo)}`;
     } catch (err) {
       alert("Connection error. Is the API server running?");
       btn.textContent = "Sign in";

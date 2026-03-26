@@ -1,6 +1,9 @@
 ---
 const userName = await Astro.session?.get("user_name");
 const isLoggedIn = !!userName;
+const currentPath = Astro.url.pathname;
+const loginHref = `/auth/login?returnTo=${encodeURIComponent(currentPath)}`;
+const signupHref = `/auth/signup?returnTo=${encodeURIComponent(currentPath)}`;
 ---
 
 <header class="header">
@@ -31,8 +34,8 @@ const isLoggedIn = !!userName;
         </div>
       ) : (
         <div class="auth-links">
-          <a href="/auth/login" class="header-link">Sign in</a>
-          <a href="/auth/signup" class="btn-primary">Get started</a>
+          <a href={loginHref} class="header-link">Sign in</a>
+          <a href={signupHref} class="btn-primary">Get started</a>
         </div>
       )}
     </div>

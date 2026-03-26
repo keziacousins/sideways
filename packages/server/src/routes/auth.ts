@@ -324,7 +324,10 @@ export function createAuthRoutes(db: Database) {
 
   router.get("/authorize", (c) => {
     const nonce = c.req.query("nonce") || "";
-    const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+    const returnTo = c.req.query("returnTo") || "/";
+    const stateRandom = crypto.randomUUID().replace(/-/g, "");
+    // Encode returnTo in state so it survives the OAuth redirect chain
+    const state = `${stateRandom}:${Buffer.from(returnTo).toString("base64url")}`;
 
     const authUrl = new URL(`${env.publicApiUrl}/oauth2/auth`);
     authUrl.searchParams.set("client_id", "sideways-web");

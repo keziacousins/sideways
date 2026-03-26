@@ -6,7 +6,19 @@
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 
 const code = Astro.url.searchParams.get("code");
+const state = Astro.url.searchParams.get("state") || "";
 const error = Astro.url.searchParams.get("error");
+
+// Extract returnTo from state (format: "random:base64url(returnTo)")
+let returnTo = "/";
+try {
+  const colonIdx = state.indexOf(":");
+  if (colonIdx > 0) {
+    returnTo = Buffer.from(state.slice(colonIdx + 1), "base64url").toString() || "/";
+  }
+} catch {}
+// Sanitize: only allow relative paths
+if (!returnTo.startsWith("/")) returnTo = "/";
 
 if (error) {
   const errorDesc = Astro.url.searchParams.get("error_description") || "";
@@ -61,5 +73,5 @@ await Astro.session?.set("refresh_token", tokens.refresh_token);
 await Astro.session?.set("user_email", userEmail);
 await Astro.session?.set("user_name", userName);
 
-return Astro.redirect("/");
+return Astro.redirect(returnTo);
 ---

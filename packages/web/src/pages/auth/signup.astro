@@ -2,6 +2,7 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+const returnTo = Astro.url.searchParams.get("returnTo") || "/";
 ---
 
 <BaseLayout title="Sign up">
@@ -30,13 +31,13 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
       </form>
 
       <p class="auth-alt">
-        Already have an account? <a href="/auth/login">Sign in</a>
+        Already have an account? <a href={`/auth/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in</a>
       </p>
     </div>
   </div>
 </BaseLayout>
 
-<script define:vars={{ API_URL }}>
+<script define:vars={{ API_URL, returnTo }}>
   const form = document.getElementById("signup-form");
 
   form.addEventListener("submit", async (e) => {
@@ -64,7 +65,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
         return;
       }
 
-      window.location.href = `${API_URL}/api/auth/authorize?nonce=${data.nonce}`;
+      window.location.href = `${API_URL}/api/auth/authorize?nonce=${data.nonce}&returnTo=${encodeURIComponent(returnTo)}`;
     } catch (err) {
       alert("Connection error. Is the API server running?");
       btn.textContent = "Create account";
