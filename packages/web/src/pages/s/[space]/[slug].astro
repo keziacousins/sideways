@@ -196,3 +196,60 @@ const navItems = documents.map((d) => ({
     margin-bottom: 1rem;
   }
 </style>
+
+{doc && (
+<script>
+  // Vanilla JS: text selection → floating comment button
+  // Communicates with the React Comments island via custom event
+  const btn = document.createElement("button");
+  btn.className = "selection-comment-btn";
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Comment`;
+  btn.style.display = "none";
+  document.body.appendChild(btn);
+
+  let currentAnchorText: string | null = null;
+
+  document.addEventListener("mouseup", () => {
+    requestAnimationFrame(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+        btn.style.display = "none";
+        return;
+      }
+
+      const docContent = sel.anchorNode?.parentElement?.closest(".sw-doc-content");
+      if (!docContent) {
+        btn.style.display = "none";
+        return;
+      }
+
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const contentRect = docContent.getBoundingClientRect();
+
+      currentAnchorText = sel.toString().trim().slice(0, 200);
+
+      btn.style.display = "flex";
+      btn.style.position = "absolute";
+      btn.style.left = `${contentRect.right + 16}px`;
+      btn.style.top = `${rect.top + window.scrollY + (rect.height / 2) - 14}px`;
+    });
+  });
+
+  document.addEventListener("mousedown", (e) => {
+    if (!(e.target as HTMLElement).closest(".selection-comment-btn")) {
+      btn.style.display = "none";
+    }
+  });
+
+  btn.addEventListener("click", () => {
+    btn.style.display = "none";
+    window.getSelection()?.removeAllRanges();
+    document.dispatchEvent(
+      new CustomEvent("sideways:inline-comment", {
+        detail: { anchorText: currentAnchorText },
+      })
+    );
+  });
+</script>
+)}

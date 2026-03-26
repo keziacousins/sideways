@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface Comment {
   id: string;
@@ -25,15 +25,9 @@ export default function Comments({
 }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
   const [anchorText, setAnchorText] = useState<string | null>(null);
-  const [selectionPos, setSelectionPos] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -54,60 +48,22 @@ export default function Comments({
     fetchComments();
   }, [fetchComments]);
 
-  // Text selection handler — show floating button
+  // Listen for custom event from the vanilla JS selection handler
   useEffect(() => {
-    function handleMouseUp() {
-      // Small delay to let the selection finalize
-      requestAnimationFrame(() => {
-        const sel = window.getSelection();
-        if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-          setSelectionPos(null);
-          return;
-        }
-
-        // Only trigger for selections inside the document content
-        const docContent = sel.anchorNode?.parentElement?.closest(".sw-doc-content");
-        if (!docContent) {
-          setSelectionPos(null);
-          return;
-        }
-
-        const range = sel.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        // Position: just to the right of the content area, vertically aligned with selection
-        const contentRect = docContent.getBoundingClientRect();
-
-        setSelectionPos({
-          x: contentRect.right + 16,
-          y: rect.top + window.scrollY + (rect.height / 2) - 14,
-        });
-        setAnchorText(sel.toString().trim().slice(0, 200));
-      });
+    function handleInlineComment(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      setAnchorText(detail.anchorText);
+      setReplyTo(null);
+      setIsOpen(true);
     }
 
-    function handleMouseDown(e: MouseEvent) {
-      // Clear selection button if clicking outside it
-      const target = e.target as HTMLElement;
-      if (!target.closest(".selection-comment-btn")) {
-        setSelectionPos(null);
-      }
-    }
-
-    document.addEventListener("mouseup", handleMouseUp);
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => {
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.removeEventListener("mousedown", handleMouseDown);
-    };
+    document.addEventListener("sideways:inline-comment", handleInlineComment);
+    return () =>
+      document.removeEventListener(
+        "sideways:inline-comment",
+        handleInlineComment,
+      );
   }, []);
-
-  const openWithAnchor = (text: string | null) => {
-    setAnchorText(text);
-    setReplyTo(null);
-    setIsOpen(true);
-    setSelectionPos(null);
-    window.getSelection()?.removeAllRanges();
-  };
 
   const submitComment = async () => {
     if (!newComment.trim()) return;
@@ -157,11 +113,10 @@ export default function Comments({
 
   return (
     <>
-      {/* Toggle button in toolbar area */}
+      {/* Toggle button */}
       <button
         className="comments-toggle"
         onClick={() => setIsOpen(!isOpen)}
-        data-count={totalCount || undefined}
       >
         <svg
           width="16"
@@ -179,34 +134,9 @@ export default function Comments({
         )}
       </button>
 
-      {/* Floating "Add comment" button on text selection */}
-      {selectionPos && accessToken && (
-        <button
-          className="selection-comment-btn"
-          style={{
-            position: "absolute",
-            left: `${selectionPos.x}px`,
-            top: `${selectionPos.y}px`,
-          }}
-          onClick={() => openWithAnchor(anchorText)}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-          Comment
-        </button>
-      )}
-
       {/* Comments panel */}
       {isOpen && (
-        <div className="comments-panel-overlay" ref={panelRef}>
+        <div className="comments-panel-overlay">
           <div className="comments-panel-header">
             <h3>Comments</h3>
             <button className="panel-close" onClick={() => setIsOpen(false)}>
@@ -230,8 +160,7 @@ export default function Comments({
               {anchorText && !replyTo && (
                 <div className="comment-form-anchor">
                   <span>
-                    Commenting on: "
-                    {anchorText.slice(0, 60)}
+                    "{anchorText.slice(0, 60)}
                     {anchorText.length > 60 ? "…" : ""}"
                   </span>
                   <button onClick={() => setAnchorText(null)}>×</button>
