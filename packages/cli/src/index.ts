@@ -385,33 +385,35 @@ program
       return;
     }
 
-    const localLines = localContent.trim().split("\n");
-    const remoteLines = remoteContent.trim().split("\n");
-
     if (localContent.trim() === remoteContent.trim()) {
       console.log(`${file} ↔ ${space}/${slug}: no changes`);
       return;
     }
 
-    console.log(`--- remote: ${space}/${slug}`);
-    console.log(`+++ local:  ${file}`);
-    console.log();
+    // Use system diff for proper unified diff output
+    const { execSync } = await import("node:child_process");
+    const { writeFileSync: writeTemp } = await import("node:fs");
+    const { join: joinPath } = await import("node:path");
+    const { tmpdir } = await import("node:os");
 
-    // Simple line-by-line diff
-    const maxLines = Math.max(localLines.length, remoteLines.length);
-    for (let i = 0; i < maxLines; i++) {
-      const remote = remoteLines[i];
-      const local = localLines[i];
-      if (remote === local) continue;
-      if (remote === undefined) {
-        console.log(`+${i + 1}: ${local}`);
-      } else if (local === undefined) {
-        console.log(`-${i + 1}: ${remote}`);
-      } else {
-        console.log(`-${i + 1}: ${remote}`);
-        console.log(`+${i + 1}: ${local}`);
-      }
+    const remoteTmp = joinPath(tmpdir(), `.sideways-remote-${Date.now()}.md`);
+    const localTmp = joinPath(tmpdir(), `.sideways-local-${Date.now()}.md`);
+    writeTemp(remoteTmp, remoteContent.trim() + "\n");
+    writeTemp(localTmp, localContent.trim() + "\n");
+
+    try {
+      execSync(
+        `diff -u --label "remote: ${space}/${slug}" --label "local: ${file}" "${remoteTmp}" "${localTmp}"`,
+        { stdio: "inherit" },
+      );
+    } catch {
+      // diff exits with 1 when files differ — that's expected
     }
+
+    // Clean up
+    const { unlinkSync } = await import("node:fs");
+    unlinkSync(remoteTmp);
+    unlinkSync(localTmp);
   });
 
 // ── rename ────────────────────────────────────────────────────────────
