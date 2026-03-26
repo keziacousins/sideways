@@ -387,16 +387,17 @@
 /* ── Scroll-to highlight ──────────────────────────────────────── */
 .comment-scroll-highlight {
   background: var(--sw-accent);
-  opacity: 0.2;
+  opacity: 0.35;
   border-radius: 3px;
   pointer-events: none;
   z-index: 30;
-  animation: highlightFade 2s var(--sw-ease) forwards;
+  box-shadow: 0 0 12px rgba(226, 163, 54, 0.3);
+  animation: highlightFade 2.5s var(--sw-ease) forwards;
 }
 
 @keyframes highlightFade {
-  0% { opacity: 0.3; }
-  70% { opacity: 0.2; }
+  0% { opacity: 0.45; }
+  60% { opacity: 0.3; }
   100% { opacity: 0; }
 }
 
