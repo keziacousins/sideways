@@ -299,7 +299,18 @@ export default function Comments({
                   canAct={isAuthenticated}
                 />
                 {(replyMap.get(comment.id) || []).map((reply) => (
-                  <CommentItem key={reply.id} comment={reply} isReply canAct={false} />
+                  <CommentItem
+                    key={reply.id}
+                    comment={reply}
+                    isReply
+                    onReply={() => {
+                      setReplyTo(comment.id);
+                      setAnchorText(null);
+                      setError(null);
+                      setComposing(true);
+                    }}
+                    canAct={isAuthenticated}
+                  />
                 ))}
               </div>
             ))}
