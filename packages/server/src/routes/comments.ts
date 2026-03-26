@@ -94,6 +94,13 @@ export function createCommentRoutes(db: Database) {
       parentId?: string;
     }>();
 
+    if (body.parentId) {
+      const parent = await db.query.comments.findFirst({
+        where: and(eq(comments.id, body.parentId), eq(comments.documentId, doc.id)),
+      });
+      if (!parent) return c.json({ error: "Parent comment not found" }, 404);
+    }
+
     const [comment] = await db
       .insert(comments)
       .values({
