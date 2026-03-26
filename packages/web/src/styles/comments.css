@@ -10,7 +10,7 @@
   padding: 0;
   background: none;
   border: none;
-  color: var(--sw-text-tertiary);
+  color: var(--sw-text-secondary);
   font-size: var(--sw-text-sm);
   font-family: var(--sw-font-body);
   cursor: pointer;

@@ -73,6 +73,13 @@ const navItems = documents.map((d) => ({
           )}
         </div>
         <div class="doc-toolbar-right">
+          <button class="toolbar-btn" title="Copy as markdown">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span>Copy markdown</span>
+          </button>
           <Comments
             client:load
             spaceSlug={spaceSlug!}
@@ -81,13 +88,6 @@ const navItems = documents.map((d) => ({
             accessToken={accessToken}
             refreshToken={refreshToken}
           />
-          <button class="toolbar-btn" title="Copy as markdown">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-            <span>Copy markdown</span>
-          </button>
         </div>
       </div>
 
@@ -162,7 +162,7 @@ const navItems = documents.map((d) => ({
     padding: 0;
     background: none;
     border: none;
-    color: var(--sw-text-tertiary);
+    color: var(--sw-text-secondary);
     font-size: var(--sw-text-sm);
     font-family: var(--sw-font-body);
     cursor: pointer;
@@ -180,10 +180,10 @@ const navItems = documents.map((d) => ({
 
   .tag {
     font-size: var(--sw-text-xs);
-    padding: 0.15em 0.5em;
-    background: var(--sw-ink-lighter);
+    padding: 0.2em 0.55em;
+    background: var(--sw-ink-surface);
     border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-tertiary);
+    color: var(--sw-text-secondary);
   }
 
   .not-found {
