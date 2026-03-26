@@ -28,10 +28,10 @@ describe("config", () => {
         "space: myproject\napi: http://example.com\n",
       );
       const config = findConfig(dir);
-      expect(config).toEqual({
-        space: "myproject",
-        api: "http://example.com",
-      });
+      expect(config?.space).toBe("myproject");
+      expect(config?.api).toBe("http://example.com");
+      expect(config?.mappings).toEqual([]);
+      expect(config?.rootDir).toBe(dir);
     });
 
     it("walks up to find config in parent directory", () => {
@@ -56,10 +56,9 @@ describe("config", () => {
       const dir = makeTempDir();
       writeFileSync(join(dir, ".sideways.yml"), "space: minimal\n");
       const config = findConfig(dir);
-      expect(config).toEqual({
-        space: "minimal",
-        api: "http://localhost:4100",
-      });
+      expect(config?.space).toBe("minimal");
+      expect(config?.api).toBe("http://localhost:4100");
+      expect(config?.mappings).toEqual([]);
     });
   });
 

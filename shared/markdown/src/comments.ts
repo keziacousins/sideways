@@ -75,8 +75,10 @@ export function extractComments(markdown: string): {
     return "";
   });
 
-  // Clean up extra blank lines left by removed comments
-  const cleaned = clean.replace(/\n{3,}/g, "\n\n").trim();
+  // Only clean up if we actually removed comments
+  const cleaned = comments.length > 0
+    ? clean.replace(/\n{3,}/g, "\n\n").trim()
+    : clean;
 
   return { clean: cleaned, comments };
 }

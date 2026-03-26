@@ -82,6 +82,36 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     return c.json(docs);
   });
 
+  /** Get sync metadata for all docs in a space (slug, version, hash) */
+  router.get("/:space/_sync", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const docs = await db.query.documents.findMany({
+      where: eq(documents.spaceId, space.id),
+      orderBy: [documents.position, documents.title],
+    });
+
+    const syncInfo = await Promise.all(
+      docs.map(async (doc) => {
+        const latest = await db.query.documentVersions.findFirst({
+          where: eq(documentVersions.documentId, doc.id),
+          orderBy: desc(documentVersions.version),
+          columns: { version: true, contentHash: true },
+        });
+        return {
+          slug: doc.slug,
+          title: doc.title,
+          version: latest?.version ?? 0,
+          contentHash: latest?.contentHash ?? "",
+        };
+      }),
+    );
+
+    return c.json(syncInfo);
+  });
+
   /** Get a document by space/slug */
   router.get("/:space/:slug", async (c) => {
     const result = await resolveSpace(c, c.req.param("space"));

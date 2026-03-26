@@ -63,6 +63,10 @@ export function createClient(baseUrl: string) {
       });
     },
 
+    getSyncInfo(space: string) {
+      return request(`/api/documents/${space}/_sync`);
+    },
+
     getVersions(space: string, slug: string) {
       return request(`/api/documents/${space}/${slug}/versions`);
     },
