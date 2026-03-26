@@ -27,6 +27,12 @@ async function ensureSystemUser(db: Database): Promise<string> {
   return user.id;
 }
 
+/** Extract title from markdown: first # heading, or null */
+function extractTitle(content: string): string | null {
+  const match = content.match(/^#\s+(.+)$/m);
+  return match ? match[1].trim() : null;
+}
+
 /** Get the current user's ID, or fall back to system user */
 async function getUserId(
   c: { get: (key: string) => any },
@@ -252,11 +258,14 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       ),
     });
 
+    // Derive title: explicit > extracted from content > existing > slug
+    const derivedTitle = body.title || (hasContent ? extractTitle(content) : null);
+
     if (existing) {
       const [updated] = await db
         .update(documents)
         .set({
-          title: body.title ?? existing.title,
+          title: derivedTitle ?? existing.title,
           tags: body.tags ?? existing.tags,
           position: body.position ?? existing.position,
           updatedAt: new Date(),
@@ -291,7 +300,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       .values({
         spaceId: space.id,
         slug,
-        title: body.title ?? slug,
+        title: derivedTitle || slug,
         tags: body.tags ?? [],
         position: body.position ?? 0,
       })
