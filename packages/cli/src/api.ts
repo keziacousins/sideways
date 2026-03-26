@@ -57,6 +57,20 @@ export function createClient(baseUrl: string) {
       });
     },
 
+    patchDocument(space: string, slug: string, patch: Record<string, any>) {
+      return request(`/api/documents/${space}/${slug}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+    },
+
+    duplicateDocument(space: string, slug: string, opts?: { targetSpace?: string; targetSlug?: string }) {
+      return request(`/api/documents/${space}/${slug}/duplicate`, {
+        method: "POST",
+        body: JSON.stringify(opts || {}),
+      });
+    },
+
     deleteDocument(space: string, slug: string) {
       return request(`/api/documents/${space}/${slug}`, {
         method: "DELETE",

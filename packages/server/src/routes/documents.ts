@@ -333,7 +333,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const { space } = result;
 
     const user = c.get("user") as AuthUser | null;
-    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user);
+    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user, space.visibility);
     if (!canWrite) return c.json({ error: "Forbidden" }, 403);
 
     const doc = await db.query.documents.findFirst({
@@ -375,6 +375,210 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     });
 
     return c.json(versions);
+  });
+
+  /**
+   * PATCH /:space/:slug — partial update (rename, move, reorder)
+   * Unlike PUT, this never touches content/versions.
+   */
+  router.patch("/:space/:slug", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const user = c.get("user") as AuthUser | null;
+    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user, space.visibility);
+    if (!canWrite) return c.json({ error: "Forbidden" }, 403);
+
+    const doc = await db.query.documents.findFirst({
+      where: and(
+        eq(documents.spaceId, space.id),
+        eq(documents.slug, c.req.param("slug")),
+      ),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
+
+    const body = await c.req.json<{
+      title?: string;
+      slug?: string;
+      tags?: string[];
+      position?: number;
+      space?: string;
+      section?: string | null;
+    }>();
+
+    const updates: Record<string, any> = {};
+
+    if (body.title !== undefined) updates.title = body.title;
+    if (body.tags !== undefined) updates.tags = body.tags;
+    if (body.position !== undefined) updates.position = body.position;
+    if (body.section !== undefined) {
+      if (body.section === null) {
+        updates.sectionId = null;
+      } else {
+        const section = await db.query.sections.findFirst({
+          where: and(
+            eq(sections.spaceId, space.id),
+            eq(sections.slug, body.section),
+          ),
+        });
+        if (!section) return c.json({ error: "Section not found" }, 404);
+        updates.sectionId = section.id;
+      }
+    }
+
+    // Rename (slug change)
+    if (body.slug && body.slug !== doc.slug) {
+      const newSlug = body.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+      const existing = await db.query.documents.findFirst({
+        where: and(eq(documents.spaceId, space.id), eq(documents.slug, newSlug)),
+      });
+      if (existing) return c.json({ error: `Slug "${newSlug}" already exists in this space` }, 409);
+      updates.slug = newSlug;
+    }
+
+    // Move to different space
+    if (body.space && body.space !== c.req.param("space")) {
+      const targetSpace = await db.query.spaces.findFirst({
+        where: eq(spaces.slug, body.space),
+      });
+      if (!targetSpace) return c.json({ error: "Target space not found" }, 404);
+
+      const targetCanWrite = await canWriteSpace(db, targetSpace.id, targetSpace.ownerId, user, targetSpace.visibility);
+      if (!targetCanWrite) return c.json({ error: "Forbidden: no write access to target space" }, 403);
+
+      // Check slug uniqueness in target
+      const slugInTarget = updates.slug || doc.slug;
+      const existing = await db.query.documents.findFirst({
+        where: and(eq(documents.spaceId, targetSpace.id), eq(documents.slug, slugInTarget)),
+      });
+      if (existing) return c.json({ error: `Slug "${slugInTarget}" already exists in target space` }, 409);
+
+      updates.spaceId = targetSpace.id;
+      updates.sectionId = null; // Clear section on cross-space move
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return c.json(doc, 200);
+    }
+
+    updates.updatedAt = new Date();
+    const [updated] = await db
+      .update(documents)
+      .set(updates)
+      .where(eq(documents.id, doc.id))
+      .returning();
+
+    return c.json(updated);
+  });
+
+  /**
+   * POST /:space/:slug/duplicate — copy a document
+   */
+  router.post("/:space/:slug/duplicate", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const doc = await db.query.documents.findFirst({
+      where: and(
+        eq(documents.spaceId, space.id),
+        eq(documents.slug, c.req.param("slug")),
+      ),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
+
+    const body = await c.req.json<{
+      targetSpace?: string;
+      targetSlug?: string;
+      targetSection?: string;
+    }>().catch(() => ({}));
+
+    const userId = await getUserId(c, db);
+
+    // Determine target space
+    let targetSpaceId = space.id;
+    let targetOwnerId = space.ownerId;
+    if (body.targetSpace && body.targetSpace !== c.req.param("space")) {
+      const ts = await db.query.spaces.findFirst({
+        where: eq(spaces.slug, body.targetSpace),
+      });
+      if (!ts) return c.json({ error: "Target space not found" }, 404);
+      targetSpaceId = ts.id;
+      targetOwnerId = ts.ownerId;
+    }
+
+    // Generate unique slug
+    let targetSlug = body.targetSlug || `${doc.slug}-copy`;
+    targetSlug = targetSlug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    let attempt = 0;
+    while (true) {
+      const slug = attempt === 0 ? targetSlug : `${targetSlug}-${attempt}`;
+      const existing = await db.query.documents.findFirst({
+        where: and(eq(documents.spaceId, targetSpaceId), eq(documents.slug, slug)),
+      });
+      if (!existing) { targetSlug = slug; break; }
+      attempt++;
+      if (attempt > 20) return c.json({ error: "Could not find unique slug" }, 409);
+    }
+
+    // Get latest content
+    const latestVersion = await db.query.documentVersions.findFirst({
+      where: eq(documentVersions.documentId, doc.id),
+      orderBy: desc(documentVersions.version),
+    });
+
+    const content = latestVersion?.content || "";
+
+    // Create the duplicate
+    const [newDoc] = await db
+      .insert(documents)
+      .values({
+        spaceId: targetSpaceId,
+        slug: targetSlug,
+        title: `${doc.title} (copy)`,
+        tags: doc.tags,
+        position: doc.position + 1,
+      })
+      .returning();
+
+    await db.insert(documentVersions).values({
+      documentId: newDoc.id,
+      version: 1,
+      title: newDoc.title,
+      content,
+      contentHash: contentHash(content),
+      createdBy: userId,
+    });
+
+    return c.json(newDoc, 201);
+  });
+
+  /**
+   * POST /:space/_reorder — bulk reorder documents
+   * Body: [{ slug, position }]
+   */
+  router.post("/:space/_reorder", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const user = c.get("user") as AuthUser | null;
+    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user, space.visibility);
+    if (!canWrite) return c.json({ error: "Forbidden" }, 403);
+
+    const items = await c.req.json<{ slug: string; position: number }[]>();
+
+    for (const item of items) {
+      await db
+        .update(documents)
+        .set({ position: item.position, updatedAt: new Date() })
+        .where(
+          and(eq(documents.spaceId, space.id), eq(documents.slug, item.slug)),
+        );
+    }
+
+    return c.json({ reordered: items.length });
   });
 
   return router;

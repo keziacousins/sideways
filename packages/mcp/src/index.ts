@@ -187,7 +187,7 @@ server.tool(
         const section = c.anchorSection ? `\n  Section: ${c.anchorSection}` : "";
         const parent = c.parentId ? ` (reply)` : "";
         const resolved = c.resolved ? " [RESOLVED]" : "";
-        return `[${c.id.slice(0, 8)}] ${author}${parent}${resolved}${section}${anchor}\n  ${c.body}`;
+        return `[${c.id}] ${author}${parent}${resolved}${section}${anchor}\n  ${c.body}`;
       })
       .join("\n\n");
 

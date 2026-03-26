@@ -36,16 +36,21 @@ export async function canAccessSpace(
 
 /**
  * Check if a user can write to a space.
- * Owner or editor/admin members can write.
+ * - Public/org spaces: any authenticated user
+ * - Shared/private: owner or editor/admin members only
  */
 export async function canWriteSpace(
   db: Database,
   spaceId: string,
   ownerId: string,
   user: AuthUser | null,
+  visibility?: string,
 ): Promise<boolean> {
   if (!user) return false;
   if (user.id === ownerId) return true;
+
+  // Public and org spaces are writable by any authenticated user
+  if (visibility === "public" || visibility === "org") return true;
 
   const member = await db.query.spaceMembers.findFirst({
     where: (m, { and, eq }) =>

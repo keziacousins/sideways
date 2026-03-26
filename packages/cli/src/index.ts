@@ -399,6 +399,103 @@ program
     }
   });
 
+// ── rename ────────────────────────────────────────────────────────────
+
+program
+  .command("rename <slug> <new-slug>")
+  .description("Rename a document (change its slug)")
+  .option("--title <title>", "Also set a new title")
+  .option("--space <space>", "Override space from config")
+  .action(async (slug: string, newSlug: string, opts: { title?: string; space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+
+    const patch: Record<string, any> = { slug: newSlug };
+    if (opts.title) patch.title = opts.title;
+
+    const doc = await client.patchDocument(space, slug, patch);
+    console.log(`Renamed ${space}/${slug} → ${space}/${doc.slug} (${doc.title})`);
+  });
+
+// ── move ──────────────────────────────────────────────────────────────
+
+program
+  .command("move <slug>")
+  .description("Move a document to a different space or section")
+  .option("--to-space <space>", "Target space")
+  .option("--to-section <section>", "Target section (use 'none' to clear)")
+  .option("--space <space>", "Override source space from config")
+  .action(async (slug: string, opts: { toSpace?: string; toSection?: string; space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+
+    const patch: Record<string, any> = {};
+    if (opts.toSpace) patch.space = opts.toSpace;
+    if (opts.toSection !== undefined) {
+      patch.section = opts.toSection === "none" ? null : opts.toSection;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      console.error("Specify --to-space and/or --to-section");
+      process.exit(1);
+    }
+
+    const doc = await client.patchDocument(space, slug, patch);
+    console.log(`Moved ${slug} → ${doc.spaceId ? "new space" : space}/${doc.slug}`);
+  });
+
+// ── duplicate ─────────────────────────────────────────────────────────
+
+program
+  .command("duplicate <slug>")
+  .description("Duplicate a document")
+  .option("--as <slug>", "Slug for the copy")
+  .option("--to-space <space>", "Target space (default: same)")
+  .option("--space <space>", "Override source space from config")
+  .action(async (slug: string, opts: { as?: string; toSpace?: string; space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+
+    const doc = await client.duplicateDocument(space, slug, {
+      targetSpace: opts.toSpace,
+      targetSlug: opts.as,
+    });
+    console.log(`Duplicated → ${doc.slug} (${doc.title})`);
+  });
+
+// ── delete ────────────────────────────────────────────────────────────
+
+program
+  .command("delete <slug>")
+  .description("Delete a document")
+  .option("--space <space>", "Override space from config")
+  .option("--force", "Skip confirmation")
+  .action(async (slug: string, opts: { space?: string; force?: boolean }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+
+    if (!opts.force) {
+      const { createInterface } = await import("node:readline");
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(`Delete ${space}/${slug}? (y/N) `, resolve);
+        rl.close;
+      });
+      rl.close();
+      if (answer.toLowerCase() !== "y") {
+        console.log("Cancelled.");
+        return;
+      }
+    }
+
+    await client.deleteDocument(space, slug);
+    console.log(`Deleted ${space}/${slug}`);
+  });
+
 // ── list ──────────────────────────────────────────────────────────────
 
 program
