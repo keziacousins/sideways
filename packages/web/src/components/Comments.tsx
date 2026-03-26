@@ -56,32 +56,49 @@ export default function Comments({
 
   // Text selection handler — show floating button
   useEffect(() => {
-    function handleSelectionChange() {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-        setSelectionPos(null);
-        return;
-      }
+    function handleMouseUp() {
+      // Small delay to let the selection finalize
+      requestAnimationFrame(() => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+          setSelectionPos(null);
+          return;
+        }
 
-      // Only trigger for selections inside the document content
-      const anchor = sel.anchorNode?.parentElement?.closest(".sw-doc-content");
-      if (!anchor) {
-        setSelectionPos(null);
-        return;
-      }
+        // Only trigger for selections inside the document content
+        const docContent = sel.anchorNode?.parentElement?.closest(".sw-doc-content");
+        if (!docContent) {
+          setSelectionPos(null);
+          return;
+        }
 
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      setSelectionPos({
-        x: rect.right + 8,
-        y: rect.top + window.scrollY - 4,
+        const range = sel.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        // Position: just to the right of the content area, vertically aligned with selection
+        const contentRect = docContent.getBoundingClientRect();
+
+        setSelectionPos({
+          x: contentRect.right + 16,
+          y: rect.top + window.scrollY + (rect.height / 2) - 14,
+        });
+        setAnchorText(sel.toString().trim().slice(0, 200));
       });
-      setAnchorText(sel.toString().trim().slice(0, 200));
     }
 
-    document.addEventListener("selectionchange", handleSelectionChange);
-    return () =>
-      document.removeEventListener("selectionchange", handleSelectionChange);
+    function handleMouseDown(e: MouseEvent) {
+      // Clear selection button if clicking outside it
+      const target = e.target as HTMLElement;
+      if (!target.closest(".selection-comment-btn")) {
+        setSelectionPos(null);
+      }
+    }
+
+    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => {
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
   }, []);
 
   const openWithAnchor = (text: string | null) => {
