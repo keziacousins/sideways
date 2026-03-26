@@ -64,9 +64,37 @@ program
       const config = requireConfig();
       const space = opts.space ?? config.space;
       const client = createClient(config.api);
-      const targets = resolveSyncTargets(config, path);
 
       await requireSpace(client, space, { createHint: true });
+
+      // Single file pull — fetch one doc by slug
+      if (path && (path.endsWith(".md") || !path.includes("/"))) {
+        const slug = slugFromFilename(basename(path));
+        try {
+          const doc = await client.getDocument(space, slug);
+          const filename = `${slug}.md`;
+          const outDir = resolve(".");
+          const filePath = join(outDir, filename);
+
+          let content = doc.content;
+          const fm: Record<string, any> = {};
+          if (doc.title && doc.title !== titleFromSlug(slug)) fm.title = doc.title;
+          if (doc.tags?.length > 0) fm.tags = doc.tags;
+
+          const output = Object.keys(fm).length > 0
+            ? serializeFrontmatter(fm, content)
+            : content;
+
+          writeFileSync(filePath, output);
+          console.log(`Pulled ${space}/${slug} → ${filePath}`);
+        } catch {
+          console.error(`Document "${slug}" not found in space "${space}".`);
+          process.exit(1);
+        }
+        return;
+      }
+
+      const targets = resolveSyncTargets(config, path);
 
       let totalPulled = 0;
       let totalSkipped = 0;
