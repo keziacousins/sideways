@@ -1,75 +1,209 @@
 ---
 import BaseLayout from "../../../layouts/BaseLayout.astro";
+import Sidebar from "../../../components/Sidebar.astro";
+import CommentsPanel from "../../../components/CommentsPanel.astro";
 import "../../../styles/document.css";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const { space: spaceSlug, slug } = Astro.params;
 
-let doc: { title: string; html: string; tags: string[] } | null = null;
-let spaceName = spaceSlug;
+let space: { name: string; slug: string } | null = null;
+let doc: { title: string; html: string; tags: string[]; updatedAt: string } | null = null;
+let documents: { slug: string; title: string; tags: string[] }[] = [];
+let comments: any[] = [];
 
 try {
   const spaceRes = await fetch(`${API_URL}/api/spaces/${spaceSlug}`);
   if (spaceRes.ok) {
-    const space = await spaceRes.json();
-    spaceName = space.name;
-  }
+    space = await spaceRes.json();
 
-  const res = await fetch(`${API_URL}/api/documents/${spaceSlug}/${slug}/render`);
-  if (res.ok) {
-    doc = await res.json();
+    const [docRes, docsRes, commentsRes] = await Promise.all([
+      fetch(`${API_URL}/api/documents/${spaceSlug}/${slug}/render`),
+      fetch(`${API_URL}/api/documents?space=${spaceSlug}`),
+      fetch(`${API_URL}/api/comments/${spaceSlug}/${slug}`).catch(() => null),
+    ]);
+
+    if (docRes.ok) doc = await docRes.json();
+    if (docsRes.ok) documents = await docsRes.json();
+    if (commentsRes?.ok) comments = await commentsRes.json();
   }
 } catch {
   // API not available
 }
 
 const html = doc?.html ?? "";
+const navItems = documents.map((d) => ({
+  slug: d.slug,
+  title: d.title,
+  type: "doc" as const,
+}));
+const hasComments = comments.length > 0;
 ---
 
-<BaseLayout title={doc?.title ?? "Not Found"}>
+<BaseLayout
+  title={doc?.title ?? "Not Found"}
+  sidebar={!!space}
+  comments={hasComments}
+>
+  <Fragment slot="sidebar">
+    {space && (
+      <Sidebar
+        spaceSlug={spaceSlug!}
+        spaceName={space.name}
+        items={navItems}
+        activeSlug={slug}
+      />
+    )}
+  </Fragment>
+
   {doc ? (
-    <article class="sw-document">
-      <nav class="sw-breadcrumb">
-        <a href="/">Spaces</a> / <a href={`/s/${spaceSlug}`}>{spaceName}</a> / <span>{doc.title}</span>
+    <div class="doc-page">
+      <nav class="breadcrumbs animate-in">
+        <a href="/">Spaces</a>
+        <span class="breadcrumb-sep">/</span>
+        <a href={`/s/${spaceSlug}`}>{space?.name}</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">{doc.title}</span>
       </nav>
-      <div set:html={html} />
-    </article>
+
+      <div class="doc-toolbar animate-in" style="animation-delay: 60ms">
+        <div class="doc-toolbar-left">
+          {doc.tags?.length > 0 && (
+            <div class="doc-tags">
+              {doc.tags.map((tag) => (
+                <span class="tag">{tag}</span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div class="doc-toolbar-right">
+          <button class="toolbar-btn" title="Copy as markdown">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span>Copy markdown</span>
+          </button>
+        </div>
+      </div>
+
+      <article class="sw-doc-content animate-in" style="animation-delay: 120ms">
+        <Fragment set:html={html} />
+      </article>
+    </div>
   ) : (
-    <div class="sw-not-found">
+    <div class="not-found">
       <h1>Document not found</h1>
-      <a href={`/s/${spaceSlug}`}>Back to space</a>
+      <a href={`/s/${spaceSlug}`}>Back to {space?.name || "space"}</a>
     </div>
   )}
+
+  <Fragment slot="comments">
+    {hasComments && (
+      <CommentsPanel
+        comments={comments}
+        spaceSlug={spaceSlug!}
+        docSlug={slug!}
+      />
+    )}
+  </Fragment>
 </BaseLayout>
 
 <style>
-  .sw-breadcrumb {
-    font-size: 0.85rem;
-    color: #64748b;
-    margin-bottom: 2rem;
+  .doc-page {
+    max-width: var(--sw-content-max);
   }
 
-  .sw-breadcrumb a {
-    color: #6366f1;
+  /* ── Breadcrumbs ────────────────────── */
+  .breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-tertiary);
+    margin-bottom: 1.5rem;
+  }
+
+  .breadcrumbs a {
+    color: var(--sw-text-tertiary);
     text-decoration: none;
   }
 
-  .sw-breadcrumb a:hover {
-    text-decoration: underline;
+  .breadcrumbs a:hover {
+    color: var(--sw-accent);
   }
 
-  .sw-not-found {
-    max-width: 72ch;
-    margin: 0 auto;
-    padding: 4rem 2rem;
+  .breadcrumb-sep {
+    color: var(--sw-text-ghost);
+  }
+
+  .breadcrumb-current {
+    color: var(--sw-text-secondary);
+  }
+
+  /* ── Toolbar ────────────────────────── */
+  .doc-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--sw-border);
+  }
+
+  .doc-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .doc-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    background: var(--sw-ink-lighter);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-md);
+    color: var(--sw-text-tertiary);
+    font-size: var(--sw-text-xs);
+    font-family: var(--sw-font-body);
+    cursor: pointer;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .toolbar-btn:hover {
+    background: var(--sw-ink-surface);
+    color: var(--sw-text-primary);
+    border-color: var(--sw-border-strong);
+  }
+
+  .doc-tags {
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .tag {
+    font-size: var(--sw-text-xs);
+    padding: 0.15em 0.5em;
+    background: var(--sw-ink-lighter);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-tertiary);
+  }
+
+  .not-found {
+    padding: 4rem 0;
     text-align: center;
   }
 
-  .sw-not-found h1 {
+  .not-found h1 {
+    font-family: var(--sw-font-display);
     margin-bottom: 1rem;
-  }
-
-  .sw-not-found a {
-    color: #6366f1;
   }
 </style>

@@ -1,0 +1,104 @@
+/* ═══════════════════════════════════════════════════════════════
+   SIDEWAYS DESIGN TOKENS
+   "Obsidian Folio" — Dark editorial aesthetic
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Color Palette ─────────────────────────────────────────── */
+  --sw-ink-deepest: #08090c;
+  --sw-ink-deep: #0d0f14;
+  --sw-ink: #12141a;
+  --sw-ink-light: #1a1d26;
+  --sw-ink-lighter: #222633;
+  --sw-ink-surface: #2a2e3d;
+
+  --sw-text-primary: #e8e6e1;
+  --sw-text-secondary: #9b978f;
+  --sw-text-tertiary: #6b675f;
+  --sw-text-ghost: #4a4740;
+
+  --sw-accent: #e2a336;
+  --sw-accent-dim: #c48a24;
+  --sw-accent-glow: rgba(226, 163, 54, 0.12);
+  --sw-accent-strong: #f0b84a;
+
+  --sw-border: rgba(255, 255, 255, 0.06);
+  --sw-border-strong: rgba(255, 255, 255, 0.1);
+  --sw-border-accent: rgba(226, 163, 54, 0.2);
+
+  /* Semantic */
+  --sw-success: #4ade80;
+  --sw-warning: #fbbf24;
+  --sw-error: #f87171;
+  --sw-info: #60a5fa;
+
+  /* ── Typography ────────────────────────────────────────────── */
+  --sw-font-display: "Newsreader Variable", "Georgia", serif;
+  --sw-font-body: "Inter Variable", system-ui, -apple-system, sans-serif;
+  --sw-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --sw-text-xs: 0.75rem;
+  --sw-text-sm: 0.8125rem;
+  --sw-text-base: 0.9375rem;
+  --sw-text-lg: 1.0625rem;
+  --sw-text-xl: 1.25rem;
+  --sw-text-2xl: 1.625rem;
+  --sw-text-3xl: 2.125rem;
+  --sw-text-4xl: 2.75rem;
+
+  --sw-leading-tight: 1.2;
+  --sw-leading-normal: 1.65;
+  --sw-leading-relaxed: 1.8;
+
+  /* ── Spacing ───────────────────────────────────────────────── */
+  --sw-sidebar-width: 280px;
+  --sw-comments-width: 320px;
+  --sw-header-height: 56px;
+  --sw-content-max: 68ch;
+  --sw-page-pad: 2.5rem;
+
+  /* ── Radii ─────────────────────────────────────────────────── */
+  --sw-radius-sm: 4px;
+  --sw-radius-md: 8px;
+  --sw-radius-lg: 12px;
+
+  /* ── Shadows ───────────────────────────────────────────────── */
+  --sw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --sw-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+  --sw-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --sw-shadow-glow: 0 0 24px var(--sw-accent-glow);
+
+  /* ── Transitions ───────────────────────────────────────────── */
+  --sw-ease: cubic-bezier(0.22, 0.68, 0, 1);
+  --sw-duration-fast: 120ms;
+  --sw-duration: 200ms;
+  --sw-duration-slow: 400ms;
+}
+
+/* ── Light mode override ──────────────────────────────────────── */
+[data-theme="light"] {
+  --sw-ink-deepest: #ffffff;
+  --sw-ink-deep: #f9f8f6;
+  --sw-ink: #f3f2ee;
+  --sw-ink-light: #eae9e4;
+  --sw-ink-lighter: #dddcd6;
+  --sw-ink-surface: #d1d0ca;
+
+  --sw-text-primary: #1a1917;
+  --sw-text-secondary: #5c5a54;
+  --sw-text-tertiary: #8a877f;
+  --sw-text-ghost: #b5b2a9;
+
+  --sw-accent: #b8841e;
+  --sw-accent-dim: #9a6f18;
+  --sw-accent-glow: rgba(184, 132, 30, 0.08);
+  --sw-accent-strong: #d49a24;
+
+  --sw-border: rgba(0, 0, 0, 0.06);
+  --sw-border-strong: rgba(0, 0, 0, 0.1);
+  --sw-border-accent: rgba(184, 132, 30, 0.2);
+
+  --sw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --sw-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --sw-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.1);
+}

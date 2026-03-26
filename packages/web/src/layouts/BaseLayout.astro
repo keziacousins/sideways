@@ -2,17 +2,22 @@
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "@fontsource-variable/newsreader";
+import "../styles/global.css";
 import Header from "../components/Header.astro";
 
 interface Props {
   title: string;
+  /** Show the sidebar navigation */
+  sidebar?: boolean;
+  /** Show the comments panel */
+  comments?: boolean;
 }
 
-const { title } = Astro.props;
+const { title, sidebar = false, comments = false } = Astro.props;
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,6 +25,75 @@ const { title } = Astro.props;
   </head>
   <body>
     <Header />
-    <slot />
+    <div class:list={["sw-shell", { "has-sidebar": sidebar, "has-comments": comments }]}>
+      {sidebar && (
+        <aside class="sw-sidebar" id="sidebar">
+          <slot name="sidebar" />
+        </aside>
+      )}
+      <main class="sw-main">
+        <slot />
+      </main>
+      {comments && (
+        <aside class="sw-comments-panel" id="comments-panel">
+          <slot name="comments" />
+        </aside>
+      )}
+    </div>
   </body>
 </html>
+
+<style>
+  .sw-shell {
+    display: flex;
+    min-height: calc(100vh - var(--sw-header-height));
+    margin-top: var(--sw-header-height);
+  }
+
+  .sw-main {
+    flex: 1;
+    min-width: 0;
+    padding: var(--sw-page-pad);
+  }
+
+  /* ── Sidebar ────────────────────────────────────── */
+  .sw-sidebar {
+    position: sticky;
+    top: var(--sw-header-height);
+    width: var(--sw-sidebar-width);
+    height: calc(100vh - var(--sw-header-height));
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--sw-border);
+    background: var(--sw-ink-deepest);
+    padding: 1.25rem 0;
+    animation: slideInLeft var(--sw-duration-slow) var(--sw-ease) both;
+  }
+
+  /* ── Comments Panel ─────────────────────────────── */
+  .sw-comments-panel {
+    position: sticky;
+    top: var(--sw-header-height);
+    width: var(--sw-comments-width);
+    height: calc(100vh - var(--sw-header-height));
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-left: 1px solid var(--sw-border);
+    background: var(--sw-ink-deepest);
+    padding: 1.25rem;
+    animation: slideInRight var(--sw-duration-slow) var(--sw-ease) both;
+  }
+
+  /* ── Responsive ─────────────────────────────────── */
+  @media (max-width: 1200px) {
+    .sw-comments-panel {
+      display: none;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .sw-sidebar {
+      display: none;
+    }
+  }
+</style>

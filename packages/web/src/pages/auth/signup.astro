@@ -5,19 +5,34 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 ---
 
 <BaseLayout title="Sign up">
-  <div class="sw-auth-page">
-    <h1>Create your Sideways account</h1>
+  <div class="auth-page">
+    <div class="auth-card animate-in">
+      <div class="auth-logo">
+        <span class="logo-mark">S</span>
+      </div>
+      <h1>Create your account</h1>
+      <p class="auth-subtitle">Start documenting with Sideways</p>
 
-    <form id="signup-form" class="sw-auth-form">
-      <input type="text" name="name" placeholder="Name" required autofocus />
-      <input type="email" name="email" placeholder="Email" required />
-      <input type="password" name="password" placeholder="Password" required minlength="8" />
-      <button type="submit">Create account</button>
-    </form>
+      <form id="signup-form" class="auth-form">
+        <div class="form-field">
+          <label for="name">Name</label>
+          <input type="text" id="name" name="name" placeholder="Your name" required autofocus />
+        </div>
+        <div class="form-field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="you@example.com" required />
+        </div>
+        <div class="form-field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" placeholder="Min. 8 characters" required minlength="8" />
+        </div>
+        <button type="submit" class="auth-submit">Create account</button>
+      </form>
 
-    <p class="sw-auth-alt">
-      Already have an account? <a href="/auth/login">Sign in</a>
-    </p>
+      <p class="auth-alt">
+        Already have an account? <a href="/auth/login">Sign in</a>
+      </p>
+    </div>
   </div>
 </BaseLayout>
 
@@ -30,6 +45,9 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
     const name = formData.get("name");
     const email = formData.get("email");
     const password = formData.get("password");
+    const btn = form.querySelector("button");
+    btn.textContent = "Creating account…";
+    btn.disabled = true;
 
     try {
       const res = await fetch(`${API_URL}/api/auth/register`, {
@@ -41,65 +59,139 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
       const data = await res.json();
       if (!res.ok) {
         alert(data.error || "Registration failed");
+        btn.textContent = "Create account";
+        btn.disabled = false;
         return;
       }
 
-      // Got a nonce — redirect to API authorize endpoint
       window.location.href = `${API_URL}/api/auth/authorize?nonce=${data.nonce}`;
     } catch (err) {
       alert("Connection error. Is the API server running?");
+      btn.textContent = "Create account";
+      btn.disabled = false;
     }
   });
 </script>
 
 <style>
-  .sw-auth-page {
-    max-width: 400px;
-    margin: 4rem auto;
-    padding: 0 2rem;
+  .auth-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - var(--sw-header-height) - 4rem);
   }
 
-  .sw-auth-page h1 {
-    font-size: 1.5rem;
-    font-weight: 700;
+  .auth-card {
+    width: 100%;
+    max-width: 380px;
+    padding: 2.5rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-lg);
+  }
+
+  .auth-logo {
     margin-bottom: 1.5rem;
   }
 
-  .sw-auth-form {
+  .auth-logo .logo-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-display);
+    font-weight: 600;
+    font-size: var(--sw-text-xl);
+  }
+
+  .auth-card h1 {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-2xl);
+    font-weight: 400;
+    margin-bottom: 0.35rem;
+  }
+
+  .auth-subtitle {
+    color: var(--sw-text-tertiary);
+    font-size: var(--sw-text-sm);
+    margin-bottom: 2rem;
+  }
+
+  .auth-form {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 1rem;
   }
 
-  .sw-auth-form input {
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 1rem;
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
   }
 
-  .sw-auth-form button {
-    padding: 0.75rem;
-    background: #6366f1;
-    color: white;
+  .form-field label {
+    font-size: var(--sw-text-sm);
+    font-weight: 500;
+    color: var(--sw-text-secondary);
+  }
+
+  .form-field input {
+    padding: 0.6rem 0.85rem;
+    background: var(--sw-ink-deep);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    color: var(--sw-text-primary);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-base);
+    transition: border-color var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .form-field input::placeholder {
+    color: var(--sw-text-ghost);
+  }
+
+  .form-field input:focus {
+    outline: none;
+    border-color: var(--sw-accent);
+    box-shadow: 0 0 0 3px var(--sw-accent-glow);
+  }
+
+  .auth-submit {
+    margin-top: 0.5rem;
+    padding: 0.65rem;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
     border: none;
-    border-radius: 6px;
-    font-size: 1rem;
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-base);
+    font-weight: 600;
     cursor: pointer;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
   }
 
-  .sw-auth-form button:hover {
-    background: #4f46e5;
+  .auth-submit:hover {
+    background: var(--sw-accent-strong);
+    box-shadow: var(--sw-shadow-glow);
   }
 
-  .sw-auth-alt {
+  .auth-submit:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .auth-alt {
     margin-top: 1.5rem;
-    font-size: 0.85rem;
-    color: #64748b;
+    text-align: center;
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-tertiary);
   }
 
-  .sw-auth-alt a {
-    color: #6366f1;
-    text-decoration: none;
+  .auth-alt a {
+    color: var(--sw-accent);
   }
 </style>

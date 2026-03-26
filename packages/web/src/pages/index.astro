@@ -3,7 +3,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 
-let spaces: { slug: string; name: string; description: string | null; visibility: string }[] = [];
+let spaces: { slug: string; name: string; description: string | null; visibility: string; personal: boolean }[] = [];
 try {
   const res = await fetch(`${API_URL}/api/spaces`);
   spaces = await res.json();
@@ -12,79 +12,173 @@ try {
 }
 ---
 
-<BaseLayout title="Documents">
-  <div class="sw-home">
-    <h1 class="sw-page-title">Spaces</h1>
-    <main class="sw-doc-list">
+<BaseLayout title="Spaces">
+  <div class="home">
+    <div class="home-hero">
+      <h1 class="home-title">Documentation</h1>
+      <p class="home-subtitle">Browse spaces or search for what you need</p>
+    </div>
+
+    <div class="space-grid">
       {spaces.length === 0 && (
-        <p class="sw-empty">No spaces yet. Create one via the API or CLI.</p>
+        <p class="empty-state">No spaces yet. Create one via the API or CLI.</p>
       )}
-      {spaces.map((space) => (
-        <a href={`/s/${space.slug}`} class="sw-doc-card">
-          <h2>{space.name}</h2>
-          {space.description && <p class="sw-description">{space.description}</p>}
-          <span class="sw-tag">{space.visibility}</span>
+      {spaces.map((space, i) => (
+        <a
+          href={`/s/${space.slug}`}
+          class="space-card animate-in"
+          style={`animation-delay: ${i * 60}ms`}
+        >
+          <div class="space-card-icon">
+            {space.personal ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            )}
+          </div>
+          <div class="space-card-content">
+            <h2 class="space-card-name">{space.name}</h2>
+            {space.description && (
+              <p class="space-card-desc">{space.description}</p>
+            )}
+          </div>
+          <div class="space-card-meta">
+            <span class:list={["visibility-badge", space.visibility]}>
+              {space.visibility}
+            </span>
+          </div>
         </a>
       ))}
-    </main>
+    </div>
   </div>
 </BaseLayout>
 
 <style>
-  .sw-home {
-    max-width: 72ch;
+  .home {
+    max-width: 800px;
     margin: 0 auto;
-    padding: 2rem;
+    padding: 1rem 0;
   }
 
-  .sw-page-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    margin-bottom: 1.5rem;
+  .home-hero {
+    padding: 2rem 0 3rem;
   }
 
-  .sw-doc-list {
+  .home-title {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-4xl);
+    font-weight: 400;
+    letter-spacing: -0.03em;
+    color: var(--sw-text-primary);
+    margin-bottom: 0.5rem;
+  }
+
+  .home-subtitle {
+    font-size: var(--sw-text-lg);
+    color: var(--sw-text-tertiary);
+  }
+
+  .space-grid {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1px;
+    background: var(--sw-border);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-lg);
+    overflow: hidden;
   }
 
-  .sw-doc-card {
-    display: block;
+  .space-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
     padding: 1.25rem 1.5rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
+    background: var(--sw-ink);
     text-decoration: none;
     color: inherit;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: background var(--sw-duration) var(--sw-ease);
   }
 
-  .sw-doc-card:hover {
-    border-color: #6366f1;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
+  .space-card:hover {
+    background: var(--sw-ink-light);
   }
 
-  .sw-doc-card h2 {
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 0.35rem;
-  }
-
-  .sw-tags {
+  .space-card-icon {
     display: flex;
-    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--sw-ink-lighter);
+    border-radius: var(--sw-radius-md);
+    color: var(--sw-accent);
+    flex-shrink: 0;
   }
 
-  .sw-tag {
-    font-size: 0.75rem;
-    background: #f1f5f9;
-    color: #64748b;
-    padding: 0.15em 0.6em;
+  .space-card-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .space-card-name {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-lg);
+    font-weight: 500;
+    color: var(--sw-text-primary);
+    margin-bottom: 0.15rem;
+  }
+
+  .space-card-desc {
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .space-card-meta {
+    flex-shrink: 0;
+  }
+
+  .visibility-badge {
+    font-size: var(--sw-text-xs);
+    padding: 0.2em 0.6em;
     border-radius: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
   }
 
-  .sw-empty {
-    color: #94a3b8;
+  .visibility-badge.public {
+    background: rgba(74, 222, 128, 0.1);
+    color: var(--sw-success);
+  }
+
+  .visibility-badge.private {
+    background: rgba(248, 113, 113, 0.1);
+    color: var(--sw-error);
+  }
+
+  .visibility-badge.org {
+    background: rgba(96, 165, 250, 0.1);
+    color: var(--sw-info);
+  }
+
+  .visibility-badge.shared {
+    background: rgba(251, 191, 36, 0.1);
+    color: var(--sw-warning);
+  }
+
+  .empty-state {
+    padding: 3rem;
+    text-align: center;
+    background: var(--sw-ink);
+    color: var(--sw-text-ghost);
   }
 </style>

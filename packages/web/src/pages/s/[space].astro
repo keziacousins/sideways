@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import Sidebar from "../../components/Sidebar.astro";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const { space: spaceSlug } = Astro.params;
@@ -17,35 +18,65 @@ try {
 } catch {
   // API not available
 }
+
+const navItems = documents.map((doc) => ({
+  slug: doc.slug,
+  title: doc.title,
+  type: "doc" as const,
+}));
 ---
 
-<BaseLayout title={space?.name ?? "Not Found"}>
+<BaseLayout title={space?.name ?? "Not Found"} sidebar={!!space}>
+  <Fragment slot="sidebar">
+    {space && (
+      <Sidebar
+        spaceSlug={spaceSlug!}
+        spaceName={space.name}
+        items={navItems}
+      />
+    )}
+  </Fragment>
+
   {space ? (
-    <div class="sw-space">
-      <nav class="sw-breadcrumb">
-        <a href="/">Spaces</a> / <span>{space.name}</span>
-      </nav>
-      {space.description && <p class="sw-description">{space.description}</p>}
-      <div class="sw-doc-list">
-        {documents.length === 0 && (
-          <p class="sw-empty">No documents in this space yet.</p>
-        )}
-        {documents.map((doc) => (
-          <a href={`/s/${spaceSlug}/${doc.slug}`} class="sw-doc-card">
-            <h2>{doc.title}</h2>
-            {doc.tags?.length > 0 && (
-              <div class="sw-tags">
-                {doc.tags.map((tag) => (
-                  <span class="sw-tag">{tag}</span>
-                ))}
+    <div class="space-landing">
+      <div class="space-header animate-in">
+        <h1>{space.name}</h1>
+        {space.description && <p class="space-desc">{space.description}</p>}
+      </div>
+
+      <div class="doc-grid">
+        {documents.length === 0 ? (
+          <p class="empty-state">No documents in this space yet.</p>
+        ) : (
+          documents.map((doc, i) => (
+            <a
+              href={`/s/${spaceSlug}/${doc.slug}`}
+              class="doc-card animate-in"
+              style={`animation-delay: ${(i + 1) * 60}ms`}
+            >
+              <div class="doc-card-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>
               </div>
-            )}
-          </a>
-        ))}
+              <span class="doc-card-title">{doc.title}</span>
+              {doc.tags?.length > 0 && (
+                <div class="doc-tags">
+                  {doc.tags.map((tag) => (
+                    <span class="tag">{tag}</span>
+                  ))}
+                </div>
+              )}
+            </a>
+          ))
+        )}
       </div>
     </div>
   ) : (
-    <div class="sw-not-found">
+    <div class="not-found">
       <h1>Space not found</h1>
       <a href="/">Back to spaces</a>
     </div>
@@ -53,80 +84,88 @@ try {
 </BaseLayout>
 
 <style>
-  .sw-space {
-    max-width: 72ch;
-    margin: 0 auto;
-    padding: 2rem;
+  .space-landing {
+    max-width: 640px;
   }
 
-  .sw-breadcrumb {
-    font-size: 0.85rem;
-    color: #64748b;
+  .space-header {
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--sw-border);
     margin-bottom: 2rem;
   }
 
-  .sw-breadcrumb a {
-    color: #6366f1;
-    text-decoration: none;
-  }
-
-  .sw-description {
-    color: #64748b;
-    margin-bottom: 2rem;
-  }
-
-  .sw-doc-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .sw-doc-card {
-    display: block;
-    padding: 1.25rem 1.5rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    text-decoration: none;
-    color: inherit;
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-
-  .sw-doc-card:hover {
-    border-color: #6366f1;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
-  }
-
-  .sw-doc-card h2 {
-    font-size: 1.1rem;
-    font-weight: 600;
+  .space-header h1 {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-3xl);
+    font-weight: 400;
+    letter-spacing: -0.02em;
     margin-bottom: 0.35rem;
   }
 
-  .sw-tags {
+  .space-desc {
+    color: var(--sw-text-tertiary);
+    font-size: var(--sw-text-base);
+  }
+
+  .doc-grid {
     display: flex;
-    gap: 0.5rem;
+    flex-direction: column;
+    gap: 2px;
   }
 
-  .sw-tag {
-    font-size: 0.75rem;
-    background: #f1f5f9;
-    color: #64748b;
-    padding: 0.15em 0.6em;
-    border-radius: 4px;
+  .doc-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--sw-radius-md);
+    text-decoration: none;
+    color: inherit;
+    transition: background var(--sw-duration-fast) var(--sw-ease);
   }
 
-  .sw-empty {
-    color: #94a3b8;
+  .doc-card:hover {
+    background: var(--sw-ink-light);
   }
 
-  .sw-not-found {
-    max-width: 72ch;
-    margin: 0 auto;
-    padding: 4rem 2rem;
+  .doc-card-icon {
+    color: var(--sw-text-ghost);
+    flex-shrink: 0;
+  }
+
+  .doc-card-title {
+    font-size: var(--sw-text-base);
+    color: var(--sw-text-primary);
+    flex: 1;
+  }
+
+  .doc-tags {
+    display: flex;
+    gap: 0.35rem;
+    flex-shrink: 0;
+  }
+
+  .tag {
+    font-size: var(--sw-text-xs);
+    padding: 0.15em 0.5em;
+    background: var(--sw-ink-lighter);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-tertiary);
+  }
+
+  .empty-state {
+    padding: 3rem 0;
+    text-align: center;
+    color: var(--sw-text-ghost);
+  }
+
+  .not-found {
+    padding: 4rem 0;
     text-align: center;
   }
 
-  .sw-not-found a {
-    color: #6366f1;
+  .not-found h1 {
+    font-family: var(--sw-font-display);
+    margin-bottom: 1rem;
   }
 </style>

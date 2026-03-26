@@ -1,0 +1,147 @@
+---
+interface NavItem {
+  slug: string;
+  title: string;
+  type: "section" | "doc";
+  children?: NavItem[];
+  active?: boolean;
+}
+
+interface Props {
+  spaceSlug: string;
+  spaceName: string;
+  items: NavItem[];
+  activeSlug?: string;
+}
+
+const { spaceSlug, spaceName, items, activeSlug } = Astro.props;
+---
+
+<nav class="sidebar-nav">
+  <div class="sidebar-header">
+    <a href={`/s/${spaceSlug}`} class="sidebar-space-name">{spaceName}</a>
+  </div>
+
+  <ul class="nav-tree">
+    {items.map((item) => (
+      <li class:list={["nav-item", { active: item.slug === activeSlug }]}>
+        {item.type === "section" ? (
+          <details open>
+            <summary class="nav-section">
+              <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span>{item.title}</span>
+            </summary>
+            {item.children && (
+              <ul class="nav-children">
+                {item.children.map((child) => (
+                  <li class:list={["nav-item", { active: child.slug === activeSlug }]}>
+                    <a href={`/s/${spaceSlug}/${child.slug}`} class="nav-link">
+                      {child.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </details>
+        ) : (
+          <a href={`/s/${spaceSlug}/${item.slug}`} class="nav-link">
+            {item.title}
+          </a>
+        )}
+      </li>
+    ))}
+  </ul>
+</nav>
+
+<style>
+  .sidebar-nav {
+    font-size: var(--sw-text-sm);
+  }
+
+  .sidebar-header {
+    padding: 0 1.25rem 1rem;
+    border-bottom: 1px solid var(--sw-border);
+    margin-bottom: 0.75rem;
+  }
+
+  .sidebar-space-name {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-base);
+    font-weight: 500;
+    color: var(--sw-text-primary);
+    text-decoration: none;
+  }
+
+  .sidebar-space-name:hover {
+    color: var(--sw-accent);
+  }
+
+  .nav-tree {
+    list-style: none;
+    padding: 0;
+  }
+
+  .nav-item {
+    margin: 0;
+  }
+
+  .nav-section {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 1.25rem;
+    color: var(--sw-text-secondary);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: var(--sw-text-xs);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .nav-section:hover {
+    color: var(--sw-text-primary);
+  }
+
+  .nav-section::-webkit-details-marker {
+    display: none;
+  }
+
+  .chevron {
+    transition: transform var(--sw-duration) var(--sw-ease);
+    flex-shrink: 0;
+  }
+
+  details[open] > .nav-section .chevron {
+    transform: rotate(90deg);
+  }
+
+  .nav-children {
+    list-style: none;
+    padding: 0;
+  }
+
+  .nav-link {
+    display: block;
+    padding: 0.35rem 1.25rem 0.35rem 2.25rem;
+    color: var(--sw-text-tertiary);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .nav-link:hover {
+    color: var(--sw-text-primary);
+    background: var(--sw-ink-light);
+  }
+
+  .nav-item.active > .nav-link,
+  .nav-item.active > details > .nav-children > .nav-item.active > .nav-link {
+    color: var(--sw-accent);
+    border-left-color: var(--sw-accent);
+    background: var(--sw-accent-glow);
+  }
+</style>

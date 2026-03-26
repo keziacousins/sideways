@@ -3,80 +3,197 @@ const userName = await Astro.session?.get("user_name");
 const isLoggedIn = !!userName;
 ---
 
-<header class="sw-site-header">
-  <div class="sw-header-inner">
-    <a href="/" class="sw-logo">Sideways</a>
-    <nav class="sw-header-nav">
+<header class="header">
+  <div class="header-inner">
+    <div class="header-left">
+      <a href="/" class="logo">
+        <span class="logo-mark">S</span>
+        <span class="logo-text">Sideways</span>
+      </a>
+    </div>
+
+    <div class="header-center">
+      <div class="search-trigger" role="button" tabindex="0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <span>Search documentation…</span>
+        <kbd>⌘K</kbd>
+      </div>
+    </div>
+
+    <div class="header-right">
       {isLoggedIn ? (
-        <div class="sw-user-menu">
-          <span class="sw-user-name">{userName}</span>
-          <a href="/auth/logout" class="sw-auth-link">Sign out</a>
+        <div class="user-menu">
+          <div class="user-avatar">{userName?.charAt(0).toUpperCase()}</div>
+          <span class="user-name">{userName}</span>
+          <a href="/auth/logout" class="header-link">Sign out</a>
         </div>
       ) : (
-        <a href="/auth/login" class="sw-auth-link sw-sign-in">Sign in</a>
+        <div class="auth-links">
+          <a href="/auth/login" class="header-link">Sign in</a>
+          <a href="/auth/signup" class="btn-primary">Get started</a>
+        </div>
       )}
-    </nav>
+    </div>
   </div>
 </header>
 
 <style>
-  .sw-site-header {
-    border-bottom: 1px solid #e2e8f0;
-    background: #fff;
+  .header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--sw-header-height);
+    background: rgba(13, 15, 20, 0.85);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border-bottom: 1px solid var(--sw-border);
+    z-index: 100;
   }
 
-  .sw-header-inner {
-    max-width: 72ch;
-    margin: 0 auto;
-    padding: 0.75rem 2rem;
+  .header-inner {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    height: 100%;
+    padding: 0 1.25rem;
+    max-width: 100%;
   }
 
-  .sw-logo {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #1a1a2e;
+  /* ── Logo ──────────────────────────── */
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
     text-decoration: none;
+    color: var(--sw-text-primary);
+  }
+
+  .logo-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
+    border-radius: var(--sw-radius-sm);
+    font-family: var(--sw-font-display);
+    font-weight: 600;
+    font-size: var(--sw-text-base);
+  }
+
+  .logo-text {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-lg);
+    font-weight: 500;
     letter-spacing: -0.02em;
   }
 
-  .sw-header-nav {
+  /* ── Search ────────────────────────── */
+  .search-trigger {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    background: var(--sw-ink-light);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-md);
+    color: var(--sw-text-tertiary);
+    font-size: var(--sw-text-sm);
+    cursor: pointer;
+    min-width: 260px;
+    transition: all var(--sw-duration) var(--sw-ease);
   }
 
-  .sw-user-menu {
+  .search-trigger:hover {
+    border-color: var(--sw-border-strong);
+    color: var(--sw-text-secondary);
+  }
+
+  .search-trigger kbd {
+    margin-left: auto;
+    padding: 0.1em 0.4em;
+    background: var(--sw-ink-lighter);
+    border: 1px solid var(--sw-border);
+    border-radius: 3px;
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-ghost);
+  }
+
+  .search-trigger span {
+    flex: 1;
+  }
+
+  /* ── User / Auth ───────────────────── */
+  .user-menu {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.6rem;
   }
 
-  .sw-user-name {
-    font-size: 0.85rem;
-    color: #64748b;
+  .user-avatar {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--sw-ink-surface);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: 50%;
+    font-size: var(--sw-text-xs);
+    font-weight: 600;
+    color: var(--sw-text-secondary);
   }
 
-  .sw-auth-link {
-    font-size: 0.85rem;
-    color: #6366f1;
+  .user-name {
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-secondary);
+  }
+
+  .header-link {
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-tertiary);
     text-decoration: none;
+    transition: color var(--sw-duration-fast) var(--sw-ease);
   }
 
-  .sw-auth-link:hover {
-    text-decoration: underline;
+  .header-link:hover {
+    color: var(--sw-text-primary);
   }
 
-  .sw-sign-in {
+  .auth-links {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .btn-primary {
     padding: 0.4rem 1rem;
-    border: 1px solid #6366f1;
-    border-radius: 6px;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
+    font-size: var(--sw-text-sm);
+    font-weight: 600;
+    border-radius: var(--sw-radius-md);
+    text-decoration: none;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
   }
 
-  .sw-sign-in:hover {
-    background: #6366f1;
-    color: white;
+  .btn-primary:hover {
+    background: var(--sw-accent-strong);
+    color: var(--sw-ink-deepest);
+    box-shadow: var(--sw-shadow-glow);
+  }
+
+  @media (max-width: 600px) {
+    .search-trigger {
+      display: none;
+    }
+    .user-name {
+      display: none;
+    }
   }
 </style>

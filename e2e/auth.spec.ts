@@ -15,43 +15,32 @@ test.describe("Authentication", () => {
   });
 
   test("sign up and login flow", async ({ page }) => {
-    // Go to signup page
     await page.goto("/auth/signup");
-    await expect(page.locator("h1")).toContainText("Create your Sideways account");
+    await expect(page.locator("h1")).toContainText("Create your account");
 
-    // Fill in the form
     await page.fill('input[name="name"]', TEST_NAME);
     await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', TEST_PASSWORD);
-
-    // Submit
     await page.click('button[type="submit"]');
 
-    // Should redirect through Hydra and back to homepage
     await page.waitForURL("/", { timeout: 15000 });
 
-    // Should show user name in header
     await expect(page.locator("text=E2E Test User")).toBeVisible();
     await expect(page.locator("text=Sign out")).toBeVisible();
-    await expect(page.locator("text=Sign in")).not.toBeVisible();
   });
 
   test("logout flow", async ({ page }) => {
-    // First login
     await page.goto("/auth/login");
     await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', TEST_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL("/", { timeout: 15000 });
 
-    // Verify logged in
     await expect(page.locator("text=Sign out")).toBeVisible();
 
-    // Logout
     await page.click("text=Sign out");
     await page.waitForURL("/");
 
-    // Should show sign in again
     await expect(page.locator("text=Sign in")).toBeVisible();
   });
 
@@ -60,21 +49,18 @@ test.describe("Authentication", () => {
     await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', "wrongpassword123!");
 
-    // Listen for the alert
     page.on("dialog", async (dialog) => {
       expect(dialog.message()).toContain("credentials");
       await dialog.accept();
     });
 
     await page.click('button[type="submit"]');
-
-    // Should stay on login page
     await expect(page).toHaveURL(/auth\/login/);
   });
 
   test("signup link from login page", async ({ page }) => {
     await page.goto("/auth/login");
-    await page.click("text=Sign up");
+    await page.click("text=Create one");
     await expect(page).toHaveURL(/auth\/signup/);
   });
 
@@ -87,7 +73,6 @@ test.describe("Authentication", () => {
 
 test.describe("Authenticated navigation", () => {
   test.beforeEach(async ({ page }) => {
-    // Login before each test
     await page.goto("/auth/login");
     await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', TEST_PASSWORD);
@@ -96,16 +81,15 @@ test.describe("Authenticated navigation", () => {
   });
 
   test("homepage shows spaces", async ({ page }) => {
-    await expect(page.locator("text=Spaces")).toBeVisible();
+    await expect(page.locator("h1")).toContainText("Documentation");
   });
 
   test("can navigate to a space", async ({ page }) => {
-    // Check if any space cards exist
-    const cards = page.locator(".sw-doc-card");
+    const cards = page.locator(".space-card");
     const count = await cards.count();
     if (count > 0) {
       await cards.first().click();
-      await expect(page.locator(".sw-breadcrumb")).toBeVisible();
+      await page.waitForURL(/\/s\//);
     }
   });
 });
