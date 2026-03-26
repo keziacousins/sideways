@@ -1,31 +1,30 @@
 ---
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 import Sidebar from "../../../components/Sidebar.astro";
-import CommentsPanel from "../../../components/CommentsPanel.astro";
+import Comments from "../../../components/Comments.tsx";
 import "../../../styles/document.css";
+import "../../../styles/comments.css";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const { space: spaceSlug, slug } = Astro.params;
+const accessToken = await Astro.session?.get("access_token") || null;
 
 let space: { name: string; slug: string } | null = null;
 let doc: { title: string; html: string; tags: string[]; updatedAt: string } | null = null;
 let documents: { slug: string; title: string; tags: string[] }[] = [];
-let comments: any[] = [];
 
 try {
   const spaceRes = await fetch(`${API_URL}/api/spaces/${spaceSlug}`);
   if (spaceRes.ok) {
     space = await spaceRes.json();
 
-    const [docRes, docsRes, commentsRes] = await Promise.all([
+    const [docRes, docsRes] = await Promise.all([
       fetch(`${API_URL}/api/documents/${spaceSlug}/${slug}/render`),
       fetch(`${API_URL}/api/documents?space=${spaceSlug}`),
-      fetch(`${API_URL}/api/comments/${spaceSlug}/${slug}`).catch(() => null),
     ]);
 
     if (docRes.ok) doc = await docRes.json();
     if (docsRes.ok) documents = await docsRes.json();
-    if (commentsRes?.ok) comments = await commentsRes.json();
   }
 } catch {
   // API not available
@@ -37,14 +36,9 @@ const navItems = documents.map((d) => ({
   title: d.title,
   type: "doc" as const,
 }));
-const hasComments = comments.length > 0;
 ---
 
-<BaseLayout
-  title={doc?.title ?? "Not Found"}
-  sidebar={!!space}
-  comments={hasComments}
->
+<BaseLayout title={doc?.title ?? "Not Found"} sidebar={!!space}>
   <Fragment slot="sidebar">
     {space && (
       <Sidebar
@@ -77,6 +71,13 @@ const hasComments = comments.length > 0;
           )}
         </div>
         <div class="doc-toolbar-right">
+          <Comments
+            client:load
+            spaceSlug={spaceSlug!}
+            docSlug={slug!}
+            apiUrl={API_URL}
+            accessToken={accessToken}
+          />
           <button class="toolbar-btn" title="Copy as markdown">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -97,16 +98,6 @@ const hasComments = comments.length > 0;
       <a href={`/s/${spaceSlug}`}>Back to {space?.name || "space"}</a>
     </div>
   )}
-
-  <Fragment slot="comments">
-    {hasComments && (
-      <CommentsPanel
-        comments={comments}
-        spaceSlug={spaceSlug!}
-        docSlug={slug!}
-      />
-    )}
-  </Fragment>
 </BaseLayout>
 
 <style>
@@ -114,7 +105,6 @@ const hasComments = comments.length > 0;
     max-width: var(--sw-content-max);
   }
 
-  /* ── Breadcrumbs ────────────────────── */
   .breadcrumbs {
     display: flex;
     align-items: center;
@@ -141,7 +131,6 @@ const hasComments = comments.length > 0;
     color: var(--sw-text-secondary);
   }
 
-  /* ── Toolbar ────────────────────────── */
   .doc-toolbar {
     display: flex;
     align-items: center;

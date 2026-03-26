@@ -7,13 +7,10 @@ import Header from "../components/Header.astro";
 
 interface Props {
   title: string;
-  /** Show the sidebar navigation */
   sidebar?: boolean;
-  /** Show the comments panel */
-  comments?: boolean;
 }
 
-const { title, sidebar = false, comments = false } = Astro.props;
+const { title, sidebar = false } = Astro.props;
 ---
 
 <!doctype html>
@@ -25,7 +22,7 @@ const { title, sidebar = false, comments = false } = Astro.props;
   </head>
   <body>
     <Header />
-    <div class:list={["sw-shell", { "has-sidebar": sidebar, "has-comments": comments }]}>
+    <div class:list={["sw-shell", { "has-sidebar": sidebar }]}>
       {sidebar && (
         <aside class="sw-sidebar" id="sidebar">
           <slot name="sidebar" />
@@ -34,11 +31,6 @@ const { title, sidebar = false, comments = false } = Astro.props;
       <main class="sw-main">
         <slot />
       </main>
-      {comments && (
-        <aside class="sw-comments-panel" id="comments-panel">
-          <slot name="comments" />
-        </aside>
-      )}
     </div>
   </body>
 </html>
@@ -56,7 +48,6 @@ const { title, sidebar = false, comments = false } = Astro.props;
     padding: var(--sw-page-pad);
   }
 
-  /* ── Sidebar ────────────────────────────────────── */
   .sw-sidebar {
     position: sticky;
     top: var(--sw-header-height);
@@ -68,27 +59,6 @@ const { title, sidebar = false, comments = false } = Astro.props;
     background: var(--sw-ink-deepest);
     padding: 1.25rem 0;
     animation: slideInLeft var(--sw-duration-slow) var(--sw-ease) both;
-  }
-
-  /* ── Comments Panel ─────────────────────────────── */
-  .sw-comments-panel {
-    position: sticky;
-    top: var(--sw-header-height);
-    width: var(--sw-comments-width);
-    height: calc(100vh - var(--sw-header-height));
-    flex-shrink: 0;
-    overflow-y: auto;
-    border-left: 1px solid var(--sw-border);
-    background: var(--sw-ink-deepest);
-    padding: 1.25rem;
-    animation: slideInRight var(--sw-duration-slow) var(--sw-ease) both;
-  }
-
-  /* ── Responsive ─────────────────────────────────── */
-  @media (max-width: 1200px) {
-    .sw-comments-panel {
-      display: none;
-    }
   }
 
   @media (max-width: 900px) {
