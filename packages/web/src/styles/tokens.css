@@ -13,9 +13,9 @@
   --sw-ink-surface: #2a2e3d;
 
   --sw-text-primary: #e8e6e1;
-  --sw-text-secondary: #9b978f;
-  --sw-text-tertiary: #6b675f;
-  --sw-text-ghost: #4a4740;
+  --sw-text-secondary: #a8a49b;
+  --sw-text-tertiary: #7d7970;
+  --sw-text-ghost: #565249;
 
   --sw-accent: #e2a336;
   --sw-accent-dim: #c48a24;
@@ -28,8 +28,8 @@
 
   /* Document content — higher contrast than UI chrome */
   --sw-doc-border: rgba(255, 255, 255, 0.15);
-  --sw-doc-marker: #7a766d;
-  --sw-doc-rule: rgba(255, 255, 255, 0.12);
+  --sw-doc-marker: #8a867d;
+  --sw-doc-rule: rgba(255, 255, 255, 0.14);
 
   /* Semantic */
   --sw-success: #4ade80;
