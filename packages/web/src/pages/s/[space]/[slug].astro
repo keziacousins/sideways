@@ -119,6 +119,29 @@ const navItems = documents.map((d) => ({
             accessToken={accessToken}
             refreshToken={refreshToken}
           />
+          {accessToken && (
+            <div class="doc-actions-menu" id="doc-actions-menu">
+              <button class="toolbar-btn" id="actions-toggle" title="More actions">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="5" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="19" r="1" />
+                </svg>
+              </button>
+              <div class="actions-dropdown" id="actions-dropdown" style="display: none;">
+                <button class="action-item" id="action-rename">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                  Rename
+                </button>
+                <button class="action-item" id="action-duplicate">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  Duplicate
+                </button>
+                <button class="action-item action-danger" id="action-delete">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14H7L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -241,6 +264,51 @@ const navItems = documents.map((d) => ({
   .version-count,
   .version-date {
     color: var(--sw-text-tertiary);
+  }
+
+  /* ── Actions Menu ────────────────────── */
+  .doc-actions-menu {
+    position: relative;
+  }
+
+  .actions-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.35rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    box-shadow: var(--sw-shadow-lg);
+    min-width: 160px;
+    z-index: 50;
+    padding: 0.25rem;
+  }
+
+  .action-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.45rem 0.65rem;
+    background: none;
+    border: none;
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-secondary);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .action-item:hover {
+    background: var(--sw-ink-light);
+    color: var(--sw-text-primary);
+  }
+
+  .action-item.action-danger:hover {
+    background: rgba(248, 113, 113, 0.08);
+    color: var(--sw-error);
   }
 
   /* ── Editor ──────────────────────────── */
@@ -554,6 +622,71 @@ const navItems = documents.map((d) => ({
         setTimeout(() => { span.textContent = "Copy markdown"; }, 2000);
       }
     });
+  });
+
+  // Actions menu
+  const actionsToggle = document.getElementById("actions-toggle");
+  const actionsDropdown = document.getElementById("actions-dropdown");
+
+  actionsToggle?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const visible = actionsDropdown.style.display !== "none";
+    actionsDropdown.style.display = visible ? "none" : "block";
+  });
+
+  document.addEventListener("click", () => {
+    if (actionsDropdown) actionsDropdown.style.display = "none";
+  });
+
+  // Rename
+  document.getElementById("action-rename")?.addEventListener("click", async () => {
+    const newTitle = prompt("New title:", document.querySelector("h1")?.textContent || "");
+    if (!newTitle) return;
+    const newSlug = newTitle.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+
+    const res = await fetch(`/s/${spaceSlug}/${slug}/rename`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: newTitle, slug: newSlug }),
+    });
+
+    if (res.ok) {
+      const doc = await res.json();
+      window.location.href = `/s/${spaceSlug}/${doc.slug}`;
+    } else if (res.status === 409) {
+      alert("A document with that name already exists.");
+    } else {
+      alert("Rename failed.");
+    }
+  });
+
+  // Duplicate
+  document.getElementById("action-duplicate")?.addEventListener("click", async () => {
+    const res = await fetch(`/s/${spaceSlug}/${slug}/duplicate`, {
+      method: "POST",
+    });
+
+    if (res.ok) {
+      const doc = await res.json();
+      window.location.href = `/s/${spaceSlug}/${doc.slug}`;
+    } else {
+      alert("Duplicate failed.");
+    }
+  });
+
+  // Delete
+  document.getElementById("action-delete")?.addEventListener("click", async () => {
+    if (!confirm("Delete this document? This cannot be undone.")) return;
+
+    const res = await fetch(`/s/${spaceSlug}/${slug}/delete`, {
+      method: "DELETE",
+    });
+
+    if (res.ok) {
+      window.location.href = `/s/${spaceSlug}`;
+    } else {
+      alert("Delete failed.");
+    }
   });
 </script>
 )}
