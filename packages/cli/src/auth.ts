@@ -1,8 +1,7 @@
-import { createServer } from "node:http";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { randomBytes, createHash } from "node:crypto";
+import { createInterface } from "node:readline";
 
 const TOKEN_DIR = join(homedir(), ".sideways");
 const TOKEN_FILE = join(TOKEN_DIR, "token.json");
@@ -32,115 +31,53 @@ export function clearCredentials(): void {
   }
 }
 
+function prompt(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
 /**
- * OAuth2 authorization code flow with PKCE.
- * After getting a JWT, immediately creates an API key and stores it.
+ * Login by pasting an API key.
+ * The user creates the key in the web UI, then pastes it here.
  */
-export async function login(
-  hydraPublicUrl: string,
-  apiUrl: string,
-): Promise<void> {
-  const clientId = "sideways-cli";
-  const redirectPort = 19876;
-  const redirectUri = `http://localhost:${redirectPort}/callback`;
+export async function login(apiUrl: string): Promise<void> {
+  console.log("\nTo authenticate, create an API key in the Sideways web UI:");
+  console.log(`  ${apiUrl.replace(/\/api$/, "").replace(/:\d+$/, ":4000")}/settings/keys`);
+  console.log("\nOr sign in to the web app, go to any page, and use the");
+  console.log("API to create one:\n");
+  console.log(`  curl -X POST ${apiUrl}/api/keys \\`);
+  console.log(`    -H "Authorization: Bearer <your-access-token>" \\`);
+  console.log(`    -H "Content-Type: application/json" \\`);
+  console.log(`    -d '{"name": "CLI"}'\n`);
 
-  // Generate PKCE challenge
-  const verifier = randomBytes(32).toString("base64url");
-  const challenge = createHash("sha256")
-    .update(verifier)
-    .digest("base64url");
+  const key = await prompt("Paste your API key (sk-...): ");
 
-  const state = randomBytes(16).toString("hex");
+  if (!key.startsWith("sk-")) {
+    console.error("Invalid API key. Keys start with 'sk-'.");
+    process.exit(1);
+  }
 
-  const authUrl = new URL(`${hydraPublicUrl}/oauth2/auth`);
-  authUrl.searchParams.set("client_id", clientId);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", "openid offline_access");
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("state", state);
-  authUrl.searchParams.set("code_challenge", challenge);
-  authUrl.searchParams.set("code_challenge_method", "S256");
-
-  console.log("\nOpen this URL to sign in:\n");
-  console.log(`  ${authUrl.toString()}\n`);
-  console.log("Waiting for callback...\n");
-
-  // Wait for the callback
-  const code = await new Promise<string>((resolve, reject) => {
-    const server = createServer((req, res) => {
-      const url = new URL(req.url!, `http://localhost:${redirectPort}`);
-
-      if (url.pathname !== "/callback") {
-        res.writeHead(404);
-        res.end();
-        return;
-      }
-
-      const error = url.searchParams.get("error");
-      if (error) {
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end("<h1>Login failed</h1><p>You can close this tab.</p>");
-        server.close();
-        reject(new Error(`OAuth error: ${error}`));
-        return;
-      }
-
-      const returnedState = url.searchParams.get("state");
-      if (returnedState !== state) {
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end("<h1>Login failed</h1><p>State mismatch.</p>");
-        server.close();
-        reject(new Error("State mismatch"));
-        return;
-      }
-
-      const code = url.searchParams.get("code");
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(
-        "<h1>Signed in to Sideways</h1><p>You can close this tab.</p>",
-      );
-      server.close();
-      resolve(code!);
+  // Verify the key works
+  try {
+    const res = await fetch(`${apiUrl}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${key}` },
     });
 
-    server.listen(redirectPort);
-  });
+    if (!res.ok) {
+      console.error("API key is invalid or expired.");
+      process.exit(1);
+    }
 
-  // Exchange code for tokens
-  const tokenRes = await fetch(`${hydraPublicUrl}/oauth2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
-      code_verifier: verifier,
-    }),
-  });
-
-  if (!tokenRes.ok) {
-    throw new Error(`Token exchange failed: ${await tokenRes.text()}`);
+    const user = await res.json();
+    storeCredentials({ api_key: key, api_url: apiUrl });
+    console.log(`\nAuthenticated as ${user.name} (${user.email})`);
+  } catch {
+    console.error("Could not connect to the API server.");
+    process.exit(1);
   }
-
-  const tokens = await tokenRes.json();
-
-  // Use the JWT to create an API key
-  const keyRes = await fetch(`${apiUrl}/api/keys`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${tokens.access_token}`,
-    },
-    body: JSON.stringify({ name: `CLI (${new Date().toISOString()})` }),
-  });
-
-  if (!keyRes.ok) {
-    throw new Error(`Failed to create API key: ${await keyRes.text()}`);
-  }
-
-  const { key } = await keyRes.json();
-
-  storeCredentials({ api_key: key, api_url: apiUrl });
-  console.log("API key created and stored in ~/.sideways/token.json");
 }

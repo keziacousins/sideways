@@ -6,7 +6,7 @@ import { basename, resolve, join } from "node:path";
 import { findConfig, createConfig, requireConfig } from "./config.js";
 import { resolveSyncTargets } from "./mappings.js";
 import { createClient } from "./api.js";
-import { login, clearCredentials, getStoredCredentials } from "./auth.js";
+import { login, clearCredentials, getStoredCredentials, storeCredentials } from "./auth.js";
 import { embedComments, extractComments, type SerializedComment } from "@sideways/markdown";
 import {
   readSyncState,
@@ -456,13 +456,38 @@ program
 
 program
   .command("login")
-  .description("Authenticate with the Sideways server")
-  .option("--hydra <url>", "Hydra public URL", "http://localhost:4444")
-  .action(async (opts: { hydra: string }) => {
+  .description("Authenticate with an API key")
+  .option("--key <key>", "API key (sk-...) — skips interactive prompt")
+  .action(async (opts: { key?: string }) => {
     const config = findConfig() ?? { api: "http://localhost:4100", space: "", mappings: [], rootDir: "" };
+
+    if (opts.key) {
+      // Non-interactive: validate and store
+      if (!opts.key.startsWith("sk-")) {
+        console.error("Invalid API key. Keys start with 'sk-'.");
+        process.exit(1);
+      }
+      try {
+        const res = await fetch(`${config.api}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${opts.key}` },
+        });
+        if (!res.ok) {
+          console.error("API key is invalid or expired.");
+          process.exit(1);
+        }
+        const user = await res.json();
+        storeCredentials({ api_key: opts.key, api_url: config.api });
+        console.log(`Authenticated as ${user.name} (${user.email})`);
+      } catch {
+        console.error("Could not connect to the API server.");
+        process.exit(1);
+      }
+      return;
+    }
+
+    // Interactive
     try {
-      await login(opts.hydra, config.api);
-      console.log("Logged in successfully.");
+      await login(config.api);
     } catch (err: any) {
       console.error(`Login failed: ${err.message}`);
       process.exit(1);
