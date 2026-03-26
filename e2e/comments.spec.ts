@@ -35,6 +35,10 @@ test.beforeAll(async () => {
   });
 });
 
+test.afterAll(async () => {
+  await fetch(`${API_URL}/api/spaces/${SPACE}`, { method: "DELETE" }).catch(() => {});
+});
+
 async function login(page: Page) {
   await page.goto("/auth/login");
   await page.fill('input[name="email"]', TEST_EMAIL);

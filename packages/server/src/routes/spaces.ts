@@ -115,6 +115,18 @@ export function createSpaceRoutes(db: Database) {
     return c.json(space, 201);
   });
 
+  /** Delete a space and all its documents */
+  router.delete("/:slug", async (c) => {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("slug")),
+    });
+    if (!space) return c.json({ error: "Not found" }, 404);
+
+    // Cascade: documents, versions, comments are handled by FK ON DELETE CASCADE
+    await db.delete(spaces).where(eq(spaces.id, space.id));
+    return c.json({ deleted: true });
+  });
+
   /** List sections in a space */
   router.get("/:slug/sections", async (c) => {
     const space = await db.query.spaces.findFirst({
