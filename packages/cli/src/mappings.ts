@@ -34,9 +34,15 @@ export function resolveSyncTargets(
     }];
   }
 
-  // No mappings → sync cwd ↔ space root
+  // No mappings → only sync from the project root
   if (config.mappings.length === 0) {
-    return [{ localDir: cwd, section: null }];
+    if (cwd !== config.rootDir) {
+      console.error(
+        `Not in the project root. Run from ${config.rootDir}\nor configure mappings in .sideways.yml`,
+      );
+      process.exit(1);
+    }
+    return [{ localDir: config.rootDir, section: null }];
   }
 
   // Check if cwd is inside a mapped directory
@@ -51,11 +57,19 @@ export function resolveSyncTargets(
     }
   }
 
-  // Cwd is project root (or not inside any mapping) → all mappings
-  return config.mappings.map((m) => ({
-    localDir: resolve(config.rootDir, m.local),
-    section: m.section,
-  }));
+  // Cwd is project root → all mappings
+  if (cwd === config.rootDir) {
+    return config.mappings.map((m) => ({
+      localDir: resolve(config.rootDir, m.local),
+      section: m.section,
+    }));
+  }
+
+  // Cwd is inside the project but not in any mapping
+  console.error(
+    `Not in a mapped directory.\nMapped directories: ${config.mappings.map((m) => m.local).join(", ")}\nRun from the project root or a mapped directory.`,
+  );
+  process.exit(1);
 }
 
 function findMappingForPath(
