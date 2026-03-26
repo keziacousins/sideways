@@ -7,7 +7,7 @@ import { apiFetch } from "../../lib/api.ts";
 const { space: spaceSlug } = Astro.params;
 const { accessToken } = Astro.locals;
 
-let space: { name: string; slug: string; description: string | null } | null = null;
+let space: { name: string; slug: string; description: string | null; visibility: string } | null = null;
 let documents: { slug: string; title: string; tags: string[] }[] = [];
 
 try {
@@ -15,7 +15,9 @@ try {
   if (spaceRes.ok) {
     space = await spaceRes.json();
     const docsRes = await apiFetch(`/api/documents?space=${spaceSlug}`, accessToken);
-    documents = await docsRes.json();
+    if (docsRes.ok) {
+      documents = await docsRes.json();
+    }
   }
 } catch {
   // API not available
@@ -48,7 +50,12 @@ const navItems = documents.map((doc) => ({
 
       <div class="doc-grid">
         {documents.length === 0 ? (
-          <p class="empty-state">No documents in this space yet.</p>
+          <p class="empty-state">
+            {!accessToken && space.visibility !== "public"
+              ? <><a href={`/auth/login?returnTo=/s/${spaceSlug}`}>Sign in</a> to view this space.</>
+              : "No documents in this space yet."
+            }
+          </p>
         ) : (
           documents.map((doc, i) => (
             <a
