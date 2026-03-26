@@ -348,6 +348,61 @@ export default function Comments({
   );
 }
 
+/** Find anchor text in the document and scroll to it with a flash highlight */
+function scrollToAnchor(anchorText: string, section: string | null) {
+  const docContent = document.querySelector(".sw-doc-content");
+  if (!docContent) return;
+
+  // Use TreeWalker to find text nodes containing the anchor text
+  const walker = document.createTreeWalker(docContent, NodeFilter.SHOW_TEXT);
+  let best: { node: Text; index: number } | null = null;
+
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode as Text;
+    const idx = textNode.textContent?.indexOf(anchorText.slice(0, 60)) ?? -1;
+    if (idx >= 0) {
+      // If we have a section, prefer matches within that section
+      if (section) {
+        const headings = Array.from(docContent.querySelectorAll("h1,h2,h3,h4,h5,h6"));
+        const nodeTop = textNode.parentElement?.getBoundingClientRect().top ?? 0;
+        const above = headings.filter(h => h.getBoundingClientRect().top < nodeTop);
+        const lastHeading = above[above.length - 1]?.textContent?.trim() || "";
+        if (section.includes(lastHeading)) {
+          best = { node: textNode, index: idx };
+          break; // Exact section match, use this one
+        }
+      }
+      if (!best) {
+        best = { node: textNode, index: idx };
+      }
+    }
+  }
+
+  if (!best) return;
+
+  // Create a temporary highlight using the Range API
+  const range = document.createRange();
+  range.setStart(best.node, best.index);
+  range.setEnd(best.node, Math.min(best.index + anchorText.length, best.node.length));
+
+  const rect = range.getBoundingClientRect();
+  const highlight = document.createElement("div");
+  highlight.className = "comment-scroll-highlight";
+  highlight.style.position = "absolute";
+  highlight.style.left = `${rect.left + window.scrollX - 4}px`;
+  highlight.style.top = `${rect.top + window.scrollY - 2}px`;
+  highlight.style.width = `${rect.width + 8}px`;
+  highlight.style.height = `${rect.height + 4}px`;
+  document.body.appendChild(highlight);
+
+  // Scroll into view
+  const el = best.node.parentElement;
+  el?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  // Remove highlight after animation
+  setTimeout(() => highlight.remove(), 2000);
+}
+
 function CommentItem({
   comment,
   isReply,
@@ -367,7 +422,13 @@ function CommentItem({
         <div className="comment-section-path">{comment.anchorSection}</div>
       )}
       {comment.anchorText && (
-        <div className="comment-anchor">
+        <div
+          className="comment-anchor"
+          role="button"
+          tabIndex={0}
+          onClick={() => scrollToAnchor(comment.anchorText!, comment.anchorSection)}
+          onKeyDown={(e) => { if (e.key === "Enter") scrollToAnchor(comment.anchorText!, comment.anchorSection); }}
+        >
           {comment.anchorContext ? (
             // Show context with anchor text highlighted within it
             (() => {

@@ -297,6 +297,15 @@
   -webkit-box-orient: vertical;
 }
 
+.comment-anchor[role="button"] {
+  cursor: pointer;
+  transition: border-color var(--sw-duration-fast) var(--sw-ease);
+}
+
+.comment-anchor[role="button"]:hover {
+  border-color: var(--sw-accent);
+}
+
 .comment-anchor mark {
   background: var(--sw-accent-glow);
   color: var(--sw-accent);
@@ -373,6 +382,22 @@
 
 .resolved-section[open] summary::before {
   content: "▼ ";
+}
+
+/* ── Scroll-to highlight ──────────────────────────────────────── */
+.comment-scroll-highlight {
+  background: var(--sw-accent);
+  opacity: 0.2;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 30;
+  animation: highlightFade 2s var(--sw-ease) forwards;
+}
+
+@keyframes highlightFade {
+  0% { opacity: 0.3; }
+  70% { opacity: 0.2; }
+  100% { opacity: 0; }
 }
 
 /* ── Responsive ───────────────────────────────────────────────── */
