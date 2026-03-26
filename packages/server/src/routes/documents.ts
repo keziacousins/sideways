@@ -124,12 +124,24 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     });
     if (!latestVersion) return c.json({ error: "No versions" }, 404);
 
+    // Count total versions for display
+    const allVersions = await db.query.documentVersions.findMany({
+      where: eq(documentVersions.documentId, doc.id),
+      columns: { id: true },
+    });
+
+    const versionInfo = {
+      version: latestVersion.version,
+      versionCount: allVersions.length,
+      versionDate: latestVersion.createdAt,
+    };
+
     const cacheKey = `/rendered/${doc.id}/${latestVersion.contentHash}.html`;
     if (latestVersion.renderedKey) {
       try {
         const cached = await storage.download(latestVersion.renderedKey);
         const html = await cached.text();
-        return c.json({ ...doc, html, content: undefined });
+        return c.json({ ...doc, ...versionInfo, html, content: undefined });
       } catch {
         // Cache miss, re-render
       }
@@ -148,7 +160,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       )
       .catch(() => {});
 
-    return c.json({ ...doc, html, content: undefined });
+    return c.json({ ...doc, ...versionInfo, html, content: undefined });
   });
 
   /** Create or update a document in a space */

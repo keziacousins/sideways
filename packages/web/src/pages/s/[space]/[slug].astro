@@ -12,7 +12,15 @@ const accessToken = await Astro.session?.get("access_token") || null;
 const refreshToken = await Astro.session?.get("refresh_token") || null;
 
 let space: { name: string; slug: string } | null = null;
-let doc: { title: string; html: string; tags: string[]; updatedAt: string } | null = null;
+let doc: {
+  title: string;
+  html: string;
+  tags: string[];
+  updatedAt: string;
+  version: number;
+  versionCount: number;
+  versionDate: string;
+} | null = null;
 let documents: { slug: string; title: string; tags: string[] }[] = [];
 
 try {
@@ -71,6 +79,13 @@ const navItems = documents.map((d) => ({
               ))}
             </div>
           )}
+          <span class="doc-version" title={`Last updated ${new Date(doc.versionDate).toLocaleString()}`}>
+            v{doc.version}
+            {doc.versionCount > 1 && (
+              <span class="version-count">· {doc.versionCount} versions</span>
+            )}
+            <span class="version-date">· {new Date(doc.versionDate).toLocaleDateString()}</span>
+          </span>
         </div>
         <div class="doc-toolbar-right">
           <button class="toolbar-btn" title="Copy as markdown">
@@ -184,6 +199,17 @@ const navItems = documents.map((d) => ({
     background: var(--sw-ink-surface);
     border-radius: var(--sw-radius-sm);
     color: var(--sw-text-secondary);
+  }
+
+  .doc-version {
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-tertiary);
+    cursor: default;
+  }
+
+  .version-count,
+  .version-date {
+    color: var(--sw-text-ghost);
   }
 
   .not-found {
