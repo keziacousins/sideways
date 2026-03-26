@@ -148,7 +148,7 @@ export function findMarkdownFiles(dir: string): string[] {
 /**
  * Compare local and remote state to determine sync status for each file.
  */
-export type FileStatus = "unchanged" | "modified" | "new" | "deleted" | "conflict";
+export type FileStatus = "unchanged" | "local-modified" | "remote-modified" | "new-local" | "new-remote" | "deleted" | "conflict";
 
 export interface SyncDiff {
   filename: string;
@@ -177,14 +177,14 @@ export function computeDiff(
 
     if (!tracked && !remote) {
       // New local file, not on remote
-      diffs.push({ filename, slug, status: "new" });
+      diffs.push({ filename, slug, status: "new-local" });
     } else if (!tracked && remote) {
-      // File exists locally and remotely but never synced — treat as modified
-      diffs.push({ filename, slug, status: "modified" });
+      // File exists locally and remotely but never synced
+      diffs.push({ filename, slug, status: "conflict" });
     } else if (tracked) {
       if (!remote) {
         // Tracked locally but not on remote — needs push
-        diffs.push({ filename, slug, status: "new" });
+        diffs.push({ filename, slug, status: "new-local" });
       } else {
         const localChanged = localHash !== tracked.localHash;
         const remoteChanged = remote.contentHash !== tracked.remoteHash;
@@ -192,9 +192,9 @@ export function computeDiff(
         if (localChanged && remoteChanged) {
           diffs.push({ filename, slug, status: "conflict" });
         } else if (localChanged) {
-          diffs.push({ filename, slug, status: "modified" });
+          diffs.push({ filename, slug, status: "local-modified" });
         } else if (remoteChanged) {
-          diffs.push({ filename, slug, status: "modified" });
+          diffs.push({ filename, slug, status: "remote-modified" });
         } else {
           diffs.push({ filename, slug, status: "unchanged" });
         }
@@ -212,7 +212,7 @@ export function computeDiff(
         diffs.push({ filename, slug: remote.slug, status: "deleted" });
       } else {
         // New remote file
-        diffs.push({ filename, slug: remote.slug, status: "new" });
+        diffs.push({ filename, slug: remote.slug, status: "new-remote" });
       }
     }
   }

@@ -228,8 +228,8 @@ program
         const diffs = computeDiff(localDir, syncState, remoteFiles);
         const toPush = diffs.filter(
           (d) =>
-            d.status === "new" ||
-            d.status === "modified" ||
+            d.status === "new-local" ||
+            d.status === "local-modified" ||
             (d.status === "conflict" && opts.force),
         );
 
@@ -331,8 +331,10 @@ program
         console.log(`  ${status.padEnd(10)}  ${d.filename}${slugPart}`);
       };
       for (const d of diffs.filter((d) => d.status === "conflict")) show("conflict", d);
-      for (const d of diffs.filter((d) => d.status === "modified")) show("modified", d);
-      for (const d of diffs.filter((d) => d.status === "new")) show("new", d);
+      for (const d of diffs.filter((d) => d.status === "local-modified")) show("modified→", d);
+      for (const d of diffs.filter((d) => d.status === "remote-modified")) show("←modified", d);
+      for (const d of diffs.filter((d) => d.status === "new-local")) show("new→", d);
+      for (const d of diffs.filter((d) => d.status === "new-remote")) show("←new", d);
       for (const d of diffs.filter((d) => d.status === "deleted")) show("deleted", d);
       for (const d of diffs.filter((d) => d.status === "unchanged")) show("unchanged", d);
     }
