@@ -23,7 +23,35 @@ export function createClient(baseUrl: string) {
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`API error ${res.status}: ${body}`);
+      let message: string;
+      try {
+        const parsed = JSON.parse(body);
+        message = parsed.error || body;
+      } catch {
+        message = body;
+      }
+
+      // Friendly messages for common errors
+      if (res.status === 404) {
+        if (message.includes("Space")) {
+          console.error(`Space not found. Does it exist on the server?`);
+        } else if (message.includes("Not found")) {
+          console.error(`Not found: ${path}`);
+        } else {
+          console.error(`Not found: ${message}`);
+        }
+        process.exit(1);
+      }
+      if (res.status === 401) {
+        console.error("Not authenticated. Run `sideways login` first.");
+        process.exit(1);
+      }
+      if (res.status === 403) {
+        console.error("Permission denied. You may need to be a space member.");
+        process.exit(1);
+      }
+
+      throw new Error(`API error ${res.status}: ${message}`);
     }
 
     return res.json();
