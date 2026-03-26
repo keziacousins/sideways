@@ -66,7 +66,7 @@
   position: fixed;
   top: var(--sw-header-height);
   right: 0;
-  width: 360px;
+  width: min(360px, 100vw);
   height: calc(100vh - var(--sw-header-height));
   background: var(--sw-ink-deepest);
   border-left: 1px solid var(--sw-border);
@@ -75,6 +75,7 @@
   animation: slideInRight var(--sw-duration) var(--sw-ease) both;
   display: flex;
   flex-direction: column;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.3);
 }
 
 .comments-panel-header {
@@ -336,7 +337,7 @@
 
 /* ── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 700px) {
-  .comments-panel-overlay {
-    width: 100%;
+  .selection-comment-btn {
+    display: none;
   }
 }
