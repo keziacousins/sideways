@@ -281,25 +281,43 @@ export function createAuthRoutes(db: Database) {
       });
 
       if (!user) {
-        // Fetch identity from Kratos to get traits
+        // Fetch identity from Kratos to get traits and create local user
+        console.log(`[consent] User not found for subject ${subject}, looking up in Kratos...`);
         try {
           const identityRes = await fetch(
             `${KRATOS_ADMIN}/admin/identities/${subject}`,
           );
           if (identityRes.ok) {
             const identity = await identityRes.json();
-            const [created] = await db
-              .insert(users)
-              .values({
-                email: identity.traits.email,
-                name: identity.traits.name || identity.traits.email,
-                hydraSubject: subject,
-              })
-              .returning();
-            user = created;
+            console.log(`[consent] Found Kratos identity: ${identity.traits.email} / ${identity.traits.name}`);
+
+            // Check if a user with this email already exists (from a different auth method)
+            const existingByEmail = await db.query.users.findFirst({
+              where: eq(users.email, identity.traits.email),
+            });
+
+            if (existingByEmail) {
+              // Link the Kratos subject to the existing user
+              await db.update(users)
+                .set({ hydraSubject: subject, name: identity.traits.name || existingByEmail.name })
+                .where(eq(users.id, existingByEmail.id));
+              user = { ...existingByEmail, hydraSubject: subject };
+            } else {
+              const [created] = await db
+                .insert(users)
+                .values({
+                  email: identity.traits.email,
+                  name: identity.traits.name || identity.traits.email,
+                  hydraSubject: subject,
+                })
+                .returning();
+              user = created;
+            }
+          } else {
+            console.error(`[consent] Kratos identity lookup failed: ${identityRes.status}`);
           }
-        } catch (e) {
-          console.error("Kratos identity lookup failed:", e);
+        } catch (e: any) {
+          console.error("[consent] Kratos identity lookup error:", e.message);
         }
       }
 

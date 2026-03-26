@@ -13,18 +13,18 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
       <h1>Create your account</h1>
       <p class="auth-subtitle">Start documenting with Sideways</p>
 
-      <form id="signup-form" class="auth-form">
+      <form id="signup-form" class="auth-form" action="/auth/signup" method="POST">
         <div class="form-field">
           <label for="name">Name</label>
-          <input type="text" id="name" name="name" placeholder="Your name" required autofocus />
+          <input type="text" id="name" name="name" autocomplete="name" placeholder="Your name" required autofocus />
         </div>
         <div class="form-field">
           <label for="email">Email</label>
-          <input type="email" id="email" name="email" placeholder="you@example.com" required />
+          <input type="email" id="email" name="email" autocomplete="username email" placeholder="you@example.com" required />
         </div>
         <div class="form-field">
           <label for="password">Password</label>
-          <input type="password" id="password" name="password" placeholder="Min. 8 characters" required minlength="8" />
+          <input type="password" id="password" name="password" autocomplete="new-password" placeholder="Min. 8 characters" required minlength="8" />
         </div>
         <button type="submit" class="auth-submit">Create account</button>
       </form>
