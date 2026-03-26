@@ -8,6 +8,11 @@ const HYDRA_ADMIN = env.hydraAdminUrl;
 const KRATOS_PUBLIC = env.kratosPublicUrl;
 const KRATOS_ADMIN = env.kratosAdminUrl;
 
+/** Rewrite Hydra internal URLs to go through our proxy */
+function rewriteHydraUrl(url: string): string {
+  return url.replace(env.hydraPublicUrl, env.publicApiUrl);
+}
+
 async function hydraAdmin(path: string, options?: RequestInit) {
   const res = await fetch(`${HYDRA_ADMIN}${path}`, {
     ...options,
@@ -195,7 +200,7 @@ export function createAuthRoutes(db: Database) {
           body: JSON.stringify({ subject: loginRequest.subject }),
         },
       );
-      return c.redirect(completion.redirect_to);
+      return c.redirect(rewriteHydraUrl(completion.redirect_to));
     }
 
     const hint = loginRequest.oidc_context?.login_hint;
@@ -215,7 +220,7 @@ export function createAuthRoutes(db: Database) {
             }),
           },
         );
-        return c.redirect(completion.redirect_to);
+        return c.redirect(rewriteHydraUrl(completion.redirect_to));
       }
     }
 
@@ -298,7 +303,7 @@ export function createAuthRoutes(db: Database) {
         },
       );
 
-      return c.redirect(completion.redirect_to);
+      return c.redirect(rewriteHydraUrl(completion.redirect_to));
     } catch (e: any) {
       console.error("Consent error:", e.message);
       return c.text(`Consent failed: ${e.message}`, 500);
@@ -314,7 +319,7 @@ export function createAuthRoutes(db: Database) {
       { method: "PUT" },
     );
 
-    return c.redirect(completion.redirect_to);
+    return c.redirect(rewriteHydraUrl(completion.redirect_to));
   });
 
   router.get("/authorize", (c) => {

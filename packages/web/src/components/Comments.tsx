@@ -43,7 +43,7 @@ export default function Comments({
   const fetchComments = useCallback(async () => {
     try {
       const res = await fetch(
-        `${apiUrl}/api/comments/${spaceSlug}/${docSlug}`,
+        `${apiUrl}/api/comments/${spaceSlug}/${docSlug}?include_resolved=true`,
         { headers },
       );
       if (res.ok) setComments(await res.json());

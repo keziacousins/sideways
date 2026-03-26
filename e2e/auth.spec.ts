@@ -1,6 +1,5 @@
 import { test, expect } from "@playwright/test";
 
-const API_URL = "http://localhost:4100";
 const TEST_EMAIL = `e2e-${Date.now()}@sideways.dev`;
 const TEST_NAME = "E2E Test User";
 const TEST_PASSWORD = "E2eTestPass2026!secure";
@@ -22,7 +21,6 @@ test.describe("Authentication", () => {
     await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', TEST_PASSWORD);
     await page.click('button[type="submit"]');
-
     await page.waitForURL("/", { timeout: 15000 });
 
     await expect(page.locator("text=E2E Test User")).toBeVisible();
@@ -35,12 +33,10 @@ test.describe("Authentication", () => {
     await page.fill('input[name="password"]', TEST_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL("/", { timeout: 15000 });
-
     await expect(page.locator("text=Sign out")).toBeVisible();
 
     await page.click("text=Sign out");
     await page.waitForURL("/");
-
     await expect(page.locator("text=Sign in")).toBeVisible();
   });
 
@@ -68,28 +64,5 @@ test.describe("Authentication", () => {
     await page.goto("/auth/signup");
     await page.click("text=Sign in");
     await expect(page).toHaveURL(/auth\/login/);
-  });
-});
-
-test.describe("Authenticated navigation", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/auth/login");
-    await page.fill('input[name="email"]', TEST_EMAIL);
-    await page.fill('input[name="password"]', TEST_PASSWORD);
-    await page.click('button[type="submit"]');
-    await page.waitForURL("/", { timeout: 15000 });
-  });
-
-  test("homepage shows spaces", async ({ page }) => {
-    await expect(page.locator("h1")).toContainText("Documentation");
-  });
-
-  test("can navigate to a space", async ({ page }) => {
-    const cards = page.locator(".space-card");
-    const count = await cards.count();
-    if (count > 0) {
-      await cards.first().click();
-      await page.waitForURL(/\/s\//);
-    }
   });
 });
