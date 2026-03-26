@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface Comment {
   id: string;
@@ -15,13 +15,15 @@ interface Props {
   docSlug: string;
   apiUrl: string;
   accessToken: string | null;
+  refreshToken: string | null;
 }
 
 export default function Comments({
   spaceSlug,
   docSlug,
   apiUrl,
-  accessToken,
+  accessToken: initialAccessToken,
+  refreshToken: initialRefreshToken,
 }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -31,32 +33,85 @@ export default function Comments({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+  // Mutable token refs so we can refresh without re-rendering everything
+  const tokenRef = useRef(initialAccessToken);
+  const refreshRef = useRef(initialRefreshToken);
+
+  /** Try to refresh the access token. Returns new token or null. */
+  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+    if (!refreshRef.current) return null;
+
+    try {
+      const res = await fetch(`${apiUrl}/api/auth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: refreshRef.current,
+          client_id: "sideways-web",
+        }),
+      });
+
+      if (res.ok) {
+        const tokens = await res.json();
+        tokenRef.current = tokens.access_token;
+        if (tokens.refresh_token) {
+          refreshRef.current = tokens.refresh_token;
+        }
+        return tokens.access_token;
+      }
+    } catch {}
+
+    tokenRef.current = null;
+    return null;
+  }, [apiUrl]);
+
+  /** Make an authenticated API call with auto-refresh on 401. */
+  const authFetch = useCallback(
+    async (url: string, options: RequestInit = {}): Promise<Response> => {
+      const doFetch = (token: string | null) => {
+        const headers: Record<string, string> = {
+          ...((options.headers as Record<string, string>) || {}),
+        };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        return fetch(url, { ...options, headers });
+      };
+
+      let res = await doFetch(tokenRef.current);
+
+      // On 401, try refreshing the token once
+      if (res.status === 401 && refreshRef.current) {
+        const newToken = await refreshAccessToken();
+        if (newToken) {
+          res = await doFetch(newToken);
+        }
+      }
+
+      return res;
+    },
+    [refreshAccessToken],
+  );
 
   const fetchComments = useCallback(async () => {
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${apiUrl}/api/comments/${spaceSlug}/${docSlug}?include_resolved=true`,
-        { headers },
       );
       if (res.ok) setComments(await res.json());
     } catch {}
-  }, [spaceSlug, docSlug, apiUrl]);
+  }, [spaceSlug, docSlug, apiUrl, authFetch]);
 
   useEffect(() => {
     fetchComments();
   }, [fetchComments]);
 
-  // Listen for custom event from the vanilla JS selection handler
+  // Listen for custom event from vanilla JS selection handler
   useEffect(() => {
     function handleInlineComment(e: Event) {
       const detail = (e as CustomEvent).detail;
-      // Reset form completely for the new selection
       setNewComment("");
       setReplyTo(null);
+      setError(null);
       setAnchorText(detail.anchorText);
       setIsOpen(true);
     }
@@ -74,17 +129,12 @@ export default function Comments({
     setError(null);
     setSubmitting(true);
 
-    const submitHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (accessToken) submitHeaders["Authorization"] = `Bearer ${accessToken}`;
-
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${apiUrl}/api/comments/${spaceSlug}/${docSlug}`,
         {
           method: "POST",
-          headers: submitHeaders,
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             body: newComment,
             anchorText: replyTo ? null : anchorText,
@@ -99,7 +149,7 @@ export default function Comments({
         setReplyTo(null);
         await fetchComments();
       } else if (res.status === 401) {
-        setError("Session expired. Please refresh the page and sign in again.");
+        setError("Session expired. Please sign in again.");
       } else {
         setError(`Failed to post comment (${res.status})`);
       }
@@ -111,13 +161,14 @@ export default function Comments({
   };
 
   const resolveComment = async (id: string) => {
-    await fetch(
+    const res = await authFetch(
       `${apiUrl}/api/comments/${spaceSlug}/${docSlug}/${id}/resolve`,
-      { method: "POST", headers },
+      { method: "POST" },
     );
-    await fetchComments();
+    if (res.ok) await fetchComments();
   };
 
+  const isAuthenticated = !!tokenRef.current;
   const topLevel = comments.filter((c) => !c.parentId && !c.resolved);
   const resolved = comments.filter((c) => !c.parentId && c.resolved);
   const replies = comments.filter((c) => c.parentId);
@@ -132,56 +183,34 @@ export default function Comments({
 
   return (
     <>
-      {/* Toggle button */}
       <button
         className="comments-toggle"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
         <span>{isOpen ? "Hide" : "Comments"}</span>
-        {totalCount > 0 && (
-          <span className="comments-badge">{totalCount}</span>
-        )}
+        {totalCount > 0 && <span className="comments-badge">{totalCount}</span>}
       </button>
 
-      {/* Comments panel */}
       {isOpen && (
         <div className="comments-panel-overlay">
           <div className="comments-panel-header">
             <h3>Comments</h3>
             <button className="panel-close" onClick={() => setIsOpen(false)}>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
 
-          {/* New comment form */}
-          {accessToken && (
+          {isAuthenticated && (
             <form className="comment-form" onSubmit={(e) => { e.preventDefault(); submitComment(); }}>
               {anchorText && !replyTo && (
                 <div className="comment-form-anchor">
-                  <span>
-                    "{anchorText.slice(0, 60)}
-                    {anchorText.length > 60 ? "…" : ""}"
-                  </span>
+                  <span>"{anchorText.slice(0, 60)}{anchorText.length > 60 ? "…" : ""}"</span>
                   <button type="button" onClick={() => setAnchorText(null)}>×</button>
                 </div>
               )}
@@ -189,11 +218,9 @@ export default function Comments({
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder={
-                  replyTo
-                    ? "Write a reply…"
-                    : anchorText
-                      ? "Add your comment…"
-                      : "Add a page comment…"
+                  replyTo ? "Write a reply…"
+                    : anchorText ? "Add your comment…"
+                    : "Add a page comment…"
                 }
                 rows={3}
                 onKeyDown={(e) => {
@@ -227,12 +254,11 @@ export default function Comments({
             </form>
           )}
 
-          {/* Comment threads */}
           <div className="comments-list">
             {topLevel.length === 0 && resolved.length === 0 && (
               <p className="comments-empty">
                 No comments yet.
-                {accessToken
+                {isAuthenticated
                   ? " Select text to add an inline comment."
                   : " Sign in to comment."}
               </p>
@@ -245,17 +271,13 @@ export default function Comments({
                   onReply={() => {
                     setReplyTo(comment.id);
                     setAnchorText(null);
+                    setError(null);
                   }}
                   onResolve={() => resolveComment(comment.id)}
-                  canAct={!!accessToken}
+                  canAct={isAuthenticated}
                 />
                 {(replyMap.get(comment.id) || []).map((reply) => (
-                  <CommentItem
-                    key={reply.id}
-                    comment={reply}
-                    isReply
-                    canAct={false}
-                  />
+                  <CommentItem key={reply.id} comment={reply} isReply canAct={false} />
                 ))}
               </div>
             ))}
@@ -263,15 +285,14 @@ export default function Comments({
             {resolved.length > 0 && (
               <details className="resolved-section">
                 <summary>
-                  {resolved.length} resolved comment
-                  {resolved.length !== 1 ? "s" : ""}
+                  {resolved.length} resolved comment{resolved.length !== 1 ? "s" : ""}
                 </summary>
                 {resolved.map((comment) => (
                   <div key={comment.id} className="comment-thread resolved">
                     <CommentItem
                       comment={comment}
                       onResolve={() => resolveComment(comment.id)}
-                      canAct={!!accessToken}
+                      canAct={isAuthenticated}
                     />
                   </div>
                 ))}
@@ -301,26 +322,17 @@ function CommentItem({
     <div className={`comment-item ${isReply ? "reply" : ""}`}>
       {comment.anchorText && (
         <div className="comment-anchor">
-          "{comment.anchorText.slice(0, 80)}
-          {comment.anchorText.length > 80 ? "…" : ""}"
+          "{comment.anchorText.slice(0, 80)}{comment.anchorText.length > 80 ? "…" : ""}"
         </div>
       )}
       <div className="comment-meta">
-        <span className="comment-author">
-          {comment.author?.name || "Unknown"}
-        </span>
-        <span className="comment-date">
-          {new Date(comment.createdAt).toLocaleDateString()}
-        </span>
+        <span className="comment-author">{comment.author?.name || "Unknown"}</span>
+        <span className="comment-date">{new Date(comment.createdAt).toLocaleDateString()}</span>
       </div>
       <div className="comment-body">{comment.body}</div>
       {canAct && (
         <div className="comment-actions">
-          {onReply && (
-            <button onClick={onReply} className="comment-action">
-              Reply
-            </button>
-          )}
+          {onReply && <button onClick={onReply} className="comment-action">Reply</button>}
           {onResolve && (
             <button onClick={onResolve} className="comment-action">
               {comment.resolved ? "Reopen" : "Resolve"}
