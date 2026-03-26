@@ -1,4 +1,5 @@
 ---
+const returnTo = Astro.url.searchParams.get("returnTo") || "/";
 await Astro.session?.destroy();
-return Astro.redirect("/");
+return Astro.redirect(returnTo.startsWith("/") ? returnTo : "/");
 ---
