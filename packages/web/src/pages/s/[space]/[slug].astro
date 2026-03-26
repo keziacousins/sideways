@@ -651,11 +651,21 @@ const navItems = documents.map((d) => ({
       // Scroll page to top so editor starts at top
       window.scrollTo(0, 0);
 
-      // Scroll textarea and preview to the same heading
+      // Scroll textarea and place cursor at the visible heading
       requestAnimationFrame(() => {
         if (visibleHeading) {
           const line = findHeadingLine(visibleHeading);
-          if (line >= 0) scrollTextareaToLine(line);
+          if (line >= 0) {
+            scrollTextareaToLine(line);
+            // Place cursor at start of that line
+            const lines = textarea.value.split("\n");
+            const pos = lines.slice(0, line).reduce((sum, l) => sum + l.length + 1, 0);
+            textarea.setSelectionRange(pos, pos);
+          }
+        } else {
+          // No heading found — cursor at top
+          textarea.setSelectionRange(0, 0);
+          textarea.scrollTop = 0;
         }
         textarea.focus();
       });
