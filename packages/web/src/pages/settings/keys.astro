@@ -4,13 +4,12 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const userName = await Astro.session?.get("user_name");
 const accessToken = await Astro.session?.get("access_token") || null;
-const refreshToken = await Astro.session?.get("refresh_token") || null;
 
 if (!userName) {
   return Astro.redirect(`/auth/login?returnTo=${encodeURIComponent("/settings/keys")}`);
 }
 
-// Fetch existing keys
+// Fetch existing keys server-side (with token refresh)
 let keys: { id: string; name: string; prefix: string; lastUsedAt: string | null; createdAt: string }[] = [];
 if (accessToken) {
   try {
@@ -28,11 +27,11 @@ if (accessToken) {
   <div class="settings-page">
     <h1>Personal Access Tokens</h1>
     <p class="settings-desc">
-      API keys are used to authenticate the CLI and MCP tools.
-      Create a key here, then use <code>sideways login</code> to authenticate.
+      API keys authenticate the CLI and MCP tools.
+      Create a key, then run <code>sideways login</code> and paste it.
     </p>
 
-    <div class="key-create" id="key-create">
+    <div class="key-create">
       <div class="key-create-form">
         <input type="text" id="key-name" placeholder="Key name (e.g. My Laptop)" value="CLI" />
         <button type="button" id="create-key-btn" class="btn-create">Create key</button>
@@ -43,6 +42,9 @@ if (accessToken) {
           <code id="new-key-value"></code>
           <button type="button" id="copy-key-btn" class="btn-copy">Copy</button>
         </div>
+        <p class="new-key-usage">
+          Then run: <code>sideways login --key <span id="new-key-hint"></span></code>
+        </p>
       </div>
     </div>
 
@@ -61,7 +63,7 @@ if (accessToken) {
               <th></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="keys-body">
             {keys.map((key) => (
               <tr data-key-id={key.id}>
                 <td><code>{key.prefix}...</code></td>
@@ -80,33 +82,34 @@ if (accessToken) {
   </div>
 </BaseLayout>
 
-<script define:vars={{ API_URL, accessToken, refreshToken }}>
-  // Create key
-  document.getElementById("create-key-btn").addEventListener("click", async () => {
-    const nameInput = document.getElementById("key-name");
-    const name = nameInput.value.trim() || "Untitled";
-    const btn = document.getElementById("create-key-btn");
+<script>
+  // Create key — calls Astro server route (handles token refresh)
+  document.getElementById("create-key-btn")?.addEventListener("click", async () => {
+    const nameInput = document.getElementById("key-name") as HTMLInputElement;
+    const name = nameInput?.value.trim() || "Untitled";
+    const btn = document.getElementById("create-key-btn") as HTMLButtonElement;
     btn.disabled = true;
     btn.textContent = "Creating...";
 
     try {
-      const res = await fetch(`${API_URL}/api/keys`, {
+      const res = await fetch("/settings/keys/create", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        document.getElementById("new-key-value").textContent = data.key;
-        document.getElementById("new-key-display").style.display = "block";
+        const display = document.getElementById("new-key-display")!;
+        document.getElementById("new-key-value")!.textContent = data.key;
+        document.getElementById("new-key-hint")!.textContent = data.key.slice(0, 15) + "...";
+        display.style.display = "block";
         btn.textContent = "Create another";
         btn.disabled = false;
+      } else if (res.status === 401) {
+        window.location.href = "/auth/login?returnTo=/settings/keys";
       } else {
-        alert("Failed to create key. You may need to sign in again.");
+        alert("Failed to create key.");
         btn.textContent = "Create key";
         btn.disabled = false;
       }
@@ -118,28 +121,30 @@ if (accessToken) {
   });
 
   // Copy key
-  document.getElementById("copy-key-btn").addEventListener("click", () => {
-    const key = document.getElementById("new-key-value").textContent;
+  document.getElementById("copy-key-btn")?.addEventListener("click", () => {
+    const key = document.getElementById("new-key-value")!.textContent!;
     navigator.clipboard.writeText(key).then(() => {
-      const btn = document.getElementById("copy-key-btn");
+      const btn = document.getElementById("copy-key-btn")!;
       btn.textContent = "Copied!";
       setTimeout(() => { btn.textContent = "Copy"; }, 2000);
     });
   });
 
-  // Revoke keys
+  // Revoke keys — calls Astro server route
   document.querySelectorAll(".btn-revoke").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
-      const keyId = e.target.dataset.keyId;
+      const target = e.target as HTMLElement;
+      const keyId = target.dataset.keyId;
       if (!confirm("Revoke this API key? This cannot be undone.")) return;
 
-      const res = await fetch(`${API_URL}/api/keys/${keyId}`, {
+      const res = await fetch(`/settings/keys/${keyId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${accessToken}` },
       });
 
       if (res.ok) {
-        e.target.closest("tr").remove();
+        target.closest("tr")?.remove();
+      } else if (res.status === 401) {
+        window.location.href = "/auth/login?returnTo=/settings/keys";
       } else {
         alert("Failed to revoke key.");
       }
@@ -174,7 +179,6 @@ if (accessToken) {
     font-size: 0.9em;
   }
 
-  /* Create form */
   .key-create {
     margin-bottom: 2.5rem;
   }
@@ -217,16 +221,9 @@ if (accessToken) {
     white-space: nowrap;
   }
 
-  .btn-create:hover {
-    background: var(--sw-accent-strong);
-  }
+  .btn-create:hover { background: var(--sw-accent-strong); }
+  .btn-create:disabled { opacity: 0.6; cursor: not-allowed; }
 
-  .btn-create:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  /* New key display */
   .new-key-display {
     margin-top: 1rem;
     padding: 1rem;
@@ -260,6 +257,19 @@ if (accessToken) {
     word-break: break-all;
   }
 
+  .new-key-usage {
+    margin-top: 0.75rem;
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-tertiary);
+  }
+
+  .new-key-usage code {
+    font-family: var(--sw-font-mono);
+    background: var(--sw-ink-lighter);
+    padding: 0.1em 0.35em;
+    border-radius: var(--sw-radius-sm);
+  }
+
   .btn-copy {
     padding: 0.4rem 0.75rem;
     background: var(--sw-ink-lighter);
@@ -272,12 +282,8 @@ if (accessToken) {
     white-space: nowrap;
   }
 
-  .btn-copy:hover {
-    background: var(--sw-ink-surface);
-    color: var(--sw-text-primary);
-  }
+  .btn-copy:hover { background: var(--sw-ink-surface); color: var(--sw-text-primary); }
 
-  /* Key list */
   .key-list h2 {
     font-family: var(--sw-font-display);
     font-size: var(--sw-text-lg);
@@ -325,13 +331,7 @@ if (accessToken) {
     cursor: pointer;
   }
 
-  .btn-revoke:hover {
-    border-color: var(--sw-error);
-    color: var(--sw-error);
-  }
+  .btn-revoke:hover { border-color: var(--sw-error); color: var(--sw-error); }
 
-  .empty-state {
-    color: var(--sw-text-ghost);
-    padding: 1.5rem 0;
-  }
+  .empty-state { color: var(--sw-text-ghost); padding: 1.5rem 0; }
 </style>
