@@ -564,17 +564,80 @@ const navItems = documents.map((d) => ({
 
   if (editBtn && docView && docEditor && textarea) {
     let previewTimer = null;
-    let savedScrollRatio = 0;
 
     const sidebar = document.getElementById("sidebar");
     const docPage = document.querySelector(".doc-page");
-    const mainEl = document.querySelector(".sw-main");
+    const previewPane = document.querySelector(".editor-preview");
+
+    /** Find the topmost visible heading in rendered content */
+    function getTopmostVisibleHeading(): string | null {
+      const headings = docView.querySelectorAll("h1, h2, h3, h4, h5, h6");
+      const headerOffset = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sw-header-height")) || 56;
+      for (const h of headings) {
+        const rect = h.getBoundingClientRect();
+        if (rect.top >= headerOffset - 10) {
+          return h.textContent?.trim() || null;
+        }
+      }
+      // All headings above viewport — use last one
+      if (headings.length) return headings[headings.length - 1].textContent?.trim() || null;
+      return null;
+    }
+
+    /** Find the line number of a heading in the textarea */
+    function findHeadingLine(headingText: string): number {
+      const lines = textarea.value.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const match = lines[i].match(/^#{1,6}\s+(.+)/);
+        if (match && match[1].trim() === headingText) return i;
+      }
+      return -1;
+    }
+
+    /** Scroll textarea to a line number */
+    function scrollTextareaToLine(lineNum: number) {
+      const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24;
+      textarea.scrollTop = lineNum * lineHeight;
+    }
+
+    /** Get the heading nearest the cursor position in the textarea */
+    function getHeadingNearCursor(): string | null {
+      const pos = textarea.selectionStart;
+      const textBefore = textarea.value.slice(0, pos);
+      const lines = textBefore.split("\n");
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const match = lines[i].match(/^#{1,6}\s+(.+)/);
+        if (match) return match[1].trim();
+      }
+      return null;
+    }
+
+    /** Scroll preview pane to a heading by text */
+    function scrollPreviewToHeading(headingText: string) {
+      if (!previewPane) return;
+      const headings = previewPane.querySelectorAll("h1, h2, h3, h4, h5, h6");
+      for (const h of headings) {
+        if (h.textContent?.trim() === headingText) {
+          h.scrollIntoView({ block: "start", behavior: "auto" });
+          return;
+        }
+      }
+    }
+
+    /** Scroll rendered view to a heading by text */
+    function scrollViewToHeading(headingText: string) {
+      const headings = docView.querySelectorAll("h1, h2, h3, h4, h5, h6");
+      for (const h of headings) {
+        if (h.textContent?.trim() === headingText) {
+          h.scrollIntoView({ block: "start", behavior: "auto" });
+          return;
+        }
+      }
+    }
 
     editBtn.addEventListener("click", () => {
-      // Remember scroll position as a ratio (0-1) of the document
-      const scrollable = mainEl || document.documentElement;
-      const maxScroll = scrollable.scrollHeight - scrollable.clientHeight;
-      savedScrollRatio = maxScroll > 0 ? scrollable.scrollTop / maxScroll : 0;
+      // Find which heading is visible before switching
+      const visibleHeading = getTopmostVisibleHeading();
 
       textarea.value = rawContent;
       docView.style.display = "none";
@@ -583,20 +646,24 @@ const navItems = documents.map((d) => ({
       if (sidebar) sidebar.style.display = "none";
       if (docPage) docPage.style.maxWidth = "none";
 
-      // Scroll textarea to approximately the same position
+      // Scroll textarea and preview to the same heading
       requestAnimationFrame(() => {
-        const textareaMaxScroll = textarea.scrollHeight - textarea.clientHeight;
-        textarea.scrollTop = textareaMaxScroll * savedScrollRatio;
+        if (visibleHeading) {
+          const line = findHeadingLine(visibleHeading);
+          if (line >= 0) scrollTextareaToLine(line);
+        }
         textarea.focus();
       });
 
-      updatePreview();
+      updatePreview().then(() => {
+        if (visibleHeading) {
+          requestAnimationFrame(() => scrollPreviewToHeading(visibleHeading));
+        }
+      });
     });
 
     cancelBtn?.addEventListener("click", () => {
-      // Remember editor scroll position
-      const textareaMaxScroll = textarea.scrollHeight - textarea.clientHeight;
-      const editorRatio = textareaMaxScroll > 0 ? textarea.scrollTop / textareaMaxScroll : 0;
+      const headingNearCursor = getHeadingNearCursor();
 
       docEditor.style.display = "none";
       docView.style.display = "block";
@@ -604,18 +671,37 @@ const navItems = documents.map((d) => ({
       if (sidebar) sidebar.style.display = "";
       if (docPage) docPage.style.maxWidth = "";
 
-      // Restore scroll position to approximately where editor was
+      // Scroll view to the heading nearest the cursor
       requestAnimationFrame(() => {
-        const scrollable = mainEl || document.documentElement;
-        const maxScroll = scrollable.scrollHeight - scrollable.clientHeight;
-        scrollable.scrollTop = maxScroll * editorRatio;
+        if (headingNearCursor) scrollViewToHeading(headingNearCursor);
       });
     });
 
-    // Live preview (debounced)
+    // Sync preview scroll to cursor position on input/click
+    let syncTimer = null;
+    function syncPreviewToCursor() {
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        const heading = getHeadingNearCursor();
+        if (heading) scrollPreviewToHeading(heading);
+      }, 150);
+    }
+
+    textarea.addEventListener("click", syncPreviewToCursor);
+    textarea.addEventListener("keyup", (e) => {
+      // Only sync on cursor-moving keys, not every keystroke
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(e.key)) {
+        syncPreviewToCursor();
+      }
+    });
+
+    // Live preview (debounced) + sync preview scroll after render
     textarea.addEventListener("input", () => {
       clearTimeout(previewTimer);
-      previewTimer = setTimeout(updatePreview, 300);
+      previewTimer = setTimeout(async () => {
+        await updatePreview();
+        syncPreviewToCursor();
+      }, 300);
     });
 
     async function updatePreview() {
