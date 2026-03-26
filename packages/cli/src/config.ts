@@ -9,6 +9,7 @@ export interface DirMapping {
 
 export interface ProjectConfig {
   space: string;
+  spaceName: string | null;
   api: string;
   mappings: DirMapping[];
   /** Absolute path to the directory containing .sideways.yml */
@@ -30,6 +31,7 @@ export function findConfig(from: string = process.cwd()): ProjectConfig | null {
       const parsed = parse(raw) as any;
       return {
         space: parsed.space ?? "default",
+        spaceName: parsed.name ?? null,
         api: parsed.api ?? DEFAULT_API,
         mappings: (parsed.mappings || []).map((m: any) => ({
           local: m.local,
@@ -52,9 +54,12 @@ export function createConfig(
   dir: string,
   space: string,
   api: string = DEFAULT_API,
+  name?: string,
 ): string {
   const configPath = resolve(dir, CONFIG_FILENAME);
-  const content = stringify({ space, api });
+  const data: Record<string, any> = { space, api };
+  if (name && name !== space) data.name = name;
+  const content = stringify(data);
   writeFileSync(configPath, content);
   return configPath;
 }

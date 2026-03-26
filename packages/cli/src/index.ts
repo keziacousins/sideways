@@ -37,7 +37,7 @@ program
     if (slug !== space) {
       console.log(`Slugified: "${space}" → "${slug}"`);
     }
-    const path = createConfig(process.cwd(), slug, opts.api);
+    const path = createConfig(process.cwd(), slug, opts.api, space);
     console.log(`Created ${path}`);
   });
 
@@ -217,7 +217,7 @@ program
       const targets = resolveSyncTargets(config, path?.endsWith(".md") ? undefined : path);
 
       // Ensure space exists on remote
-      await client.createSpace(space).catch(() => {});
+      await client.createSpace(space, config.spaceName || undefined).catch(() => {});
 
       let totalPushed = 0;
       for (const target of targets) {
