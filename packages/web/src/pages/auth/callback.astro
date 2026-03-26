@@ -1,7 +1,7 @@
 ---
 /**
- * OAuth2 callback — receives the authorization code from Hydra,
- * exchanges it for tokens via the API, and stores in session.
+ * OAuth2 callback — exchanges code for tokens, then fetches user info
+ * from our own API using the access token.
  */
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 
@@ -17,7 +17,7 @@ if (!code) {
   return Astro.redirect("/auth/login?error=missing_code");
 }
 
-// Exchange code for tokens via our API proxy
+// Exchange code for tokens
 const redirectUri = `${Astro.url.origin}/auth/callback`;
 const tokenRes = await fetch(`${API_URL}/api/auth/token`, {
   method: "POST",
@@ -36,21 +36,26 @@ if (!tokenRes.ok) {
 
 const tokens = await tokenRes.json();
 
-// Decode the ID token to get user info
-let userEmail = "unknown";
-let userName = "Unknown";
-
-if (tokens.id_token) {
-  try {
-    const payload = JSON.parse(
-      Buffer.from(tokens.id_token.split(".")[1], "base64").toString(),
-    );
-    userEmail = payload.email || payload.sub || "unknown";
-    userName = payload.name || userEmail;
-  } catch {}
+if (!tokens.access_token) {
+  return Astro.redirect("/auth/login?error=no_access_token");
 }
 
-// Store in Astro session
+// Fetch user info from our API using the access token
+let userName = "Unknown";
+let userEmail = "unknown";
+
+try {
+  const meRes = await fetch(`${API_URL}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${tokens.access_token}` },
+  });
+  if (meRes.ok) {
+    const me = await meRes.json();
+    userName = me.name;
+    userEmail = me.email;
+  }
+} catch {}
+
+// Store in session
 await Astro.session?.set("access_token", tokens.access_token);
 await Astro.session?.set("refresh_token", tokens.refresh_token);
 await Astro.session?.set("user_email", userEmail);

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { type Database, users } from "@sideways/db";
 import { env } from "../env.js";
+import type { AuthUser } from "../middleware/auth.js";
 
 const HYDRA_ADMIN = env.hydraAdminUrl;
 const KRATOS_PUBLIC = env.kratosPublicUrl;
@@ -26,13 +27,9 @@ export function createAuthRoutes(db: Database) {
   const router = new Hono();
 
   // ── Kratos proxy routes ──────────────────────────────────────────────
-  // These proxy to Kratos native API so the frontend doesn't need
-  // direct CORS access to Kratos.
 
   /**
-   * POST /auth/login — Authenticate via Kratos native login flow
-   * Body: { email, password }
-   * Returns: { nonce } on success (used to bridge to OAuth2 flow)
+   * POST /api/auth/login — Authenticate via Kratos native login flow
    */
   router.post("/login", async (c) => {
     const { email, password } = await c.req.json<{
@@ -40,16 +37,12 @@ export function createAuthRoutes(db: Database) {
       password: string;
     }>();
 
-    // Create a native login flow
-    const flowRes = await fetch(`${KRATOS_PUBLIC}/self-service/login/api`, {
-      method: "GET",
-    });
+    const flowRes = await fetch(`${KRATOS_PUBLIC}/self-service/login/api`);
     if (!flowRes.ok) {
       return c.json({ error: "Failed to create login flow" }, 500);
     }
     const flow = await flowRes.json();
 
-    // Submit credentials
     const submitRes = await fetch(
       `${KRATOS_PUBLIC}/self-service/login?flow=${flow.id}`,
       {
@@ -81,14 +74,12 @@ export function createAuthRoutes(db: Database) {
       return c.json({ error: "Login failed: no identity" }, 500);
     }
 
-    // Generate a nonce and store it for the OAuth2 bridge
     const nonce = crypto.randomUUID();
     recentLogins.set(nonce, {
       subject,
-      expiresAt: Date.now() + 60_000, // 1 minute
+      expiresAt: Date.now() + 60_000,
     });
 
-    // Clean up expired nonces
     for (const [key, val] of recentLogins) {
       if (val.expiresAt < Date.now()) recentLogins.delete(key);
     }
@@ -97,8 +88,7 @@ export function createAuthRoutes(db: Database) {
   });
 
   /**
-   * POST /auth/register — Register via Kratos native registration flow
-   * Body: { email, name, password }
+   * POST /api/auth/register — Register via Kratos
    */
   router.post("/register", async (c) => {
     const { email, name, password } = await c.req.json<{
@@ -146,7 +136,6 @@ export function createAuthRoutes(db: Database) {
       return c.json({ error: "Registration succeeded but no identity returned" }, 500);
     }
 
-    // Generate nonce for immediate OAuth2 login
     const nonce = crypto.randomUUID();
     recentLogins.set(nonce, {
       subject,
@@ -158,10 +147,6 @@ export function createAuthRoutes(db: Database) {
 
   // ── Kratos webhook ───────────────────────────────────────────────────
 
-  /**
-   * POST /auth/hooks/registration — Called by Kratos after registration
-   * Creates/updates the local user record.
-   */
   router.post("/hooks/registration", async (c) => {
     const body = await c.req.json<{
       identity_id: string;
@@ -184,14 +169,16 @@ export function createAuthRoutes(db: Database) {
     return c.json({ ok: true });
   });
 
-  // ── Hydra OAuth2 endpoints ───────────────────────────────────────────
-  // These are called by Hydra during the authorization flow.
+  // ── GET /api/auth/me — Return current user info ──────────────────────
 
-  /**
-   * GET /auth/login — Hydra redirects here for login.
-   * If we have a valid nonce (from Kratos login), auto-accept.
-   * Otherwise redirect to the web login page.
-   */
+  router.get("/me", async (c) => {
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ error: "Not authenticated" }, 401);
+    return c.json({ id: user.id, email: user.email, name: user.name });
+  });
+
+  // ── Hydra OAuth2 endpoints ───────────────────────────────────────────
+
   router.get("/login", async (c) => {
     const challenge = c.req.query("login_challenge");
     if (!challenge) return c.text("Missing login_challenge", 400);
@@ -200,7 +187,6 @@ export function createAuthRoutes(db: Database) {
       `/admin/oauth2/auth/requests/login?login_challenge=${challenge}`,
     );
 
-    // Already authenticated — skip
     if (loginRequest.skip) {
       const completion = await hydraAdmin(
         `/admin/oauth2/auth/requests/login/accept?login_challenge=${challenge}`,
@@ -212,7 +198,6 @@ export function createAuthRoutes(db: Database) {
       return c.redirect(completion.redirect_to);
     }
 
-    // Check if login_hint contains a valid nonce
     const hint = loginRequest.oidc_context?.login_hint;
     if (hint && recentLogins.has(hint)) {
       const login = recentLogins.get(hint)!;
@@ -234,36 +219,9 @@ export function createAuthRoutes(db: Database) {
       }
     }
 
-    // No valid nonce — redirect to web login page
     return c.redirect(`${env.publicUrl}/auth/login?login_challenge=${challenge}`);
   });
 
-  /**
-   * GET /auth/authorize — Initiates the OAuth2 flow.
-   * Called by the frontend after Kratos login to bridge to Hydra.
-   * Query params: nonce (from Kratos login)
-   */
-  router.get("/authorize", (c) => {
-    const nonce = c.req.query("nonce") || "";
-    const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-
-    // Redirect to our own Hydra proxy (keeps browser on localhost)
-    const authUrl = new URL(`${env.publicApiUrl}/oauth2/auth`);
-    authUrl.searchParams.set("client_id", "sideways-web");
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("scope", "openid offline_access");
-    authUrl.searchParams.set("redirect_uri", `${env.publicUrl}/auth/callback`);
-    authUrl.searchParams.set("state", state);
-    if (nonce) authUrl.searchParams.set("login_hint", nonce);
-
-    return c.redirect(authUrl.toString());
-  });
-
-  /**
-   * GET /auth/consent — Hydra redirects here after login.
-   * Auto-accepts all scopes (first-party app).
-   * Injects custom claims into the JWT.
-   */
   router.get("/consent", async (c) => {
     const challenge = c.req.query("consent_challenge");
     if (!challenge) return c.text("Missing consent_challenge", 400);
@@ -275,29 +233,24 @@ export function createAuthRoutes(db: Database) {
 
       const subject = consentRequest.subject;
 
-      // Look up or create local user
+      // Ensure local user exists
       let user = await db.query.users.findFirst({
         where: eq(users.hydraSubject, subject),
       });
 
       if (!user) {
-        // Fetch identity from Kratos to get traits and create local user
-        console.log(`[consent] User not found for subject ${subject}, looking up in Kratos...`);
         try {
           const identityRes = await fetch(
             `${KRATOS_ADMIN}/admin/identities/${subject}`,
           );
           if (identityRes.ok) {
             const identity = await identityRes.json();
-            console.log(`[consent] Found Kratos identity: ${identity.traits.email} / ${identity.traits.name}`);
 
-            // Check if a user with this email already exists (from a different auth method)
             const existingByEmail = await db.query.users.findFirst({
               where: eq(users.email, identity.traits.email),
             });
 
             if (existingByEmail) {
-              // Link the Kratos subject to the existing user
               await db.update(users)
                 .set({ hydraSubject: subject, name: identity.traits.name || existingByEmail.name })
                 .where(eq(users.id, existingByEmail.id));
@@ -313,14 +266,13 @@ export function createAuthRoutes(db: Database) {
                 .returning();
               user = created;
             }
-          } else {
-            console.error(`[consent] Kratos identity lookup failed: ${identityRes.status}`);
           }
         } catch (e: any) {
-          console.error("[consent] Kratos identity lookup error:", e.message);
+          console.error("[consent] Kratos lookup error:", e.message);
         }
       }
 
+      // Inject claims — these go into the JWT access token
       const completion = await hydraAdmin(
         `/admin/oauth2/auth/requests/consent/accept?consent_challenge=${challenge}`,
         {
@@ -353,9 +305,6 @@ export function createAuthRoutes(db: Database) {
     }
   });
 
-  /**
-   * GET /auth/logout — Hydra logout endpoint
-   */
   router.get("/logout", async (c) => {
     const challenge = c.req.query("logout_challenge");
     if (!challenge) return c.redirect("/");
@@ -368,10 +317,21 @@ export function createAuthRoutes(db: Database) {
     return c.redirect(completion.redirect_to);
   });
 
-  /**
-   * POST /auth/token — Proxy token exchange to Hydra
-   * Used by the web frontend after OAuth2 callback.
-   */
+  router.get("/authorize", (c) => {
+    const nonce = c.req.query("nonce") || "";
+    const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+
+    const authUrl = new URL(`${env.publicApiUrl}/oauth2/auth`);
+    authUrl.searchParams.set("client_id", "sideways-web");
+    authUrl.searchParams.set("response_type", "code");
+    authUrl.searchParams.set("scope", "openid offline_access");
+    authUrl.searchParams.set("redirect_uri", `${env.publicUrl}/auth/callback`);
+    authUrl.searchParams.set("state", state);
+    if (nonce) authUrl.searchParams.set("login_hint", nonce);
+
+    return c.redirect(authUrl.toString());
+  });
+
   router.post("/token", async (c) => {
     const body = await c.req.parseBody();
 
