@@ -30,7 +30,7 @@ test.beforeAll(async () => {
     body: JSON.stringify({
       title: "Comments Test Document",
       content:
-        "# Comments Test\n\nFirst paragraph for testing.\n\nSecond paragraph here.",
+        "# Comments Test\n\nFirst paragraph for testing inline comments.\n\nSecond paragraph with different content.\n\n## Another Section\n\nMore content here for anchoring.",
     }),
   });
 });
@@ -44,7 +44,7 @@ async function login(page: Page) {
 }
 
 test.describe("Comments — unauthenticated", () => {
-  test("toggle opens panel, shows empty state, no form", async ({ page }) => {
+  test("panel shows empty state with sign-in prompt", async ({ page }) => {
     await page.goto(`/s/${SPACE}/${DOC}`);
     await page.locator(".comments-toggle").click();
     await expect(page.locator(".comments-panel-overlay")).toBeVisible();
@@ -54,96 +54,131 @@ test.describe("Comments — unauthenticated", () => {
 });
 
 test.describe("Comments — authenticated", () => {
-  test("full comment lifecycle: add, reply, resolve", async ({ page }) => {
+  test("can open panel, add page comment, see it appear", async ({ page }) => {
     await login(page);
     await page.goto(`/s/${SPACE}/${DOC}`);
 
-    // Listen for network to debug
-    const apiResponses: string[] = [];
-    page.on("response", (res) => {
-      if (res.url().includes("/api/comments")) {
-        apiResponses.push(`${res.status()} ${res.request().method()} ${res.url().slice(0, 100)}`);
-      }
-    });
-
     // Open panel
     await page.locator(".comments-toggle").click();
+    await expect(page.locator(".comments-panel-overlay")).toBeVisible();
+    await expect(page.locator(".comment-form textarea")).toBeVisible();
 
-    // Check if comment form is visible (means we have auth)
-    const hasForm = await page.locator(".comment-form").isVisible();
-    if (!hasForm) {
-      // Token might not have been passed — check page
-      console.log("No comment form — checking if user is authenticated on page");
-      const headerText = await page.locator(".user-name").textContent().catch(() => "not found");
-      console.log("Header user:", headerText);
-    }
-    expect(hasForm).toBe(true);
+    // Type a comment
+    await page.locator(".comment-form textarea").click();
+    await page.locator(".comment-form textarea").fill("This is a page-level comment.");
 
-    // Add comment
-    await page.locator(".comment-form textarea").fill("This is a great doc!");
-    await page.locator(".comment-form-submit").click({ force: true });
+    // Submit button should be enabled
+    await expect(page.locator(".comment-form-submit")).toBeEnabled();
 
-    // Wait for API response
-    await page.waitForResponse(
-      (res) => res.url().includes("/api/comments") && res.request().method() === "POST",
-      { timeout: 5000 },
-    );
+    // Click submit
+    await page.locator(".comment-form-submit").click();
 
-    // Wait for refetch
-    await page.waitForResponse(
-      (res) => res.url().includes("/api/comments") && res.request().method() === "GET",
-      { timeout: 5000 },
-    );
-
-    // Now check for the comment
+    // Wait for comment to appear in the list
     await expect(page.locator(".comment-body").first()).toContainText(
-      "great doc",
+      "page-level comment",
       { timeout: 5000 },
     );
+    await expect(page.locator(".comment-author").first()).toContainText(TEST_NAME);
+
+    // Textarea should be cleared after submit
+    await expect(page.locator(".comment-form textarea")).toHaveValue("");
+  });
+
+  test("submit button is disabled when textarea is empty", async ({ page }) => {
+    await login(page);
+    await page.goto(`/s/${SPACE}/${DOC}`);
+    await page.locator(".comments-toggle").click();
+
+    await expect(page.locator(".comment-form-submit")).toBeDisabled();
+  });
+
+  test("can cancel anchor/reply and return to page comment mode", async ({ page }) => {
+    await login(page);
+    await page.goto(`/s/${SPACE}/${DOC}`);
+    await page.locator(".comments-toggle").click();
+
+    // Wait for existing comments to load
+    await expect(page.locator(".comment-thread").first()).toBeVisible({ timeout: 5000 });
+
+    // Click reply on a comment
+    await page.locator(".comment-action").filter({ hasText: "Reply" }).first().click();
+
+    // Should show "Write a reply" placeholder
+    await expect(page.locator(".comment-form textarea")).toHaveAttribute(
+      "placeholder",
+      /reply/i,
+    );
+
+    // Cancel button should be visible
+    await expect(page.locator(".comment-form-cancel")).toBeVisible();
+
+    // Click cancel
+    await page.locator(".comment-form-cancel").click();
+
+    // Should return to page comment mode
+    await expect(page.locator(".comment-form textarea")).toHaveAttribute(
+      "placeholder",
+      /page comment/i,
+    );
+    // Cancel button should be gone
+    await expect(page.locator(".comment-form-cancel")).not.toBeVisible();
+  });
+
+  test("can reply to a comment", async ({ page }) => {
+    await login(page);
+    await page.goto(`/s/${SPACE}/${DOC}`);
+    await page.locator(".comments-toggle").click();
+
+    await expect(page.locator(".comment-thread").first()).toBeVisible({ timeout: 5000 });
 
     // Reply
-    await page
-      .locator(".comment-action")
-      .filter({ hasText: "Reply" })
-      .first()
-      .click({ force: true });
+    await page.locator(".comment-action").filter({ hasText: "Reply" }).first().click();
+    await page.locator(".comment-form textarea").click();
+    await page.locator(".comment-form textarea").fill("This is a reply.");
+    await page.locator(".comment-form-submit").click();
 
-    await page.locator(".comment-form textarea").fill("Thanks!");
-    await page.locator(".comment-form-submit").click({ force: true });
-
-    await page.waitForResponse(
-      (res) => res.url().includes("/api/comments") && res.request().method() === "POST",
+    // Reply should appear
+    await expect(page.locator(".comment-item.reply .comment-body").first()).toContainText(
+      "This is a reply",
       { timeout: 5000 },
     );
 
-    await expect(page.locator(".comment-item.reply").first()).toBeVisible({
-      timeout: 5000,
-    });
+    // Form should clear after reply
+    await expect(page.locator(".comment-form textarea")).toHaveValue("");
+    await expect(page.locator(".comment-form-cancel")).not.toBeVisible();
+  });
+
+  test("can resolve and see resolved section", async ({ page }) => {
+    await login(page);
+    await page.goto(`/s/${SPACE}/${DOC}`);
+    await page.locator(".comments-toggle").click();
+
+    await expect(page.locator(".comment-thread").first()).toBeVisible({ timeout: 5000 });
 
     // Resolve
-    const resolvePromise = page.waitForResponse(
-      (res) => res.url().includes("/resolve") && res.request().method() === "POST",
-      { timeout: 5000 },
-    );
-    await page
-      .locator(".comment-action")
-      .filter({ hasText: "Resolve" })
-      .first()
-      .click({ force: true });
+    await page.locator(".comment-action").filter({ hasText: "Resolve" }).first().click();
 
-    const resolveRes = await resolvePromise;
-    console.log("Resolve response:", resolveRes.status());
+    // Resolved section should appear
+    await expect(page.locator(".resolved-section")).toBeVisible({ timeout: 5000 });
+  });
 
-    // Wait for refetch after resolve
-    await page.waitForResponse(
-      (res) => res.url().includes("/api/comments") && res.request().method() === "GET",
-      { timeout: 5000 },
-    );
+  test("can close panel", async ({ page }) => {
+    await login(page);
+    await page.goto(`/s/${SPACE}/${DOC}`);
+    await page.locator(".comments-toggle").click();
+    await expect(page.locator(".comments-panel-overlay")).toBeVisible();
 
-    await expect(page.locator(".resolved-section")).toBeVisible({
-      timeout: 5000,
-    });
+    await page.locator(".panel-close").click();
+    await expect(page.locator(".comments-panel-overlay")).not.toBeVisible();
+  });
 
-    console.log("API responses:", apiResponses);
+  test("badge shows comment count", async ({ page }) => {
+    await login(page);
+    await page.goto(`/s/${SPACE}/${DOC}`);
+
+    // Wait for React island to hydrate and fetch comments
+    await expect(page.locator(".comments-badge")).toBeVisible({ timeout: 5000 });
+    const count = await page.locator(".comments-badge").textContent();
+    expect(Number(count)).toBeGreaterThan(0);
   });
 });

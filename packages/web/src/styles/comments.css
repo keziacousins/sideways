@@ -71,7 +71,7 @@
   background: var(--sw-ink-deepest);
   border-left: 1px solid var(--sw-border);
   overflow-y: auto;
-  z-index: 40;
+  z-index: 90;
   animation: slideInRight var(--sw-duration) var(--sw-ease) both;
   display: flex;
   flex-direction: column;

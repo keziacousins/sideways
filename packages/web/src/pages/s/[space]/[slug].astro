@@ -52,7 +52,7 @@ const navItems = documents.map((d) => ({
 
   {doc ? (
     <div class="doc-page">
-      <nav class="breadcrumbs animate-in">
+      <nav class="breadcrumbs">
         <a href="/">Spaces</a>
         <span class="breadcrumb-sep">/</span>
         <a href={`/s/${spaceSlug}`}>{space?.name}</a>
@@ -60,7 +60,7 @@ const navItems = documents.map((d) => ({
         <span class="breadcrumb-current">{doc.title}</span>
       </nav>
 
-      <div class="doc-toolbar animate-in" style="animation-delay: 60ms">
+      <div class="doc-toolbar">
         <div class="doc-toolbar-left">
           {doc.tags?.length > 0 && (
             <div class="doc-tags">
@@ -88,7 +88,7 @@ const navItems = documents.map((d) => ({
         </div>
       </div>
 
-      <article class="sw-doc-content animate-in" style="animation-delay: 120ms">
+      <article class="sw-doc-content">
         <Fragment set:html={html} />
       </article>
     </div>
