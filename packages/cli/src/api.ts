@@ -67,6 +67,11 @@ export function createClient(baseUrl: string) {
       return request(`/api/documents/${space}/${slug}/versions`);
     },
 
+    getComments(space: string, slug: string, includeResolved = false) {
+      const qs = includeResolved ? "?include_resolved=true" : "";
+      return request(`/api/comments/${space}/${slug}${qs}`);
+    },
+
     listKeys() {
       return request("/api/keys");
     },

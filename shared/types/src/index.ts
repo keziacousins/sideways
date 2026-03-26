@@ -61,8 +61,8 @@ export interface Comment {
   parentId: string | null;
   authorId: string;
   body: string;
-  anchorStart: number | null;
-  anchorEnd: number | null;
+  /** Text snippet the comment is anchored to. Null = page-level comment. */
+  anchorText: string | null;
   resolved: boolean;
   createdAt: string;
   updatedAt: string;

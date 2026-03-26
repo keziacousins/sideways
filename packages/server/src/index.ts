@@ -7,6 +7,7 @@ import { createDocumentRoutes } from "./routes/documents.js";
 import { createSpaceRoutes } from "./routes/spaces.js";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createKeyRoutes } from "./routes/keys.js";
+import { createCommentRoutes } from "./routes/comments.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { env } from "./env.js";
 
@@ -78,6 +79,7 @@ app.route("/api/auth", createAuthRoutes(db));
 app.route("/api/spaces", createSpaceRoutes(db));
 app.route("/api/documents", createDocumentRoutes(db, storage));
 app.route("/api/keys", createKeyRoutes(db));
+app.route("/api/comments", createCommentRoutes(db));
 
 serve({ fetch: app.fetch, port: env.port }, () => {
   console.log(`Sideways API running on http://localhost:${env.port}`);

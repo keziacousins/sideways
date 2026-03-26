@@ -10,6 +10,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
+    "@sideways/markdown": "workspace:*",
     "commander": "^13.1.0",
     "yaml": "^2.7.0"
   },

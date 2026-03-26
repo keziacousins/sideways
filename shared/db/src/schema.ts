@@ -96,9 +96,8 @@ export const comments = pgTable("comments", {
   parentId: uuid("parent_id").references((): any => comments.id),
   authorId: uuid("author_id").notNull().references(() => users.id),
   body: text("body").notNull(),
-  /** For inline comments: character offset range */
-  anchorStart: integer("anchor_start"),
-  anchorEnd: integer("anchor_end"),
+  /** Text snippet the comment is anchored to. Null = page-level comment. */
+  anchorText: text("anchor_text"),
   resolved: boolean("resolved").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

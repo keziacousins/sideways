@@ -6,6 +6,7 @@ import { basename, resolve, dirname } from "node:path";
 import { findConfig, createConfig, requireConfig } from "./config.js";
 import { createClient } from "./api.js";
 import { login, clearCredentials, getStoredCredentials } from "./auth.js";
+import { embedComments, extractComments, type SerializedComment } from "@sideways/markdown";
 
 const program = new Command();
 
@@ -49,7 +50,10 @@ program
       const client = createClient(config.api);
 
       const filePath = resolve(file);
-      const content = readFileSync(filePath, "utf-8");
+      const raw = readFileSync(filePath, "utf-8");
+
+      // Extract any embedded comments from the markdown
+      const { clean, comments: embeddedComments } = extractComments(raw);
 
       const slug =
         opts.slug ?? basename(file, ".md").replace(/[^a-z0-9-]/gi, "-").toLowerCase();
@@ -58,9 +62,16 @@ program
 
       const result = await client.putDocument(space, slug, {
         title,
-        content,
+        content: clean,
         tags,
       });
+
+      if (embeddedComments.length > 0) {
+        console.log(
+          `  ${embeddedComments.length} comment(s) found in file (stored in DB)`,
+        );
+      }
+
       console.log(`Pushed ${space}/${slug} (${result.id})`);
     },
   );
@@ -72,18 +83,58 @@ program
   .description("Download a document as a local markdown file")
   .option("-d, --dir <path>", "Output directory", ".")
   .option("--space <space>", "Override space from config")
+  .option("--clean", "Exclude comments from output")
+  .option("--include-resolved", "Include resolved comments")
   .action(
-    async (slug: string, opts: { dir: string; space?: string }) => {
+    async (
+      slug: string,
+      opts: {
+        dir: string;
+        space?: string;
+        clean?: boolean;
+        includeResolved?: boolean;
+      },
+    ) => {
       const config = requireConfig();
       const space = opts.space ?? config.space;
       const client = createClient(config.api);
 
       const doc = await client.getDocument(space, slug);
+      let content = doc.content;
+
+      if (!opts.clean) {
+        try {
+          const rawComments = await client.getComments(
+            space,
+            slug,
+            opts.includeResolved,
+          );
+          if (rawComments.length > 0) {
+            const serialized: SerializedComment[] = rawComments.map(
+              (c: any) => ({
+                id: c.id,
+                author: c.author?.name || "Unknown",
+                authorEmail: c.author?.email,
+                date: c.createdAt?.slice(0, 10) || "",
+                body: c.body,
+                anchorText: c.anchorText,
+                parentId: c.parentId,
+                resolved: c.resolved,
+              }),
+            );
+            content = embedComments(content, serialized);
+          }
+        } catch {
+          // Comments not available (no auth, etc.) — pull content only
+        }
+      }
+
       const outDir = resolve(opts.dir);
       mkdirSync(outDir, { recursive: true });
 
       const outPath = resolve(outDir, `${slug}.md`);
-      writeFileSync(outPath, doc.content);
+      writeFileSync(outPath, content);
+
       console.log(`Pulled ${space}/${slug} → ${outPath}`);
     },
   );

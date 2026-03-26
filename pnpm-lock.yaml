@@ -23,6 +23,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@sideways/markdown':
+        specifier: workspace:*
+        version: link:../../shared/markdown
       commander:
         specifier: ^13.1.0
         version: 13.1.0

@@ -22,6 +22,13 @@
       "when": 1774480000000,
       "tag": "0002_add_api_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1774484000000,
+      "tag": "0003_comments_text_anchor",
+      "breakpoints": true
     }
   ]
 }

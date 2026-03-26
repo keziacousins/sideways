@@ -33,6 +33,9 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
   return processor;
 }
 
+export { extractComments, embedComments } from "./comments.js";
+export type { SerializedComment } from "./comments.js";
+
 /**
  * Render markdown to HTML string.
  */
