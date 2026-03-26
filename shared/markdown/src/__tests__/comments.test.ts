@@ -7,6 +7,8 @@ const makeComment = (overrides: Partial<SerializedComment> = {}): SerializedComm
   date: "2026-03-26",
   body: "A comment.",
   anchorText: null,
+  anchorSection: null,
+  anchorContext: null,
   parentId: null,
   resolved: false,
   ...overrides,

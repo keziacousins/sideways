@@ -18,6 +18,8 @@ export interface SerializedComment {
   date: string;
   body: string;
   anchorText: string | null;
+  anchorSection: string | null;
+  anchorContext: string | null;
   parentId: string | null;
   resolved: boolean;
 }
@@ -64,6 +66,8 @@ export function extractComments(markdown: string): {
       date: attrs.date || "",
       body,
       anchorText: attrs.anchor || null,
+      anchorSection: attrs.section || null,
+      anchorContext: attrs.context || null,
       parentId: attrs.parent || null,
       resolved: headerLine.includes(" resolved"),
     });
@@ -109,6 +113,7 @@ export function embedComments(
     if (comment.authorEmail) attrs.push(`email="${comment.authorEmail}"`);
     if (comment.date) attrs.push(`date="${comment.date}"`);
     if (comment.anchorText) attrs.push(`anchor="${comment.anchorText}"`);
+    if (comment.anchorSection) attrs.push(`section="${comment.anchorSection}"`);
     if (comment.parentId) attrs.push(`parent="${comment.parentId}"`);
     if (comment.resolved) attrs.push("resolved");
 

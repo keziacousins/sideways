@@ -89,6 +89,8 @@ export function createCommentRoutes(db: Database) {
     const body = await c.req.json<{
       body: string;
       anchorText?: string;
+      anchorSection?: string;
+      anchorContext?: string;
       parentId?: string;
     }>();
 
@@ -99,6 +101,8 @@ export function createCommentRoutes(db: Database) {
         authorId: user.id,
         body: body.body,
         anchorText: body.anchorText ?? null,
+        anchorSection: body.anchorSection ?? null,
+        anchorContext: body.anchorContext ?? null,
         parentId: body.parentId ?? null,
       })
       .returning();

@@ -4,6 +4,8 @@ interface Comment {
   id: string;
   body: string;
   anchorText: string | null;
+  anchorSection: string | null;
+  anchorContext: string | null;
   parentId: string | null;
   resolved: boolean;
   createdAt: string;
@@ -30,6 +32,8 @@ export default function Comments({
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
   const [anchorText, setAnchorText] = useState<string | null>(null);
+  const [anchorSection, setAnchorSection] = useState<string | null>(null);
+  const [anchorContext, setAnchorContext] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [composing, setComposing] = useState(false);
@@ -120,6 +124,8 @@ export default function Comments({
       setReplyTo(null);
       setError(null);
       setAnchorText(detail.anchorText);
+      setAnchorSection(detail.anchorSection || null);
+      setAnchorContext(detail.anchorContext || null);
       setComposing(true);
       setIsOpen(true);
     }
@@ -146,6 +152,8 @@ export default function Comments({
           body: JSON.stringify({
             body: newComment,
             anchorText: replyTo ? null : anchorText,
+            anchorSection: replyTo ? null : anchorSection,
+            anchorContext: replyTo ? null : anchorContext,
             parentId: replyTo,
           }),
         },
@@ -154,6 +162,8 @@ export default function Comments({
       if (res.ok) {
         setNewComment("");
         setAnchorText(null);
+        setAnchorSection(null);
+        setAnchorContext(null);
         setReplyTo(null);
         setComposing(false);
         await fetchComments();
@@ -232,7 +242,7 @@ export default function Comments({
               {anchorText && !replyTo && (
                 <div className="comment-form-anchor">
                   <span>"{anchorText.slice(0, 60)}{anchorText.length > 60 ? "…" : ""}"</span>
-                  <button type="button" onClick={() => setAnchorText(null)}>×</button>
+                  <button type="button" onClick={() => { setAnchorText(null); setAnchorSection(null); setAnchorContext(null); }}>×</button>
                 </div>
               )}
               <textarea
@@ -353,9 +363,31 @@ function CommentItem({
 }) {
   return (
     <div className={`comment-item ${isReply ? "reply" : ""}`}>
+      {comment.anchorSection && (
+        <div className="comment-section-path">{comment.anchorSection}</div>
+      )}
       {comment.anchorText && (
         <div className="comment-anchor">
-          "{comment.anchorText.slice(0, 80)}{comment.anchorText.length > 80 ? "…" : ""}"
+          {comment.anchorContext ? (
+            // Show context with anchor text highlighted within it
+            (() => {
+              const ctx = comment.anchorContext;
+              const idx = ctx.indexOf(comment.anchorText.slice(0, 40));
+              if (idx >= 0) {
+                const before = ctx.slice(Math.max(0, idx - 40), idx);
+                const match = ctx.slice(idx, idx + comment.anchorText.length);
+                const after = ctx.slice(idx + comment.anchorText.length, idx + comment.anchorText.length + 40);
+                return (
+                  <>
+                    {before.length > 0 && idx > 40 && "…"}{before}<mark>{match}</mark>{after}{after.length >= 40 && "…"}
+                  </>
+                );
+              }
+              return <>"{comment.anchorText.slice(0, 80)}{comment.anchorText.length > 80 ? "…" : ""}"</>;
+            })()
+          ) : (
+            <>"{comment.anchorText.slice(0, 80)}{comment.anchorText.length > 80 ? "…" : ""}"</>
+          )}
         </div>
       )}
       <div className="comment-meta">

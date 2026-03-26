@@ -199,8 +199,7 @@ const navItems = documents.map((d) => ({
 
 {doc && (
 <script>
-  // Vanilla JS: text selection → subtle comment pip
-  // Appears at the end of the selection, small and unobtrusive
+  // Vanilla JS: text selection → comment button + rich context capture
   const btn = document.createElement("button");
   btn.className = "selection-comment-btn";
   btn.setAttribute("aria-label", "Add comment");
@@ -208,10 +207,63 @@ const navItems = documents.map((d) => ({
   btn.style.display = "none";
   document.body.appendChild(btn);
 
-  let currentAnchorText: string | null = null;
+  let currentDetail: any = null;
+
+  /** Walk up from a node to find the heading hierarchy */
+  function getSectionPath(node: Node): string {
+    const docContent = (node as HTMLElement).closest?.(".sw-doc-content")
+      || (node.parentElement?.closest(".sw-doc-content"));
+    if (!docContent) return "";
+
+    // Find all headings before the selection point
+    const headings = Array.from(docContent.querySelectorAll("h1, h2, h3, h4, h5, h6"));
+    const selectionTop = (node as HTMLElement).getBoundingClientRect?.()?.top
+      ?? node.parentElement?.getBoundingClientRect()?.top ?? 0;
+
+    // Filter headings that are above the selection
+    const above = headings.filter(h => h.getBoundingClientRect().top < selectionTop);
+    if (above.length === 0) return "";
+
+    // Build hierarchy: keep the most recent heading at each level
+    const levels: Map<number, string> = new Map();
+    for (const h of above) {
+      const level = parseInt(h.tagName[1]);
+      const text = h.textContent?.trim() || "";
+      levels.set(level, text);
+      // Clear deeper levels when a shallower heading appears
+      for (const [k] of levels) {
+        if (k > level) levels.delete(k);
+      }
+    }
+
+    // Build path from shallowest to deepest
+    return Array.from(levels.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([, text]) => text)
+      .join(" > ");
+  }
+
+  /** Get surrounding text context around the selection */
+  function getContext(range: Range): string {
+    const container = range.commonAncestorContainer;
+    const block = container.nodeType === Node.TEXT_NODE
+      ? container.parentElement
+      : container as HTMLElement;
+    if (!block) return "";
+
+    // Walk up to find a meaningful block (p, li, td, pre, blockquote)
+    let contextEl: HTMLElement | null = block;
+    while (contextEl && !["P", "LI", "TD", "PRE", "BLOCKQUOTE", "H1", "H2", "H3", "H4", "H5", "H6"].includes(contextEl.tagName)) {
+      contextEl = contextEl.parentElement;
+      if (contextEl?.classList.contains("sw-doc-content")) { contextEl = block; break; }
+    }
+    if (!contextEl) return "";
+
+    const fullText = contextEl.textContent?.trim() || "";
+    return fullText.slice(0, 300);
+  }
 
   document.addEventListener("mouseup", () => {
-    // Short delay for selection to finalize
     setTimeout(() => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) {
@@ -227,10 +279,12 @@ const navItems = documents.map((d) => ({
 
       const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
+      const anchorText = sel.toString().trim().slice(0, 200);
+      const anchorSection = getSectionPath(sel.anchorNode!);
+      const anchorContext = getContext(range);
 
-      currentAnchorText = sel.toString().trim().slice(0, 200);
+      currentDetail = { anchorText, anchorSection, anchorContext };
 
-      // Position at the end of the selection, just above the last line
       btn.style.display = "flex";
       btn.style.position = "fixed";
       btn.style.left = `${rect.right + 6}px`;
@@ -244,7 +298,6 @@ const navItems = documents.map((d) => ({
     }
   });
 
-  // Also hide on scroll (position becomes stale)
   document.addEventListener("scroll", () => {
     btn.style.display = "none";
   }, { passive: true });
@@ -254,7 +307,7 @@ const navItems = documents.map((d) => ({
     window.getSelection()?.removeAllRanges();
     document.dispatchEvent(
       new CustomEvent("sideways:inline-comment", {
-        detail: { anchorText: currentAnchorText },
+        detail: currentDetail,
       })
     );
   });

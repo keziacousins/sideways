@@ -63,6 +63,10 @@ export interface Comment {
   body: string;
   /** Text snippet the comment is anchored to. Null = page-level comment. */
   anchorText: string | null;
+  /** Heading hierarchy at anchor point */
+  anchorSection: string | null;
+  /** Surrounding lines for context */
+  anchorContext: string | null;
   resolved: boolean;
   createdAt: string;
   updatedAt: string;

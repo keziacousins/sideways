@@ -98,6 +98,10 @@ export const comments = pgTable("comments", {
   body: text("body").notNull(),
   /** Text snippet the comment is anchored to. Null = page-level comment. */
   anchorText: text("anchor_text"),
+  /** Heading hierarchy at anchor point, e.g. "Installation > Prerequisites" */
+  anchorSection: text("anchor_section"),
+  /** Surrounding lines for context, with anchor text marked */
+  anchorContext: text("anchor_context"),
   resolved: boolean("resolved").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
