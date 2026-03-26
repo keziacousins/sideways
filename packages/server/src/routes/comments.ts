@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import {
   type Database,
   comments,
@@ -44,7 +44,7 @@ export function createCommentRoutes(db: Database) {
       where: includeResolved
         ? eq(comments.documentId, doc.id)
         : and(eq(comments.documentId, doc.id), eq(comments.resolved, false)),
-      orderBy: desc(comments.createdAt),
+      orderBy: comments.createdAt,
     });
 
     // Fetch author info
