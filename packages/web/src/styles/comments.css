@@ -165,6 +165,16 @@
   color: var(--sw-text-ghost);
 }
 
+.comment-form-error {
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.5rem;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: var(--sw-radius-sm);
+  color: var(--sw-error);
+  font-size: var(--sw-text-xs);
+}
+
 .comment-form-actions {
   display: flex;
   justify-content: flex-end;

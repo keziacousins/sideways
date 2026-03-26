@@ -28,6 +28,8 @@ export default function Comments({
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
   const [anchorText, setAnchorText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -69,6 +71,8 @@ export default function Comments({
 
   const submitComment = async () => {
     if (!newComment.trim()) return;
+    setError(null);
+    setSubmitting(true);
 
     const submitHeaders: Record<string, string> = {
       "Content-Type": "application/json",
@@ -94,11 +98,15 @@ export default function Comments({
         setAnchorText(null);
         setReplyTo(null);
         await fetchComments();
+      } else if (res.status === 401) {
+        setError("Session expired. Please refresh the page and sign in again.");
       } else {
-        console.error("[Comments] Submit failed:", res.status, await res.text());
+        setError(`Failed to post comment (${res.status})`);
       }
     } catch (e) {
-      console.error("[Comments] Submit error:", e);
+      setError("Connection error. Is the server running?");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -192,6 +200,7 @@ export default function Comments({
                   if (e.key === "Enter" && e.metaKey) submitComment();
                 }}
               />
+              {error && <div className="comment-form-error">{error}</div>}
               <div className="comment-form-actions">
                 {(replyTo || anchorText) && (
                   <button
@@ -201,6 +210,7 @@ export default function Comments({
                       setReplyTo(null);
                       setAnchorText(null);
                       setNewComment("");
+                      setError(null);
                     }}
                   >
                     Cancel
@@ -209,9 +219,9 @@ export default function Comments({
                 <button
                   type="submit"
                   className="comment-form-submit"
-                  disabled={!newComment.trim()}
+                  disabled={!newComment.trim() || submitting}
                 >
-                  Comment
+                  {submitting ? "Posting…" : "Comment"}
                 </button>
               </div>
             </form>

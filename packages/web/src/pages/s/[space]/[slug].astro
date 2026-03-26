@@ -7,7 +7,49 @@ import "../../../styles/comments.css";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const { space: spaceSlug, slug } = Astro.params;
-const accessToken = await Astro.session?.get("access_token") || null;
+
+// Get access token, refresh if expired
+let accessToken = await Astro.session?.get("access_token") || null;
+const refreshToken = await Astro.session?.get("refresh_token") || null;
+
+if (accessToken) {
+  // Check if token is expired by trying to decode the JWT exp claim
+  try {
+    const payload = JSON.parse(
+      Buffer.from(accessToken.split(".")[1], "base64").toString(),
+    );
+    const expiresAt = payload.exp * 1000;
+    if (Date.now() > expiresAt - 60_000) {
+      // Expired or about to expire — try refresh
+      if (refreshToken) {
+        const refreshRes = await fetch(`${API_URL}/api/auth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: refreshToken,
+            client_id: "sideways-web",
+          }),
+        });
+        if (refreshRes.ok) {
+          const tokens = await refreshRes.json();
+          accessToken = tokens.access_token;
+          await Astro.session?.set("access_token", tokens.access_token);
+          if (tokens.refresh_token) {
+            await Astro.session?.set("refresh_token", tokens.refresh_token);
+          }
+        } else {
+          // Refresh failed — clear token, user will see "Sign in to comment"
+          accessToken = null;
+        }
+      } else {
+        accessToken = null;
+      }
+    }
+  } catch {
+    // Not a JWT or decode failed — use as-is
+  }
+}
 
 let space: { name: string; slug: string } | null = null;
 let doc: { title: string; html: string; tags: string[]; updatedAt: string } | null = null;
