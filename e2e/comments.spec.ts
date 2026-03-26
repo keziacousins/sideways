@@ -56,6 +56,7 @@ test.describe("Comments — unauthenticated", () => {
 });
 
 test.describe("Comments — authenticated", () => {
+  test.describe.configure({ mode: "serial" });
   test("can open panel, add page comment, see it appear", async ({ page }) => {
     await login(page);
     await page.goto(`/s/${SPACE}/${DOC}`);
@@ -63,10 +64,12 @@ test.describe("Comments — authenticated", () => {
     // Open panel
     await page.locator(".comments-toggle").click();
     await expect(page.locator(".comments-panel-overlay")).toBeVisible();
+
+    // Click the compose trigger to expand the form
+    await page.locator(".comment-compose-trigger").click();
     await expect(page.locator(".comment-form textarea")).toBeVisible();
 
     // Type a comment
-    await page.locator(".comment-form textarea").click();
     await page.locator(".comment-form textarea").fill("This is a page-level comment.");
 
     // Submit button should be enabled
@@ -82,14 +85,15 @@ test.describe("Comments — authenticated", () => {
     );
     await expect(page.locator(".comment-author").first()).toContainText(TEST_NAME);
 
-    // Textarea should be cleared after submit
-    await expect(page.locator(".comment-form textarea")).toHaveValue("");
+    // Form should collapse back to trigger after submit
+    await expect(page.locator(".comment-compose-trigger")).toBeVisible({ timeout: 5000 });
   });
 
   test("submit button is disabled when textarea is empty", async ({ page }) => {
     await login(page);
     await page.goto(`/s/${SPACE}/${DOC}`);
     await page.locator(".comments-toggle").click();
+    await page.locator(".comment-compose-trigger").click();
 
     await expect(page.locator(".comment-form-submit")).toBeDisabled();
   });
@@ -117,13 +121,11 @@ test.describe("Comments — authenticated", () => {
     // Click cancel
     await page.locator(".comment-form-cancel").click();
 
-    // Should return to page comment mode
-    await expect(page.locator(".comment-form textarea")).toHaveAttribute(
-      "placeholder",
-      /page comment/i,
+    // Should collapse back to trigger
+    await expect(page.locator(".comment-compose-trigger")).toBeVisible(
     );
-    // Cancel button should be gone
-    await expect(page.locator(".comment-form-cancel")).not.toBeVisible();
+    // Form should be gone
+    await expect(page.locator(".comment-form")).not.toBeVisible();
   });
 
   test("can reply to a comment", async ({ page }) => {
@@ -145,9 +147,8 @@ test.describe("Comments — authenticated", () => {
       { timeout: 5000 },
     );
 
-    // Form should clear after reply
-    await expect(page.locator(".comment-form textarea")).toHaveValue("");
-    await expect(page.locator(".comment-form-cancel")).not.toBeVisible();
+    // Form should collapse after reply
+    await expect(page.locator(".comment-compose-trigger")).toBeVisible({ timeout: 5000 });
   });
 
   test("can resolve and see resolved section", async ({ page }) => {

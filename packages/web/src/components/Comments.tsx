@@ -32,6 +32,7 @@ export default function Comments({
   const [anchorText, setAnchorText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [composing, setComposing] = useState(false);
 
   // Mutable token refs so we can refresh without re-rendering everything
   const tokenRef = useRef(initialAccessToken);
@@ -113,6 +114,7 @@ export default function Comments({
       setReplyTo(null);
       setError(null);
       setAnchorText(detail.anchorText);
+      setComposing(true);
       setIsOpen(true);
     }
 
@@ -147,6 +149,7 @@ export default function Comments({
         setNewComment("");
         setAnchorText(null);
         setReplyTo(null);
+        setComposing(false);
         await fetchComments();
       } else if (res.status === 401) {
         setError("Session expired. Please sign in again.");
@@ -206,7 +209,19 @@ export default function Comments({
             </button>
           </div>
 
-          {isAuthenticated && (
+          {isAuthenticated && !composing && !replyTo && !anchorText && (
+            <div className="comment-form-collapsed">
+              <button
+                type="button"
+                className="comment-compose-trigger"
+                onClick={() => setComposing(true)}
+              >
+                Add a comment…
+              </button>
+            </div>
+          )}
+
+          {isAuthenticated && (composing || replyTo || anchorText) && (
             <form className="comment-form" onSubmit={(e) => { e.preventDefault(); submitComment(); }}>
               {anchorText && !replyTo && (
                 <div className="comment-form-anchor">
@@ -215,12 +230,13 @@ export default function Comments({
                 </div>
               )}
               <textarea
+                autoFocus
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder={
                   replyTo ? "Write a reply…"
                     : anchorText ? "Add your comment…"
-                    : "Add a page comment…"
+                    : "Write a comment…"
                 }
                 rows={3}
                 onKeyDown={(e) => {
@@ -229,20 +245,19 @@ export default function Comments({
               />
               {error && <div className="comment-form-error">{error}</div>}
               <div className="comment-form-actions">
-                {(replyTo || anchorText) && (
-                  <button
-                    type="button"
-                    className="comment-form-cancel"
-                    onClick={() => {
-                      setReplyTo(null);
-                      setAnchorText(null);
-                      setNewComment("");
-                      setError(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="comment-form-cancel"
+                  onClick={() => {
+                    setReplyTo(null);
+                    setAnchorText(null);
+                    setNewComment("");
+                    setError(null);
+                    setComposing(false);
+                  }}
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit"
                   className="comment-form-submit"
@@ -272,6 +287,7 @@ export default function Comments({
                     setReplyTo(comment.id);
                     setAnchorText(null);
                     setError(null);
+                    setComposing(true);
                   }}
                   onResolve={() => resolveComment(comment.id)}
                   canAct={isAuthenticated}

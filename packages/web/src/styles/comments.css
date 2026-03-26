@@ -7,21 +7,18 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.35rem 0.75rem;
-  background: var(--sw-ink-lighter);
-  border: 1px solid var(--sw-border);
-  border-radius: var(--sw-radius-md);
+  padding: 0;
+  background: none;
+  border: none;
   color: var(--sw-text-tertiary);
-  font-size: var(--sw-text-xs);
+  font-size: var(--sw-text-sm);
   font-family: var(--sw-font-body);
   cursor: pointer;
-  transition: all var(--sw-duration-fast) var(--sw-ease);
+  transition: color var(--sw-duration-fast) var(--sw-ease);
 }
 
 .comments-toggle:hover {
-  background: var(--sw-ink-surface);
   color: var(--sw-text-primary);
-  border-color: var(--sw-border-strong);
 }
 
 .comments-badge {
@@ -43,24 +40,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   padding: 0;
-  background: var(--sw-ink-surface);
-  color: var(--sw-text-tertiary);
-  border: 1px solid var(--sw-border-strong);
+  background: var(--sw-accent-dim);
+  color: var(--sw-ink-deepest);
+  border: none;
   border-radius: 50%;
   cursor: pointer;
   z-index: 50;
-  box-shadow: var(--sw-shadow-sm);
+  box-shadow: 0 2px 8px rgba(226, 163, 54, 0.25);
   transition: all var(--sw-duration-fast) var(--sw-ease);
 }
 
 .selection-comment-btn:hover {
   background: var(--sw-accent);
-  color: var(--sw-ink-deepest);
-  border-color: var(--sw-accent);
-  box-shadow: var(--sw-shadow-glow);
+  transform: scale(1.1);
+  box-shadow: 0 2px 12px rgba(226, 163, 54, 0.4);
 }
 
 /* ── Panel ────────────────────────────────────────────────────── */
@@ -166,6 +162,31 @@
 
 .comment-form textarea::placeholder {
   color: var(--sw-text-ghost);
+}
+
+/* ── Collapsed Form Trigger ────────────────────────────────────── */
+.comment-form-collapsed {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--sw-border);
+}
+
+.comment-compose-trigger {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--sw-ink);
+  border: 1px solid var(--sw-border);
+  border-radius: var(--sw-radius-md);
+  color: var(--sw-text-ghost);
+  font-size: var(--sw-text-sm);
+  font-family: var(--sw-font-body);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--sw-duration-fast) var(--sw-ease);
+}
+
+.comment-compose-trigger:hover {
+  border-color: var(--sw-border-strong);
+  color: var(--sw-text-tertiary);
 }
 
 .comment-form-error {

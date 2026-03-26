@@ -152,28 +152,25 @@ const navItems = documents.map((d) => ({
   .doc-toolbar-right {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 1.25rem;
   }
 
   .toolbar-btn {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.35rem 0.75rem;
-    background: var(--sw-ink-lighter);
-    border: 1px solid var(--sw-border);
-    border-radius: var(--sw-radius-md);
+    padding: 0;
+    background: none;
+    border: none;
     color: var(--sw-text-tertiary);
-    font-size: var(--sw-text-xs);
+    font-size: var(--sw-text-sm);
     font-family: var(--sw-font-body);
     cursor: pointer;
-    transition: all var(--sw-duration-fast) var(--sw-ease);
+    transition: color var(--sw-duration-fast) var(--sw-ease);
   }
 
   .toolbar-btn:hover {
-    background: var(--sw-ink-surface);
     color: var(--sw-text-primary);
-    border-color: var(--sw-border-strong);
   }
 
   .doc-tags {
