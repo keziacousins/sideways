@@ -63,8 +63,16 @@ export function createClient(baseUrl: string) {
       });
     },
 
-    getSyncInfo(space: string) {
-      return request(`/api/documents/${space}/_sync`);
+    getSyncInfo(space: string, section?: string) {
+      const qs = section ? `?section=${section}` : "";
+      return request(`/api/documents/${space}/_sync${qs}`);
+    },
+
+    createSection(space: string, slug: string, title?: string) {
+      return request(`/api/spaces/${space}/sections/${slug}`, {
+        method: "PUT",
+        body: JSON.stringify({ title: title || slug }),
+      });
     },
 
     getVersions(space: string, slug: string) {

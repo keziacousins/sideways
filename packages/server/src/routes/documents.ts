@@ -6,6 +6,7 @@ import {
   type Database,
   documents,
   documentVersions,
+  sections,
   spaces,
   users,
 } from "@sideways/db";
@@ -88,8 +89,27 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     if ("error" in result) return result.error;
     const { space } = result;
 
+    // Optional section filter
+    const sectionSlug = c.req.query("section");
+    let sectionId: string | null = null;
+    if (sectionSlug) {
+      const section = await db.query.sections.findFirst({
+        where: and(
+          eq(sections.spaceId, space.id),
+          eq(sections.slug, sectionSlug),
+        ),
+      });
+      if (section) sectionId = section.id;
+    }
+
+    const whereClause = sectionId
+      ? and(eq(documents.spaceId, space.id), eq(documents.sectionId, sectionId))
+      : sectionSlug
+        ? and(eq(documents.spaceId, space.id), eq(documents.sectionId, sectionId)) // no match — empty
+        : eq(documents.spaceId, space.id);
+
     const docs = await db.query.documents.findMany({
-      where: eq(documents.spaceId, space.id),
+      where: whereClause,
       orderBy: [documents.position, documents.title],
     });
 

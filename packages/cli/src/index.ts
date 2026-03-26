@@ -3,20 +3,19 @@
 import { Command } from "commander";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { basename, resolve, join } from "node:path";
-import { findConfig, createConfig, requireConfig, findMappingForCwd } from "./config.js";
+import { findConfig, createConfig, requireConfig } from "./config.js";
+import { resolveSyncTargets } from "./mappings.js";
 import { createClient } from "./api.js";
 import { login, clearCredentials, getStoredCredentials } from "./auth.js";
 import { embedComments, extractComments, type SerializedComment } from "@sideways/markdown";
 import {
   readSyncState,
   writeSyncState,
-  hashContent,
   hashLocalFile,
   slugFromFilename,
   titleFromSlug,
   parseFrontmatter,
   serializeFrontmatter,
-  findMarkdownFiles,
   computeDiff,
 } from "./sync.js";
 
@@ -60,101 +59,104 @@ program
       const config = requireConfig();
       const space = opts.space ?? config.space;
       const client = createClient(config.api);
-      const targetDir = resolve(path || ".");
+      const targets = resolveSyncTargets(config, path);
 
-      mkdirSync(targetDir, { recursive: true });
+      let totalPulled = 0;
+      let totalSkipped = 0;
 
-      // Get remote sync info
-      const remoteFiles = await client.getSyncInfo(space);
-      const syncState = readSyncState(targetDir, space);
+      for (const target of targets) {
+        const { localDir, section } = target;
+        mkdirSync(localDir, { recursive: true });
 
-      let pulled = 0;
-      let skipped = 0;
-
-      for (const remote of remoteFiles) {
-        const filename = `${remote.slug}.md`;
-        const filePath = join(targetDir, filename);
-        const tracked = syncState.files[filename];
-
-        // Check for local modifications
-        if (tracked && !opts.force) {
-          try {
-            const localContent = readFileSync(filePath, "utf-8");
-            const { content: stripped } = parseFrontmatter(localContent);
-            const localHash = hashContent(stripped);
-            if (localHash !== tracked.localHash && remote.contentHash !== tracked.remoteHash) {
-              console.log(`  conflict: ${filename} (use --force to overwrite)`);
-              skipped++;
-              continue;
-            }
-          } catch {}
+        // Ensure section exists on remote if specified
+        if (section) {
+          await client.createSection(space, section).catch(() => {});
         }
 
-        // Fetch full content
-        const doc = await client.getDocument(space, remote.slug);
-        let content = doc.content;
+        const remoteFiles = await client.getSyncInfo(space, section || undefined);
+        const syncState = readSyncState(localDir, space, section);
 
-        // Add frontmatter if doc has tags or title differs from slug
-        const fm: Record<string, any> = {};
-        if (doc.title && doc.title !== titleFromSlug(remote.slug)) {
-          fm.title = doc.title;
-        }
-        if (doc.tags?.length > 0) {
-          fm.tags = doc.tags;
+        if (targets.length > 1) {
+          const label = section || "(root)";
+          console.log(`\n${label}:`);
         }
 
-        // Embed comments unless --clean
-        if (!opts.clean) {
-          try {
-            const rawComments = await client.getComments(
-              space,
-              remote.slug,
-              opts.includeResolved,
-            );
-            if (rawComments.length > 0) {
-              const serialized: SerializedComment[] = rawComments.map(
-                (c: any) => ({
-                  id: c.id,
-                  author: c.author?.name || "Unknown",
-                  authorEmail: c.author?.email,
-                  date: c.createdAt?.slice(0, 10) || "",
-                  body: c.body,
-                  anchorText: c.anchorText,
-                  anchorSection: c.anchorSection,
-                  anchorContext: c.anchorContext,
-                  parentId: c.parentId,
-                  resolved: c.resolved,
-                }),
+        for (const remote of remoteFiles) {
+          const filename = `${remote.slug}.md`;
+          const filePath = join(localDir, filename);
+          const tracked = syncState.files[filename];
+
+          if (tracked && !opts.force) {
+            try {
+              const localContent = readFileSync(filePath, "utf-8");
+              const localHash = hashLocalFile(localContent);
+              if (localHash !== tracked.localHash && remote.contentHash !== tracked.remoteHash) {
+                console.log(`  conflict: ${filename} (use --force to overwrite)`);
+                totalSkipped++;
+                continue;
+              }
+            } catch {}
+          }
+
+          const doc = await client.getDocument(space, remote.slug);
+          let content = doc.content;
+
+          const fm: Record<string, any> = {};
+          if (doc.title && doc.title !== titleFromSlug(remote.slug)) {
+            fm.title = doc.title;
+          }
+          if (doc.tags?.length > 0) {
+            fm.tags = doc.tags;
+          }
+
+          if (!opts.clean) {
+            try {
+              const rawComments = await client.getComments(
+                space, remote.slug, opts.includeResolved,
               );
-              content = embedComments(content, serialized);
-            }
-          } catch {}
+              if (rawComments.length > 0) {
+                const serialized: SerializedComment[] = rawComments.map(
+                  (c: any) => ({
+                    id: c.id,
+                    author: c.author?.name || "Unknown",
+                    authorEmail: c.author?.email,
+                    date: c.createdAt?.slice(0, 10) || "",
+                    body: c.body,
+                    anchorText: c.anchorText,
+                    anchorSection: c.anchorSection,
+                    anchorContext: c.anchorContext,
+                    parentId: c.parentId,
+                    resolved: c.resolved,
+                  }),
+                );
+                content = embedComments(content, serialized);
+              }
+            } catch {}
+          }
+
+          const output = Object.keys(fm).length > 0
+            ? serializeFrontmatter(fm, content)
+            : content;
+
+          writeFileSync(filePath, output);
+
+          syncState.files[filename] = {
+            slug: remote.slug,
+            remoteVersion: remote.version,
+            localHash: hashLocalFile(output),
+            remoteHash: remote.contentHash,
+          };
+
+          const isNew = !tracked;
+          console.log(`  ${isNew ? "new" : "updated"}: ${filename}`);
+          totalPulled++;
         }
 
-        const output = Object.keys(fm).length > 0
-          ? serializeFrontmatter(fm, content)
-          : content;
-
-        writeFileSync(filePath, output);
-
-        // Update sync state — hash the file we just wrote through the same
-        // pipeline that status will use (strip comments + frontmatter)
-        syncState.files[filename] = {
-          slug: remote.slug,
-          remoteVersion: remote.version,
-          localHash: hashLocalFile(output),
-          remoteHash: remote.contentHash,
-        };
-
-        const isNew = !tracked;
-        console.log(`  ${isNew ? "new" : "updated"}: ${filename}`);
-        pulled++;
+        syncState.lastSync = new Date().toISOString();
+        writeSyncState(localDir, syncState);
       }
 
-      syncState.lastSync = new Date().toISOString();
-      writeSyncState(targetDir, syncState);
-
-      console.log(`\nPulled ${pulled} file(s)${skipped > 0 ? `, ${skipped} skipped` : ""}`);
+      console.log(`\nPulled ${totalPulled} file(s)${totalSkipped > 0 ? `, ${totalSkipped} skipped` : ""}`);
     },
   );
 
@@ -207,78 +209,88 @@ program
         return;
       }
 
-      // Push all changed files in a directory
-      const targetDir = resolve(path || ".");
-      const syncState = readSyncState(targetDir, space);
-      const remoteFiles = await client.getSyncInfo(space);
+      // Push all changed files across sync targets
+      const targets = resolveSyncTargets(config, path?.endsWith(".md") ? undefined : path);
 
-      const diffs = computeDiff(targetDir, syncState, remoteFiles);
-      const toPush = diffs.filter(
-        (d) =>
-          d.status === "new" ||
-          d.status === "modified" ||
-          (d.status === "conflict" && opts.force),
-      );
+      let totalPushed = 0;
+      for (const target of targets) {
+        const { localDir, section } = target;
 
-      if (toPush.length === 0) {
-        console.log("Nothing to push.");
-        return;
-      }
-
-      for (const diff of toPush) {
-        const filePath = join(targetDir, diff.filename);
-
-        if (opts.dryRun) {
-          console.log(`  would push: ${diff.filename} (${diff.status})`);
-          continue;
+        if (section) {
+          await client.createSection(space, section).catch(() => {});
         }
 
-        const raw = readFileSync(filePath, "utf-8");
-        const { clean } = extractComments(raw);
-        const { frontmatter, content } = parseFrontmatter(clean);
+        const syncState = readSyncState(localDir, space, section);
+        const remoteFiles = await client.getSyncInfo(space, section || undefined);
 
-        const title = frontmatter.title || titleFromSlug(diff.slug);
-        const tags = frontmatter.tags || [];
+        const diffs = computeDiff(localDir, syncState, remoteFiles);
+        const toPush = diffs.filter(
+          (d) =>
+            d.status === "new" ||
+            d.status === "modified" ||
+            (d.status === "conflict" && opts.force),
+        );
 
-        const result = await client.putDocument(space, diff.slug, {
-          title,
-          content,
-          tags,
-        });
+        if (toPush.length === 0) continue;
 
-        // Update sync state — hash the file on disk through the same pipeline
-        const fileOnDisk = readFileSync(filePath, "utf-8");
-        const h = hashLocalFile(fileOnDisk);
-        syncState.files[diff.filename] = {
-          slug: diff.slug,
-          remoteVersion: (syncState.files[diff.filename]?.remoteVersion ?? 0) + 1,
-          localHash: h,
-          remoteHash: h,
-        };
-
-        console.log(`  pushed: ${diff.filename} (${diff.status})`);
-      }
-
-      if (!opts.dryRun) {
-        const conflicts = diffs.filter((d) => d.status === "conflict" && !opts.force);
-        for (const c of conflicts) {
-          console.log(`  conflict: ${c.filename} (use --force to overwrite)`);
+        if (targets.length > 1) {
+          console.log(`\n${section || "(root)"}:`);
         }
 
-        // Re-fetch remote hashes after push to ensure sync state matches
-        const updatedRemote = await client.getSyncInfo(space);
-        const remoteHashMap = new Map(updatedRemote.map((r: any) => [r.slug, r]));
-        for (const [filename, entry] of Object.entries(syncState.files)) {
-          const remote = remoteHashMap.get(entry.slug);
-          if (remote) {
-            entry.remoteHash = remote.contentHash;
-            entry.remoteVersion = remote.version;
+        for (const diff of toPush) {
+          const filePath = join(localDir, diff.filename);
+
+          if (opts.dryRun) {
+            console.log(`  would push: ${diff.filename} (${diff.status})`);
+            continue;
           }
+
+          const raw = readFileSync(filePath, "utf-8");
+          const { clean } = extractComments(raw);
+          const { frontmatter, content } = parseFrontmatter(clean);
+
+          const title = frontmatter.title || titleFromSlug(diff.slug);
+          const tags = frontmatter.tags || [];
+
+          await client.putDocument(space, diff.slug, { title, content, tags });
+
+          const h = hashLocalFile(raw);
+          syncState.files[diff.filename] = {
+            slug: diff.slug,
+            remoteVersion: (syncState.files[diff.filename]?.remoteVersion ?? 0) + 1,
+            localHash: h,
+            remoteHash: h,
+          };
+
+          console.log(`  pushed: ${diff.filename} (${diff.status})`);
+          totalPushed++;
         }
 
-        syncState.lastSync = new Date().toISOString();
-        writeSyncState(targetDir, syncState);
-        console.log(`\nPushed ${toPush.length} file(s)`);
+        if (!opts.dryRun) {
+          const conflicts = diffs.filter((d) => d.status === "conflict" && !opts.force);
+          for (const c of conflicts) {
+            console.log(`  conflict: ${c.filename} (use --force to overwrite)`);
+          }
+
+          const updatedRemote = await client.getSyncInfo(space, section || undefined);
+          const remoteHashMap = new Map(updatedRemote.map((r: any) => [r.slug, r]));
+          for (const entry of Object.values(syncState.files)) {
+            const remote = remoteHashMap.get(entry.slug);
+            if (remote) {
+              entry.remoteHash = remote.contentHash;
+              entry.remoteVersion = remote.version;
+            }
+          }
+
+          syncState.lastSync = new Date().toISOString();
+          writeSyncState(localDir, syncState);
+        }
+      }
+
+      if (totalPushed === 0 && !opts.dryRun) {
+        console.log("Nothing to push.");
+      } else if (!opts.dryRun) {
+        console.log(`\nPushed ${totalPushed} file(s)`);
       }
     },
   );
@@ -293,29 +305,30 @@ program
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = createClient(config.api);
-    const targetDir = process.cwd();
+    const targets = resolveSyncTargets(config);
 
-    const syncState = readSyncState(targetDir, space);
-    const remoteFiles = await client.getSyncInfo(space);
-    const diffs = computeDiff(targetDir, syncState, remoteFiles);
+    let anyFiles = false;
+    for (const target of targets) {
+      const { localDir, section } = target;
+      const syncState = readSyncState(localDir, space, section);
+      const remoteFiles = await client.getSyncInfo(space, section || undefined);
+      const diffs = computeDiff(localDir, syncState, remoteFiles);
 
-    if (diffs.length === 0) {
-      console.log("No files tracked. Run `sideways pull` first.");
-      return;
+      if (diffs.length === 0) continue;
+      anyFiles = true;
+
+      const label = section ? `${space}/${section}` : space;
+      console.log(`${label}:`);
+      for (const d of diffs.filter((d) => d.status === "conflict")) console.log(`  conflict:   ${d.filename}`);
+      for (const d of diffs.filter((d) => d.status === "modified")) console.log(`  modified:   ${d.filename}`);
+      for (const d of diffs.filter((d) => d.status === "new")) console.log(`  new:        ${d.filename}`);
+      for (const d of diffs.filter((d) => d.status === "deleted")) console.log(`  deleted:    ${d.filename}`);
+      for (const d of diffs.filter((d) => d.status === "unchanged")) console.log(`  unchanged:  ${d.filename}`);
     }
 
-    const modified = diffs.filter((d) => d.status === "modified");
-    const newFiles = diffs.filter((d) => d.status === "new");
-    const deleted = diffs.filter((d) => d.status === "deleted");
-    const conflicts = diffs.filter((d) => d.status === "conflict");
-    const unchanged = diffs.filter((d) => d.status === "unchanged");
-
-    console.log(`${space}:`);
-    for (const d of conflicts) console.log(`  conflict:   ${d.filename}`);
-    for (const d of modified) console.log(`  modified:   ${d.filename}`);
-    for (const d of newFiles) console.log(`  new:        ${d.filename}`);
-    for (const d of deleted) console.log(`  deleted:    ${d.filename}`);
-    for (const d of unchanged) console.log(`  unchanged:  ${d.filename}`);
+    if (!anyFiles) {
+      console.log("No files tracked. Run `sideways pull` first.");
+    }
   });
 
 // ── list ──────────────────────────────────────────────────────────────

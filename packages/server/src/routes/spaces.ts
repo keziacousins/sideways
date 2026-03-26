@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { type Database, spaces, sections, users } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
 
@@ -98,6 +98,45 @@ export function createSpaceRoutes(db: Database) {
       where: eq(sections.spaceId, space.id),
     });
     return c.json(all);
+  });
+
+  /** Create or update a section */
+  router.put("/:spaceSlug/sections/:sectionSlug", async (c) => {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("spaceSlug")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
+    const sectionSlug = c.req.param("sectionSlug");
+    const body = await c.req.json<{ title?: string; position?: number }>();
+
+    const existing = await db.query.sections.findFirst({
+      where: and(eq(sections.spaceId, space.id), eq(sections.slug, sectionSlug)),
+    });
+
+    if (existing) {
+      const [updated] = await db
+        .update(sections)
+        .set({
+          title: body.title ?? existing.title,
+          position: body.position ?? existing.position,
+          updatedAt: new Date(),
+        })
+        .where(eq(sections.id, existing.id))
+        .returning();
+      return c.json(updated, 200);
+    }
+
+    const [section] = await db
+      .insert(sections)
+      .values({
+        spaceId: space.id,
+        slug: sectionSlug,
+        title: body.title ?? sectionSlug,
+        position: body.position ?? 0,
+      })
+      .returning();
+    return c.json(section, 201);
   });
 
   return router;
