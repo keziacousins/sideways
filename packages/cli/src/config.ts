@@ -61,6 +61,19 @@ export function createConfig(
   if (name && name !== space) data.name = name;
   const content = stringify(data);
   writeFileSync(configPath, content);
+
+  // Clear stale sync state from a previous config
+  const syncDir = resolve(dir, ".sideways");
+  const syncFile = resolve(syncDir, "sync.json");
+  if (existsSync(syncFile)) {
+    try {
+      const old = JSON.parse(readFileSync(syncFile, "utf-8"));
+      if (old.space !== space) {
+        writeFileSync(syncFile, "{}");
+      }
+    } catch {}
+  }
+
   return configPath;
 }
 

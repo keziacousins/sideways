@@ -44,12 +44,15 @@ export function hashLocalFile(fileContent: string): string {
   return hashContent(content);
 }
 
-/** Read sync state for a directory, or return empty state */
+/** Read sync state for a directory, or return empty state.
+ *  Returns empty state if the stored space doesn't match (stale config). */
 export function readSyncState(dir: string, space: string, section: string | null = null): SyncState {
   const syncPath = join(dir, SYNC_DIR, SYNC_FILE);
   if (existsSync(syncPath)) {
     try {
-      return JSON.parse(readFileSync(syncPath, "utf-8"));
+      const state = JSON.parse(readFileSync(syncPath, "utf-8"));
+      if (state.space === space) return state;
+      // Space mismatch — stale sync state, start fresh
     } catch {}
   }
   return { space, section, lastSync: "", files: {} };
