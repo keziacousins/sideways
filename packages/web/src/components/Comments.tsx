@@ -52,8 +52,10 @@ export default function Comments({
   useEffect(() => {
     function handleInlineComment(e: Event) {
       const detail = (e as CustomEvent).detail;
-      setAnchorText(detail.anchorText);
+      // Reset form completely for the new selection
+      setNewComment("");
       setReplyTo(null);
+      setAnchorText(detail.anchorText);
       setIsOpen(true);
     }
 
@@ -68,12 +70,17 @@ export default function Comments({
   const submitComment = async () => {
     if (!newComment.trim()) return;
 
+    const submitHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (accessToken) submitHeaders["Authorization"] = `Bearer ${accessToken}`;
+
     try {
       const res = await fetch(
         `${apiUrl}/api/comments/${spaceSlug}/${docSlug}`,
         {
           method: "POST",
-          headers,
+          headers: submitHeaders,
           body: JSON.stringify({
             body: newComment,
             anchorText: replyTo ? null : anchorText,
@@ -87,8 +94,12 @@ export default function Comments({
         setAnchorText(null);
         setReplyTo(null);
         await fetchComments();
+      } else {
+        console.error("[Comments] Submit failed:", res.status, await res.text());
       }
-    } catch {}
+    } catch (e) {
+      console.error("[Comments] Submit error:", e);
+    }
   };
 
   const resolveComment = async (id: string) => {
@@ -156,14 +167,14 @@ export default function Comments({
 
           {/* New comment form */}
           {accessToken && (
-            <div className="comment-form">
+            <form className="comment-form" onSubmit={(e) => { e.preventDefault(); submitComment(); }}>
               {anchorText && !replyTo && (
                 <div className="comment-form-anchor">
                   <span>
                     "{anchorText.slice(0, 60)}
                     {anchorText.length > 60 ? "…" : ""}"
                   </span>
-                  <button onClick={() => setAnchorText(null)}>×</button>
+                  <button type="button" onClick={() => setAnchorText(null)}>×</button>
                 </div>
               )}
               <textarea
@@ -184,6 +195,7 @@ export default function Comments({
               <div className="comment-form-actions">
                 {(replyTo || anchorText) && (
                   <button
+                    type="button"
                     className="comment-form-cancel"
                     onClick={() => {
                       setReplyTo(null);
@@ -195,14 +207,14 @@ export default function Comments({
                   </button>
                 )}
                 <button
+                  type="submit"
                   className="comment-form-submit"
-                  onClick={submitComment}
                   disabled={!newComment.trim()}
                 >
                   Comment
                 </button>
               </div>
-            </div>
+            </form>
           )}
 
           {/* Comment threads */}
