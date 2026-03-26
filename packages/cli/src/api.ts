@@ -63,9 +63,21 @@ export function createClient(baseUrl: string) {
       });
     },
 
-    getSyncInfo(space: string, section?: string) {
+    async getSyncInfo(space: string, section?: string) {
       const qs = section ? `?section=${section}` : "";
-      return request(`/api/documents/${space}/_sync${qs}`);
+      try {
+        return await request(`/api/documents/${space}/_sync${qs}`);
+      } catch (e: any) {
+        if (e.message?.includes("404")) return [];
+        throw e;
+      }
+    },
+
+    createSpace(slug: string, name?: string) {
+      return request(`/api/spaces/${slug}`, {
+        method: "PUT",
+        body: JSON.stringify({ name: name || slug, visibility: "private" }),
+      });
     },
 
     createSection(space: string, slug: string, title?: string) {

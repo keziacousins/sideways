@@ -212,6 +212,9 @@ program
       // Push all changed files across sync targets
       const targets = resolveSyncTargets(config, path?.endsWith(".md") ? undefined : path);
 
+      // Ensure space exists on remote
+      await client.createSpace(space).catch(() => {});
+
       let totalPushed = 0;
       for (const target of targets) {
         const { localDir, section } = target;
