@@ -1,0 +1,337 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+const userName = await Astro.session?.get("user_name");
+const accessToken = await Astro.session?.get("access_token") || null;
+const refreshToken = await Astro.session?.get("refresh_token") || null;
+
+if (!userName) {
+  return Astro.redirect(`/auth/login?returnTo=${encodeURIComponent("/settings/keys")}`);
+}
+
+// Fetch existing keys
+let keys: { id: string; name: string; prefix: string; lastUsedAt: string | null; createdAt: string }[] = [];
+if (accessToken) {
+  try {
+    const res = await fetch(`${API_URL}/api/keys`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      keys = await res.json();
+    }
+  } catch {}
+}
+---
+
+<BaseLayout title="API Keys">
+  <div class="settings-page">
+    <h1>Personal Access Tokens</h1>
+    <p class="settings-desc">
+      API keys are used to authenticate the CLI and MCP tools.
+      Create a key here, then use <code>sideways login</code> to authenticate.
+    </p>
+
+    <div class="key-create" id="key-create">
+      <div class="key-create-form">
+        <input type="text" id="key-name" placeholder="Key name (e.g. My Laptop)" value="CLI" />
+        <button type="button" id="create-key-btn" class="btn-create">Create key</button>
+      </div>
+      <div id="new-key-display" class="new-key-display" style="display: none;">
+        <p class="new-key-warning">Copy this key now — it won't be shown again.</p>
+        <div class="new-key-value">
+          <code id="new-key-value"></code>
+          <button type="button" id="copy-key-btn" class="btn-copy">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="key-list">
+      <h2>Your keys</h2>
+      {keys.length === 0 ? (
+        <p class="empty-state">No API keys yet.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Name</th>
+              <th>Created</th>
+              <th>Last used</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {keys.map((key) => (
+              <tr data-key-id={key.id}>
+                <td><code>{key.prefix}...</code></td>
+                <td>{key.name}</td>
+                <td>{new Date(key.createdAt).toLocaleDateString()}</td>
+                <td>{key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : "Never"}</td>
+                <td>
+                  <button type="button" class="btn-revoke" data-key-id={key.id}>Revoke</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  </div>
+</BaseLayout>
+
+<script define:vars={{ API_URL, accessToken, refreshToken }}>
+  // Create key
+  document.getElementById("create-key-btn").addEventListener("click", async () => {
+    const nameInput = document.getElementById("key-name");
+    const name = nameInput.value.trim() || "Untitled";
+    const btn = document.getElementById("create-key-btn");
+    btn.disabled = true;
+    btn.textContent = "Creating...";
+
+    try {
+      const res = await fetch(`${API_URL}/api/keys`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ name }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        document.getElementById("new-key-value").textContent = data.key;
+        document.getElementById("new-key-display").style.display = "block";
+        btn.textContent = "Create another";
+        btn.disabled = false;
+      } else {
+        alert("Failed to create key. You may need to sign in again.");
+        btn.textContent = "Create key";
+        btn.disabled = false;
+      }
+    } catch {
+      alert("Connection error.");
+      btn.textContent = "Create key";
+      btn.disabled = false;
+    }
+  });
+
+  // Copy key
+  document.getElementById("copy-key-btn").addEventListener("click", () => {
+    const key = document.getElementById("new-key-value").textContent;
+    navigator.clipboard.writeText(key).then(() => {
+      const btn = document.getElementById("copy-key-btn");
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+    });
+  });
+
+  // Revoke keys
+  document.querySelectorAll(".btn-revoke").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const keyId = e.target.dataset.keyId;
+      if (!confirm("Revoke this API key? This cannot be undone.")) return;
+
+      const res = await fetch(`${API_URL}/api/keys/${keyId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (res.ok) {
+        e.target.closest("tr").remove();
+      } else {
+        alert("Failed to revoke key.");
+      }
+    });
+  });
+</script>
+
+<style>
+  .settings-page {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  .settings-page h1 {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-2xl);
+    font-weight: 400;
+    margin-bottom: 0.5rem;
+  }
+
+  .settings-desc {
+    color: var(--sw-text-secondary);
+    font-size: var(--sw-text-sm);
+    margin-bottom: 2rem;
+  }
+
+  .settings-desc code {
+    font-family: var(--sw-font-mono);
+    background: var(--sw-ink-lighter);
+    padding: 0.1em 0.35em;
+    border-radius: var(--sw-radius-sm);
+    font-size: 0.9em;
+  }
+
+  /* Create form */
+  .key-create {
+    margin-bottom: 2.5rem;
+  }
+
+  .key-create-form {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .key-create-form input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    color: var(--sw-text-primary);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm);
+  }
+
+  .key-create-form input:focus {
+    outline: none;
+    border-color: var(--sw-accent);
+  }
+
+  .key-create-form input::placeholder {
+    color: var(--sw-text-ghost);
+  }
+
+  .btn-create {
+    padding: 0.5rem 1rem;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
+    border: none;
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-create:hover {
+    background: var(--sw-accent-strong);
+  }
+
+  .btn-create:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* New key display */
+  .new-key-display {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-accent-dim);
+    border-radius: var(--sw-radius-md);
+  }
+
+  .new-key-warning {
+    color: var(--sw-accent);
+    font-size: var(--sw-text-sm);
+    font-weight: 500;
+    margin-bottom: 0.75rem;
+  }
+
+  .new-key-value {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .new-key-value code {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background: var(--sw-ink-deepest);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-mono);
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-primary);
+    word-break: break-all;
+  }
+
+  .btn-copy {
+    padding: 0.4rem 0.75rem;
+    background: var(--sw-ink-lighter);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-md);
+    color: var(--sw-text-secondary);
+    font-size: var(--sw-text-xs);
+    font-family: var(--sw-font-body);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-copy:hover {
+    background: var(--sw-ink-surface);
+    color: var(--sw-text-primary);
+  }
+
+  /* Key list */
+  .key-list h2 {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-lg);
+    font-weight: 500;
+    margin-bottom: 1rem;
+  }
+
+  .key-list table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--sw-text-sm);
+  }
+
+  .key-list th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    color: var(--sw-text-tertiary);
+    font-weight: 500;
+    font-size: var(--sw-text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--sw-border);
+  }
+
+  .key-list td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--sw-border);
+    color: var(--sw-text-secondary);
+  }
+
+  .key-list code {
+    font-family: var(--sw-font-mono);
+    color: var(--sw-text-primary);
+    font-size: var(--sw-text-xs);
+  }
+
+  .btn-revoke {
+    padding: 0.25rem 0.5rem;
+    background: none;
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-tertiary);
+    font-size: var(--sw-text-xs);
+    font-family: var(--sw-font-body);
+    cursor: pointer;
+  }
+
+  .btn-revoke:hover {
+    border-color: var(--sw-error);
+    color: var(--sw-error);
+  }
+
+  .empty-state {
+    color: var(--sw-text-ghost);
+    padding: 1.5rem 0;
+  }
+</style>

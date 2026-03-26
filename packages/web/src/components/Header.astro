@@ -30,6 +30,7 @@ const signupHref = `/auth/signup?returnTo=${encodeURIComponent(currentPath)}`;
         <div class="user-menu">
           <div class="user-avatar">{userName?.charAt(0).toUpperCase()}</div>
           <span class="user-name">{userName}</span>
+          <a href="/settings/keys" class="header-link">API Keys</a>
           <a href={`/auth/logout?returnTo=${encodeURIComponent(currentPath)}`} class="header-link">Sign out</a>
         </div>
       ) : (
