@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
-import { type Database, spaces, sections, users } from "@sideways/db";
+import { type Database, spaces, sections, spaceMembers, users } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
@@ -25,12 +25,36 @@ async function getUserId(c: any, db: Database): Promise<string> {
 export function createSpaceRoutes(db: Database) {
   const router = new Hono();
 
-  /** List all spaces */
+  /** List spaces visible to the current user */
   router.get("/", async (c) => {
+    const user = c.get("user") as AuthUser | null;
+
     const all = await db.query.spaces.findMany({
       orderBy: desc(spaces.updatedAt),
     });
-    return c.json(all);
+
+    // Filter to spaces the user can see
+    const visible = [];
+    for (const space of all) {
+      if (space.visibility === "public") {
+        visible.push(space);
+      } else if (user) {
+        if (space.visibility === "org") {
+          visible.push(space);
+        } else if (space.ownerId === user.id) {
+          visible.push(space);
+        } else {
+          // Check membership for shared/private
+          const member = await db.query.spaceMembers.findFirst({
+            where: (m, { and: a, eq: e }) =>
+              a(e(m.spaceId, space.id), e(m.userId, user.id)),
+          });
+          if (member) visible.push(space);
+        }
+      }
+    }
+
+    return c.json(visible);
   });
 
   /** Get a space by slug */
