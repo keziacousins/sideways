@@ -26,6 +26,11 @@
   --sw-border-strong: rgba(255, 255, 255, 0.1);
   --sw-border-accent: rgba(226, 163, 54, 0.2);
 
+  /* Document content — higher contrast than UI chrome */
+  --sw-doc-border: rgba(255, 255, 255, 0.15);
+  --sw-doc-marker: #7a766d;
+  --sw-doc-rule: rgba(255, 255, 255, 0.12);
+
   /* Semantic */
   --sw-success: #4ade80;
   --sw-warning: #fbbf24;
@@ -97,6 +102,10 @@
   --sw-border: rgba(0, 0, 0, 0.06);
   --sw-border-strong: rgba(0, 0, 0, 0.1);
   --sw-border-accent: rgba(184, 132, 30, 0.2);
+
+  --sw-doc-border: rgba(0, 0, 0, 0.15);
+  --sw-doc-marker: #6b675f;
+  --sw-doc-rule: rgba(0, 0, 0, 0.12);
 
   --sw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
   --sw-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
