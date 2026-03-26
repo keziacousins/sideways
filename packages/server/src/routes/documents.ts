@@ -159,6 +159,14 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     return c.json({ ...doc, content: latestVersion?.content ?? "" });
   });
 
+  /** Preview: render arbitrary markdown without saving */
+  router.post("/:space/:slug/render", async (c) => {
+    const body = await c.req.json<{ content: string }>();
+    const target = c.req.query("target") === "pdf" ? "pdf" : "web";
+    const html = await renderMarkdown(body.content || "", { target });
+    return c.json({ html });
+  });
+
   /** Get a document rendered as HTML */
   router.get("/:space/:slug/render", async (c) => {
     const result = await resolveSpace(c, c.req.param("space"));
