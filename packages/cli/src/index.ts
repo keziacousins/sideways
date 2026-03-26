@@ -77,8 +77,13 @@ program
           const filePath = join(outDir, filename);
 
           let content = doc.content;
+          // Only add frontmatter if title/tags aren't derivable from content
           const fm: Record<string, any> = {};
-          if (doc.title && doc.title !== titleFromSlug(slug)) fm.title = doc.title;
+          const headingMatch = content.match(/^#\s+(.+)$/m);
+          const headingTitle = headingMatch ? headingMatch[1].trim() : null;
+          if (doc.title && doc.title !== titleFromSlug(slug) && doc.title !== headingTitle) {
+            fm.title = doc.title;
+          }
           if (doc.tags?.length > 0) fm.tags = doc.tags;
 
           const output = Object.keys(fm).length > 0
@@ -136,7 +141,9 @@ program
           let content = doc.content;
 
           const fm: Record<string, any> = {};
-          if (doc.title && doc.title !== titleFromSlug(remote.slug)) {
+          const headingMatch = content.match(/^#\s+(.+)$/m);
+          const headingTitle = headingMatch ? headingMatch[1].trim() : null;
+          if (doc.title && doc.title !== titleFromSlug(remote.slug) && doc.title !== headingTitle) {
             fm.title = doc.title;
           }
           if (doc.tags?.length > 0) {
