@@ -87,11 +87,39 @@ export function createClient(baseUrl: string) {
       }
     },
 
-    createSpace(slug: string, name?: string) {
+    createSpace(slug: string, name?: string, visibility: string = "private") {
       return request(`/api/spaces/${slug}`, {
         method: "PUT",
-        body: JSON.stringify({ name: name || slug, visibility: "private" }),
+        body: JSON.stringify({ name: name || slug, visibility }),
       });
+    },
+
+    updateSpace(slug: string, updates: Record<string, any>) {
+      return request(`/api/spaces/${slug}`, {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      });
+    },
+
+    getSpaceMembers(slug: string) {
+      return request(`/api/spaces/${slug}/members`);
+    },
+
+    addSpaceMember(slug: string, email: string, role: string) {
+      return request(`/api/spaces/${slug}/members`, {
+        method: "PUT",
+        body: JSON.stringify({ email, role }),
+      });
+    },
+
+    removeSpaceMember(slug: string, memberId: string) {
+      return request(`/api/spaces/${slug}/members/${memberId}`, {
+        method: "DELETE",
+      });
+    },
+
+    deleteSpace(slug: string) {
+      return request(`/api/spaces/${slug}`, { method: "DELETE" });
     },
 
     createSection(space: string, slug: string, title?: string) {

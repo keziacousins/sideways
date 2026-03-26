@@ -496,6 +496,85 @@ program
     console.log(`Deleted ${space}/${slug}`);
   });
 
+// ── space-settings ────────────────────────────────────────────────────
+
+program
+  .command("space-set <property> <value>")
+  .description("Update a space property (name, description, visibility)")
+  .option("--space <space>", "Override space from config")
+  .action(async (property: string, value: string, opts: { space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+
+    const valid = ["name", "description", "visibility"];
+    if (!valid.includes(property)) {
+      console.error(`Invalid property. Use: ${valid.join(", ")}`);
+      process.exit(1);
+    }
+    if (property === "visibility" && !["public", "private"].includes(value)) {
+      console.error("Visibility must be 'public' or 'private'.");
+      process.exit(1);
+    }
+
+    const result = await client.updateSpace(space, { [property]: value });
+    console.log(`Updated ${space}: ${property} = ${value}`);
+  });
+
+// ── members ───────────────────────────────────────────────────────────
+
+program
+  .command("members")
+  .description("List space members")
+  .option("--space <space>", "Override space from config")
+  .action(async (opts: { space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+
+    const members = await client.getSpaceMembers(space);
+    if (members.length === 0) {
+      console.log("No members.");
+      return;
+    }
+    for (const m of members) {
+      console.log(`  ${m.email}  ${m.name}  (${m.role})`);
+    }
+  });
+
+program
+  .command("member-add <email> [role]")
+  .description("Add a member to the space (role: viewer, editor, admin)")
+  .option("--space <space>", "Override space from config")
+  .action(async (email: string, role: string = "editor", opts: { space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+
+    const result = await client.addSpaceMember(space, email, role);
+    console.log(`Added ${email} as ${role} to ${space}`);
+  });
+
+program
+  .command("member-remove <email>")
+  .description("Remove a member from the space")
+  .option("--space <space>", "Override space from config")
+  .action(async (email: string, opts: { space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+
+    const members = await client.getSpaceMembers(space);
+    const member = members.find((m: any) => m.email === email);
+    if (!member || !member.memberId) {
+      console.error(`Member ${email} not found in ${space}`);
+      process.exit(1);
+    }
+
+    await client.removeSpaceMember(space, member.memberId);
+    console.log(`Removed ${email} from ${space}`);
+  });
+
 // ── list ──────────────────────────────────────────────────────────────
 
 program
