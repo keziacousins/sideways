@@ -42,23 +42,25 @@
 .selection-comment-btn {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.65rem;
-  background: var(--sw-accent);
-  color: var(--sw-ink-deepest);
-  border: none;
-  border-radius: var(--sw-radius-md);
-  font-size: var(--sw-text-xs);
-  font-family: var(--sw-font-body);
-  font-weight: 600;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: var(--sw-ink-surface);
+  color: var(--sw-text-tertiary);
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 50%;
   cursor: pointer;
   z-index: 50;
-  box-shadow: var(--sw-shadow-md);
-  animation: fadeIn var(--sw-duration-fast) var(--sw-ease);
+  box-shadow: var(--sw-shadow-sm);
+  transition: all var(--sw-duration-fast) var(--sw-ease);
 }
 
 .selection-comment-btn:hover {
-  background: var(--sw-accent-strong);
+  background: var(--sw-accent);
+  color: var(--sw-ink-deepest);
+  border-color: var(--sw-accent);
+  box-shadow: var(--sw-shadow-glow);
 }
 
 /* ── Panel ────────────────────────────────────────────────────── */

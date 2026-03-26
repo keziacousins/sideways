@@ -241,18 +241,20 @@ const navItems = documents.map((d) => ({
 
 {doc && (
 <script>
-  // Vanilla JS: text selection → floating comment button
-  // Communicates with the React Comments island via custom event
+  // Vanilla JS: text selection → subtle comment pip
+  // Appears at the end of the selection, small and unobtrusive
   const btn = document.createElement("button");
   btn.className = "selection-comment-btn";
-  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Comment`;
+  btn.setAttribute("aria-label", "Add comment");
+  btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
   btn.style.display = "none";
   document.body.appendChild(btn);
 
   let currentAnchorText: string | null = null;
 
   document.addEventListener("mouseup", () => {
-    requestAnimationFrame(() => {
+    // Short delay for selection to finalize
+    setTimeout(() => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) {
         btn.style.display = "none";
@@ -267,15 +269,15 @@ const navItems = documents.map((d) => ({
 
       const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
-      const contentRect = docContent.getBoundingClientRect();
 
       currentAnchorText = sel.toString().trim().slice(0, 200);
 
+      // Position at the end of the selection, just above the last line
       btn.style.display = "flex";
-      btn.style.position = "absolute";
-      btn.style.left = `${contentRect.right + 16}px`;
-      btn.style.top = `${rect.top + window.scrollY + (rect.height / 2) - 14}px`;
-    });
+      btn.style.position = "fixed";
+      btn.style.left = `${rect.right + 6}px`;
+      btn.style.top = `${rect.top - 2}px`;
+    }, 10);
   });
 
   document.addEventListener("mousedown", (e) => {
@@ -283,6 +285,11 @@ const navItems = documents.map((d) => ({
       btn.style.display = "none";
     }
   });
+
+  // Also hide on scroll (position becomes stale)
+  document.addEventListener("scroll", () => {
+    btn.style.display = "none";
+  }, { passive: true });
 
   btn.addEventListener("click", () => {
     btn.style.display = "none";
