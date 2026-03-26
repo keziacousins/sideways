@@ -1,0 +1,19 @@
+{
+  "name": "@sideways/mcp",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "sideways-mcp": "./bin/sideways-mcp"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0"
+  }
+}
