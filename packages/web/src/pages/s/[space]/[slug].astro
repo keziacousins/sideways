@@ -558,29 +558,52 @@ const navItems = documents.map((d) => ({
 
   if (editBtn && docView && docEditor && textarea) {
     let previewTimer = null;
+    let savedScrollRatio = 0;
 
     const sidebar = document.getElementById("sidebar");
     const docPage = document.querySelector(".doc-page");
+    const mainEl = document.querySelector(".sw-main");
 
     editBtn.addEventListener("click", () => {
+      // Remember scroll position as a ratio (0-1) of the document
+      const scrollable = mainEl || document.documentElement;
+      const maxScroll = scrollable.scrollHeight - scrollable.clientHeight;
+      savedScrollRatio = maxScroll > 0 ? scrollable.scrollTop / maxScroll : 0;
+
       textarea.value = rawContent;
       docView.style.display = "none";
       docEditor.style.display = "flex";
       editBtn.style.display = "none";
-      // Hide sidebar, expand content
       if (sidebar) sidebar.style.display = "none";
       if (docPage) docPage.style.maxWidth = "none";
-      textarea.focus();
+
+      // Scroll textarea to approximately the same position
+      requestAnimationFrame(() => {
+        const textareaMaxScroll = textarea.scrollHeight - textarea.clientHeight;
+        textarea.scrollTop = textareaMaxScroll * savedScrollRatio;
+        textarea.focus();
+      });
+
       updatePreview();
     });
 
     cancelBtn?.addEventListener("click", () => {
+      // Remember editor scroll position
+      const textareaMaxScroll = textarea.scrollHeight - textarea.clientHeight;
+      const editorRatio = textareaMaxScroll > 0 ? textarea.scrollTop / textareaMaxScroll : 0;
+
       docEditor.style.display = "none";
       docView.style.display = "block";
       editBtn.style.display = "";
-      // Restore sidebar and content width
       if (sidebar) sidebar.style.display = "";
       if (docPage) docPage.style.maxWidth = "";
+
+      // Restore scroll position to approximately where editor was
+      requestAnimationFrame(() => {
+        const scrollable = mainEl || document.documentElement;
+        const maxScroll = scrollable.scrollHeight - scrollable.clientHeight;
+        scrollable.scrollTop = maxScroll * editorRatio;
+      });
     });
 
     // Live preview (debounced)
