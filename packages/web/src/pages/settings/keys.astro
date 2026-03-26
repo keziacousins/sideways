@@ -1,21 +1,18 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import { apiFetch } from "../../lib/api.ts";
 
-const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const userName = await Astro.session?.get("user_name");
-const accessToken = await Astro.session?.get("access_token") || null;
+const { accessToken } = Astro.locals;
 
 if (!userName) {
   return Astro.redirect(`/auth/login?returnTo=${encodeURIComponent("/settings/keys")}`);
 }
 
-// Fetch existing keys server-side (with token refresh)
 let keys: { id: string; name: string; prefix: string; lastUsedAt: string | null; createdAt: string }[] = [];
 if (accessToken) {
   try {
-    const res = await fetch(`${API_URL}/api/keys`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const res = await apiFetch("/api/keys", accessToken);
     if (res.ok) {
       keys = await res.json();
     }

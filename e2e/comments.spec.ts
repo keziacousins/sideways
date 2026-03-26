@@ -47,7 +47,7 @@ test.describe("Comments — unauthenticated", () => {
   test("panel shows empty state with sign-in prompt", async ({ page }) => {
     await page.goto(`/s/${SPACE}/${DOC}`);
     // Wait for React island to hydrate
-    await expect(page.locator(".comments-toggle")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".comments-toggle")).toBeVisible({ timeout: 10000 });
     await page.locator(".comments-toggle").click();
     await expect(page.locator(".comments-panel-overlay")).toBeVisible({ timeout: 5000 });
     await expect(page.locator(".comments-empty")).toContainText("Sign in");

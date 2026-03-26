@@ -2,17 +2,19 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Sidebar from "../../components/Sidebar.astro";
 
-const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+import { apiFetch } from "../../lib/api.ts";
+
 const { space: spaceSlug } = Astro.params;
+const { accessToken } = Astro.locals;
 
 let space: { name: string; slug: string; description: string | null } | null = null;
 let documents: { slug: string; title: string; tags: string[] }[] = [];
 
 try {
-  const spaceRes = await fetch(`${API_URL}/api/spaces/${spaceSlug}`);
+  const spaceRes = await apiFetch(`/api/spaces/${spaceSlug}`, accessToken);
   if (spaceRes.ok) {
     space = await spaceRes.json();
-    const docsRes = await fetch(`${API_URL}/api/documents?space=${spaceSlug}`);
+    const docsRes = await apiFetch(`/api/documents?space=${spaceSlug}`, accessToken);
     documents = await docsRes.json();
   }
 } catch {

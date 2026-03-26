@@ -1,11 +1,12 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { apiFetch } from "../lib/api.ts";
 
-const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+const { accessToken } = Astro.locals;
 
 let spaces: { slug: string; name: string; description: string | null; visibility: string; personal: boolean }[] = [];
 try {
-  const res = await fetch(`${API_URL}/api/spaces`);
+  const res = await apiFetch("/api/spaces", accessToken);
   spaces = await res.json();
 } catch {
   // API not available

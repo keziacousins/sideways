@@ -5,10 +5,11 @@ import Comments from "../../../components/Comments.tsx";
 import "../../../styles/document.css";
 import "../../../styles/comments.css";
 
+import { apiFetch } from "../../../lib/api.ts";
+
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const { space: spaceSlug, slug } = Astro.params;
-
-const accessToken = await Astro.session?.get("access_token") || null;
+const { accessToken } = Astro.locals;
 const refreshToken = await Astro.session?.get("refresh_token") || null;
 
 let space: { name: string; slug: string } | null = null;
@@ -24,13 +25,13 @@ let doc: {
 let documents: { slug: string; title: string; tags: string[] }[] = [];
 
 try {
-  const spaceRes = await fetch(`${API_URL}/api/spaces/${spaceSlug}`);
+  const spaceRes = await apiFetch(`/api/spaces/${spaceSlug}`, accessToken);
   if (spaceRes.ok) {
     space = await spaceRes.json();
 
     const [docRes, docsRes] = await Promise.all([
-      fetch(`${API_URL}/api/documents/${spaceSlug}/${slug}/render`),
-      fetch(`${API_URL}/api/documents?space=${spaceSlug}`),
+      apiFetch(`/api/documents/${spaceSlug}/${slug}/render`, accessToken),
+      apiFetch(`/api/documents?space=${spaceSlug}`, accessToken),
     ]);
 
     if (docRes.ok) doc = await docRes.json();

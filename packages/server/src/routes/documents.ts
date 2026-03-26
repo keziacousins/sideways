@@ -65,10 +65,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const spaceSlug = c.req.query("space");
 
     if (spaceSlug) {
-      const space = await db.query.spaces.findFirst({
-        where: eq(spaces.slug, spaceSlug),
-      });
-      if (!space) return c.json({ error: "Space not found" }, 404);
+      const result = await resolveSpace(c, spaceSlug);
+      if ("error" in result) return result.error;
+      const { space } = result;
 
       const docs = await db.query.documents.findMany({
         where: eq(documents.spaceId, space.id),
