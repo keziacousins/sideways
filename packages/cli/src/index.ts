@@ -33,7 +33,11 @@ program
   .description("Create .sideways.yml in the current directory")
   .option("--api <url>", "API base URL", "http://localhost:4100")
   .action((space: string, opts: { api: string }) => {
-    const path = createConfig(process.cwd(), space, opts.api);
+    const slug = slugFromFilename(space);
+    if (slug !== space) {
+      console.log(`Slugified: "${space}" → "${slug}"`);
+    }
+    const path = createConfig(process.cwd(), slug, opts.api);
     console.log(`Created ${path}`);
   });
 

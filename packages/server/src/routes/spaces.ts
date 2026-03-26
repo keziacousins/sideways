@@ -44,7 +44,11 @@ export function createSpaceRoutes(db: Database) {
 
   /** Create or update a space */
   router.put("/:slug", async (c) => {
-    const slug = c.req.param("slug");
+    const rawSlug = c.req.param("slug");
+    // Validate slug — must be URL-safe
+    const slug = rawSlug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    if (!slug) return c.json({ error: "Invalid space slug" }, 400);
+
     const body = await c.req.json<{
       name?: string;
       description?: string;

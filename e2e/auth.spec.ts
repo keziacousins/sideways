@@ -10,7 +10,7 @@ test.describe("Authentication", () => {
   }) => {
     await page.goto("/");
     await expect(page.locator("text=Sign in")).toBeVisible();
-    await expect(page.locator("text=Sideways")).toBeVisible();
+    await expect(page.locator(".logo-text")).toBeVisible();
   });
 
   test("sign up and login flow", async ({ page }) => {
