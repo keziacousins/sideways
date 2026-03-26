@@ -319,15 +319,76 @@ program
 
       const label = section ? `${space}/${section}` : space;
       console.log(`${label}:`);
-      for (const d of diffs.filter((d) => d.status === "conflict")) console.log(`  conflict:   ${d.filename}`);
-      for (const d of diffs.filter((d) => d.status === "modified")) console.log(`  modified:   ${d.filename}`);
-      for (const d of diffs.filter((d) => d.status === "new")) console.log(`  new:        ${d.filename}`);
-      for (const d of diffs.filter((d) => d.status === "deleted")) console.log(`  deleted:    ${d.filename}`);
-      for (const d of diffs.filter((d) => d.status === "unchanged")) console.log(`  unchanged:  ${d.filename}`);
+      const show = (status: string, d: { filename: string; slug: string }) => {
+        const slugPart = d.slug !== d.filename.replace(/\.md$/, "") ? ` → ${d.slug}` : "";
+        console.log(`  ${status.padEnd(10)}  ${d.filename}${slugPart}`);
+      };
+      for (const d of diffs.filter((d) => d.status === "conflict")) show("conflict", d);
+      for (const d of diffs.filter((d) => d.status === "modified")) show("modified", d);
+      for (const d of diffs.filter((d) => d.status === "new")) show("new", d);
+      for (const d of diffs.filter((d) => d.status === "deleted")) show("deleted", d);
+      for (const d of diffs.filter((d) => d.status === "unchanged")) show("unchanged", d);
     }
 
     if (!anyFiles) {
       console.log("No files tracked. Run `sideways pull` first.");
+    }
+  });
+
+// ── diff ──────────────────────────────────────────────────────────────
+
+program
+  .command("diff <file>")
+  .description("Show diff between local file and remote version")
+  .option("--space <space>", "Override space from config")
+  .action(async (file: string, opts: { space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+
+    const filePath = resolve(file);
+    const raw = readFileSync(filePath, "utf-8");
+    const { clean } = extractComments(raw);
+    const { frontmatter, content: localContent } = parseFrontmatter(clean);
+
+    const slug = frontmatter.slug || slugFromFilename(basename(file));
+
+    let remoteContent: string;
+    try {
+      const doc = await client.getDocument(space, slug);
+      remoteContent = doc.content;
+    } catch {
+      console.log(`No remote document found for slug "${slug}"`);
+      console.log("This file would be created as a new document on push.");
+      return;
+    }
+
+    const localLines = localContent.trim().split("\n");
+    const remoteLines = remoteContent.trim().split("\n");
+
+    if (localContent.trim() === remoteContent.trim()) {
+      console.log(`${file} ↔ ${space}/${slug}: no changes`);
+      return;
+    }
+
+    console.log(`--- remote: ${space}/${slug}`);
+    console.log(`+++ local:  ${file}`);
+    console.log();
+
+    // Simple line-by-line diff
+    const maxLines = Math.max(localLines.length, remoteLines.length);
+    for (let i = 0; i < maxLines; i++) {
+      const remote = remoteLines[i];
+      const local = localLines[i];
+      if (remote === local) continue;
+      if (remote === undefined) {
+        console.log(`+${i + 1}: ${local}`);
+      } else if (local === undefined) {
+        console.log(`-${i + 1}: ${remote}`);
+      } else {
+        console.log(`-${i + 1}: ${remote}`);
+        console.log(`+${i + 1}: ${local}`);
+      }
     }
   });
 

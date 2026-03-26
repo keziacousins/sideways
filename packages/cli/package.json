@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "type": "module",
   "bin": {
-    "sideways": "./dist/index.js"
+    "sideways": "./bin/sideways"
   },
   "scripts": {
     "build": "tsc",
