@@ -158,7 +158,7 @@ const navItems = documents.map((d) => ({
             <div class="sw-doc-content" id="editor-preview-content"></div>
           </div>
         </div>
-        <div class="editor-actions">
+        <div class="editor-floating-bar">
           <button type="button" class="editor-cancel" id="editor-cancel">Cancel</button>
           <button type="button" class="editor-save" id="editor-save">Save</button>
         </div>
@@ -315,8 +315,9 @@ const navItems = documents.map((d) => ({
   .doc-editor {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - var(--sw-header-height) - 10rem);
+    height: calc(100vh - var(--sw-header-height) - 8rem);
     min-height: 400px;
+    position: relative;
   }
 
   .editor-panes {
@@ -357,12 +358,19 @@ const navItems = documents.map((d) => ({
     overflow-y: auto;
   }
 
-  .editor-actions {
+  .editor-floating-bar {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
-    justify-content: flex-end;
     gap: 0.5rem;
-    padding-top: 0.75rem;
-    flex-shrink: 0;
+    padding: 0.5rem 1rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-lg);
+    box-shadow: var(--sw-shadow-lg);
+    z-index: 50;
   }
 
   .editor-cancel {
@@ -551,11 +559,17 @@ const navItems = documents.map((d) => ({
   if (editBtn && docView && docEditor && textarea) {
     let previewTimer = null;
 
+    const sidebar = document.getElementById("sidebar");
+    const docPage = document.querySelector(".doc-page");
+
     editBtn.addEventListener("click", () => {
       textarea.value = rawContent;
       docView.style.display = "none";
-      docEditor.style.display = "block";
+      docEditor.style.display = "flex";
       editBtn.style.display = "none";
+      // Hide sidebar, expand content
+      if (sidebar) sidebar.style.display = "none";
+      if (docPage) docPage.style.maxWidth = "none";
       textarea.focus();
       updatePreview();
     });
@@ -564,6 +578,9 @@ const navItems = documents.map((d) => ({
       docEditor.style.display = "none";
       docView.style.display = "block";
       editBtn.style.display = "";
+      // Restore sidebar and content width
+      if (sidebar) sidebar.style.display = "";
+      if (docPage) docPage.style.maxWidth = "";
     });
 
     // Live preview (debounced)
