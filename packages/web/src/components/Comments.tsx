@@ -61,9 +61,15 @@ export default function Comments({
         }
         return tokens.access_token;
       }
-    } catch {}
 
-    tokenRef.current = null;
+      // Refresh failed — token is invalid/expired, clear both
+      tokenRef.current = null;
+      refreshRef.current = null;
+    } catch {
+      tokenRef.current = null;
+      refreshRef.current = null;
+    }
+
     return null;
   }, [apiUrl]);
 
