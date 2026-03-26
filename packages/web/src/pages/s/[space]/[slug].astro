@@ -321,9 +321,11 @@ const navItems = documents.map((d) => ({
   .doc-editor {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - var(--sw-header-height) - 8rem);
-    min-height: 400px;
+    /* Fill from current position to bottom of viewport, minus floating bar space */
+    height: calc(100vh - var(--sw-header-height) - var(--sw-page-pad) - 5rem);
+    min-height: 300px;
     position: relative;
+    overflow: hidden;
   }
 
   .editor-panes {
@@ -645,6 +647,9 @@ const navItems = documents.map((d) => ({
       editBtn.style.display = "none";
       if (sidebar) sidebar.style.display = "none";
       if (docPage) docPage.style.maxWidth = "none";
+      document.body.style.overflow = "hidden";
+      // Scroll page to top so editor starts at top
+      window.scrollTo(0, 0);
 
       // Scroll textarea and preview to the same heading
       requestAnimationFrame(() => {
@@ -670,6 +675,7 @@ const navItems = documents.map((d) => ({
       editBtn.style.display = "";
       if (sidebar) sidebar.style.display = "";
       if (docPage) docPage.style.maxWidth = "";
+      document.body.style.overflow = "";
 
       // Scroll view to the heading nearest the cursor
       requestAnimationFrame(() => {
