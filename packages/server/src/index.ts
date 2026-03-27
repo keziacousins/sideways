@@ -9,6 +9,7 @@ import { createAuthRoutes } from "./routes/auth.js";
 import { createKeyRoutes } from "./routes/keys.js";
 import { createCommentRoutes } from "./routes/comments.js";
 import { createMcpRoutes } from "./routes/mcp.js";
+import { createThemeRoutes } from "./routes/themes.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { requestLogMiddleware } from "./middleware/requestLog.js";
 import { logger } from "./logger.js";
@@ -94,6 +95,7 @@ app.route("/api/documents", createDocumentRoutes(db, storage));
 app.route("/api/keys", createKeyRoutes(db));
 app.route("/api/comments", createCommentRoutes(db));
 app.route("/api/mcp", createMcpRoutes(db));
+app.route("/api/themes", createThemeRoutes(db, storage));
 
 serve({ fetch: app.fetch, port: env.port }, () => {
   logger.info({ port: env.port }, "Sideways API running");

@@ -4,11 +4,12 @@ import Sidebar from "../../components/Sidebar.astro";
 
 import { apiFetch } from "../../lib/api.ts";
 import { buildNavTree } from "../../lib/nav.ts";
+import { themeToCSS } from "../../lib/theme.ts";
 
 const { space: spaceSlug } = Astro.params;
 const { accessToken } = Astro.locals;
 
-let space: { name: string; slug: string; description: string | null; visibility: string } | null = null;
+let space: { name: string; slug: string; description: string | null; visibility: string; theme?: { tokens: any } } | null = null;
 let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number }[] = [];
 let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 
@@ -28,8 +29,10 @@ try {
 }
 
 const navItems = buildNavTree(sections, documents);
+const themeCss = themeToCSS(space?.theme?.tokens);
 ---
 
+{themeCss && <style set:html={themeCss} />}
 <BaseLayout title={space?.name ?? "Not Found"} sidebar={!!space}>
   <Fragment slot="sidebar">
     {space && (

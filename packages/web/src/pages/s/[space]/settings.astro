@@ -12,13 +12,18 @@ if (!userName) {
 
 let space: any = null;
 let members: any[] = [];
+let themes: any[] = [];
 
 try {
   const spaceRes = await apiFetch(`/api/spaces/${spaceSlug}`, accessToken);
   if (spaceRes.ok) space = await spaceRes.json();
 
-  const membersRes = await apiFetch(`/api/spaces/${spaceSlug}/members`, accessToken);
+  const [membersRes, themesRes] = await Promise.all([
+    apiFetch(`/api/spaces/${spaceSlug}/members`, accessToken),
+    apiFetch(`/api/themes`, accessToken),
+  ]);
   if (membersRes.ok) members = await membersRes.json();
+  if (themesRes.ok) themes = await themesRes.json();
 } catch {}
 
 if (!space) return Astro.redirect("/");
@@ -55,6 +60,23 @@ if (!space) return Astro.redirect("/");
           </select>
         </div>
         <button type="button" id="save-general" class="btn-save">Save changes</button>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2>Theme</h2>
+      <p class="settings-hint">Choose a theme to customize the look of this space's documents and PDF exports.</p>
+      <div class="settings-form">
+        <div class="form-field">
+          <label>Theme</label>
+          <select id="space-theme">
+            <option value="" selected={!space.themeId}>Default (Sideways)</option>
+            {themes.map((t: any) => (
+              <option value={t.id} selected={space.themeId === t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <button type="button" id="save-theme" class="btn-save">Save theme</button>
       </div>
     </section>
 
@@ -131,6 +153,25 @@ if (!space) return Astro.redirect("/");
       setTimeout(() => { btn.textContent = "Save changes"; }, 2000);
     } else {
       alert("Failed to save.");
+    }
+  });
+
+  // Save theme
+  document.getElementById("save-theme")?.addEventListener("click", async () => {
+    const themeId = document.getElementById("space-theme").value || null;
+
+    const res = await fetch(`/s/${spaceSlug}/settings/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ themeId }),
+    });
+
+    if (res.ok) {
+      const btn = document.getElementById("save-theme");
+      btn.textContent = "Saved!";
+      setTimeout(() => { btn.textContent = "Save theme"; }, 2000);
+    } else {
+      alert("Failed to save theme.");
     }
   });
 

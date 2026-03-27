@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
-import { type Database, spaces, sections, spaceMembers, users } from "@sideways/db";
+import { type Database, spaces, sections, spaceMembers, themes, users } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
 import { canWriteSpace } from "../middleware/visibility.js";
 
@@ -68,7 +68,16 @@ export function createSpaceRoutes(db: Database) {
     const user = c.get("user") as AuthUser | null;
     const canWrite = await canWriteSpace(db, space.id, space.ownerId, user);
 
-    return c.json({ ...space, canWrite });
+    // Include theme tokens if space has a theme
+    let theme: { id: string; name: string; tokens: any } | null = null;
+    if (space.themeId) {
+      const t = await db.query.themes.findFirst({
+        where: eq(themes.id, space.themeId),
+      });
+      if (t) theme = { id: t.id, name: t.name, tokens: t.tokens };
+    }
+
+    return c.json({ ...space, canWrite, theme });
   });
 
   /** Create or update a space */
@@ -83,6 +92,7 @@ export function createSpaceRoutes(db: Database) {
       description?: string;
       visibility?: "private" | "shared" | "org" | "public";
       personal?: boolean;
+      themeId?: string | null;
     }>();
 
     const ownerId = await getUserId(c, db);
@@ -107,6 +117,7 @@ export function createSpaceRoutes(db: Database) {
           name: body.name ?? existing.name,
           description: body.description ?? existing.description,
           visibility: body.visibility ?? existing.visibility,
+          themeId: body.themeId !== undefined ? body.themeId : existing.themeId,
           updatedAt: new Date(),
         })
         .where(eq(spaces.id, existing.id))

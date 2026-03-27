@@ -8,12 +8,13 @@ import {
   documentVersions,
   sections,
   spaces,
+  themes,
   users,
 } from "@sideways/db";
 import type { Storage } from "@sideways/storage";
 import type { AuthUser } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
-import { buildPrintHTML } from "../pdf/template.js";
+import { buildPrintHTML, type ThemeTokens } from "../pdf/template.js";
 import { env } from "../env.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
@@ -645,6 +646,15 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     // Render markdown to HTML with pdf target
     const html = await renderMarkdown(latestVersion.content, { target: "pdf" });
 
+    // Resolve theme if space has one
+    let theme: ThemeTokens | undefined;
+    if (space.themeId) {
+      const themeRow = await db.query.themes.findFirst({
+        where: eq(themes.id, space.themeId),
+      });
+      if (themeRow) theme = themeRow.tokens as ThemeTokens;
+    }
+
     // Build the full print HTML document
     const showToc = c.req.query("toc") !== "false";
     const showTitlePage = c.req.query("title-page") !== "false";
@@ -659,6 +669,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       }),
       showTitlePage,
       showToc,
+      theme,
     });
 
     // Send to WeasyPrint service

@@ -89,3 +89,22 @@ const { title, sidebar = false } = Astro.props;
     }
   }
 </style>
+
+<script>
+  // Persist sidebar scroll position across page navigations
+  const sidebar = document.getElementById("sidebar");
+  if (sidebar) {
+    const key = "sw-sidebar-scroll";
+    const saved = sessionStorage.getItem(key);
+    if (saved) {
+      sidebar.scrollTop = parseInt(saved, 10);
+    }
+    // Save on any link click within sidebar (before navigation)
+    sidebar.addEventListener("click", (e) => {
+      const link = (e.target as HTMLElement).closest("a");
+      if (link) {
+        sessionStorage.setItem(key, String(sidebar.scrollTop));
+      }
+    });
+  }
+</script>

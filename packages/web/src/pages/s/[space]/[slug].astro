@@ -7,13 +7,14 @@ import "../../../styles/comments.css";
 
 import { apiFetch } from "../../../lib/api.ts";
 import { buildNavTree } from "../../../lib/nav.ts";
+import { themeToCSS } from "../../../lib/theme.ts";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const { space: spaceSlug, slug } = Astro.params;
 const { accessToken } = Astro.locals;
 const refreshToken = await Astro.session?.get("refresh_token") || null;
 
-let space: { name: string; slug: string; canWrite?: boolean } | null = null;
+let space: { name: string; slug: string; canWrite?: boolean; theme?: { tokens: any } } | null = null;
 let doc: {
   title: string;
   html: string;
@@ -59,8 +60,10 @@ const currentDoc = documents.find(d => d.slug === slug);
 const childPages = currentDoc
   ? documents.filter(d => d.parentId === currentDoc.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
   : [];
+const themeCss = themeToCSS(space?.theme?.tokens);
 ---
 
+{themeCss && <style set:html={themeCss} />}
 <BaseLayout title={doc?.title ?? "Not Found"} sidebar={!!space}>
   <Fragment slot="sidebar">
     {space && (
