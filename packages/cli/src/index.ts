@@ -335,7 +335,10 @@ program
         // Compute status
         let status: string;
         if (!tracked && !remote) status = "new-local";
-        else if (!tracked && remote) status = "conflict";
+        else if (!tracked && remote) {
+          // Not tracked — compare hashes to decide
+          status = localHash === remote.contentHash ? "unchanged" : "remote-modified";
+        }
         else if (tracked && !remote) status = "new-local";
         else if (tracked) {
           const localChanged = localHash !== tracked.localHash;
@@ -447,7 +450,9 @@ program
 
       let status: string;
       if (!tracked && !remote) status = "new-local";
-      else if (!tracked && remote) status = "conflict";
+      else if (!tracked && remote) {
+        status = localHash === remote.contentHash ? "unchanged" : "remote-modified";
+      }
       else if (tracked && !remote) status = "new-local";
       else if (tracked) {
         const localChanged = localHash !== tracked.localHash;
