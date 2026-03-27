@@ -47,6 +47,17 @@ function getSyncRoot(config: ReturnType<typeof requireConfig>): string {
   return resolve(config.rootDir, config.root || ".");
 }
 
+/** Resolve a user-provided identifier (slug, filename, or path) to a discovered file */
+function resolveFile(files: ReturnType<typeof discoverFiles>, input: string) {
+  const normalized = slugFromFilename(basename(input));
+  return files.find(f => f.slug === input || f.slug === normalized || f.relativePath === input || f.filename === input);
+}
+
+/** Normalize user input to a slug — accepts filenames, paths, or slugs */
+function toSlug(input: string): string {
+  return slugFromFilename(basename(input));
+}
+
 /** Prepare a file's content for writing to disk (frontmatter + comments) */
 async function prepareFileForDisk(
   client: ReturnType<typeof createClient>,
@@ -528,9 +539,7 @@ program
     }
 
     const files = discoverFiles(syncRoot, config.ignore);
-    // Accept slug, filename, or relative path
-    const normalized = slugFromFilename(basename(slug));
-    const file = files.find(f => f.slug === slug || f.slug === normalized || f.relativePath === slug || f.filename === slug);
+    const file = resolveFile(files, slug);
     if (!file) {
       console.error(`No local file found for "${slug}"`);
       process.exit(1);
@@ -542,7 +551,7 @@ program
     const { content: localContent } = parseFrontmatter(clean);
 
     try {
-      const doc = await client.getDocument(space, slug);
+      const doc = await client.getDocument(space, file.slug);
       const remoteContent = doc.content;
 
       if (localContent.trim() === remoteContent.trim()) {
@@ -577,10 +586,11 @@ program
   .description("Rename a document's title")
   .option("--space <space>", "Override space from config")
   .option("--slug <new-slug>", "Also change the slug")
-  .action(async (slug: string, newTitle: string, opts: { space?: string; slug?: string }) => {
+  .action(async (input: string, newTitle: string, opts: { space?: string; slug?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = createClient(config.api);
+    const slug = toSlug(input);
 
     const patch: Record<string, any> = { title: newTitle };
     if (opts.slug) patch.slug = opts.slug;
@@ -595,10 +605,11 @@ program
   .command("move <slug> <target-space>")
   .description("Move a document to another space")
   .option("--space <space>", "Override source space from config")
-  .action(async (slug: string, targetSpace: string, opts: { space?: string }) => {
+  .action(async (input: string, targetSpace: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = createClient(config.api);
+    const slug = toSlug(input);
 
     const result = await client.patchDocument(space, slug, { space: targetSpace });
     console.log(`Moved ${slug} → ${targetSpace}/${result.slug}`);
@@ -612,10 +623,11 @@ program
   .option("--space <space>", "Override space from config")
   .option("--target-space <space>", "Target space for the copy")
   .option("--slug <slug>", "Custom slug for the copy")
-  .action(async (slug: string, opts: { space?: string; targetSpace?: string; slug?: string }) => {
+  .action(async (input: string, opts: { space?: string; targetSpace?: string; slug?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = createClient(config.api);
+    const slug = toSlug(input);
 
     const result = await client.duplicateDocument(space, slug, {
       targetSpace: opts.targetSpace,
@@ -630,10 +642,11 @@ program
   .command("delete <slug>")
   .description("Delete a document from the server")
   .option("--space <space>", "Override space from config")
-  .action(async (slug: string, opts: { space?: string }) => {
+  .action(async (input: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = createClient(config.api);
+    const slug = toSlug(input);
 
     await requireSpace(client, space);
     await client.deleteDocument(space, slug);
@@ -717,10 +730,11 @@ program
   .option("-o, --output <path>", "Output file path")
   .option("--no-toc", "Omit table of contents")
   .option("--no-title-page", "Omit title page")
-  .action(async (slug: string, opts: { space?: string; output?: string; toc?: boolean; titlePage?: boolean }) => {
+  .action(async (input: string, opts: { space?: string; output?: string; toc?: boolean; titlePage?: boolean }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = createClient(config.api);
+    const slug = toSlug(input);
 
     const res = await client.downloadPdf(space, slug, {
       toc: opts.toc,
