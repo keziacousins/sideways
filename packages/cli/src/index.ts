@@ -383,16 +383,31 @@ program
       }
 
       if (!opts.dryRun) {
-        // Refresh remote state
+        // Refresh remote state and ensure ALL local files are tracked
         const updatedRemote = await client.getSyncInfo(space);
         const remoteHashMap = new Map(updatedRemote.map((r: any) => [r.slug, r]));
-        for (const entry of Object.values(syncState.files)) {
-          const remote = remoteHashMap.get(entry.slug);
-          if (remote) {
-            entry.remoteHash = remote.contentHash;
-            entry.remoteVersion = remote.version;
+
+        for (const file of sorted) {
+          const remote = remoteHashMap.get(file.slug);
+          if (!remote) continue;
+
+          if (syncState.files[file.relativePath]) {
+            // Already tracked — update remote hash/version
+            syncState.files[file.relativePath].remoteHash = remote.contentHash;
+            syncState.files[file.relativePath].remoteVersion = remote.version;
+          } else {
+            // Not tracked yet — record it now
+            const filePath = join(syncRoot, file.relativePath);
+            const raw = readFileSync(filePath, "utf-8");
+            syncState.files[file.relativePath] = {
+              slug: file.slug,
+              remoteVersion: remote.version,
+              localHash: hashLocalFile(raw),
+              remoteHash: remote.contentHash,
+            };
           }
         }
+
         syncState.lastSync = new Date().toISOString();
         writeSyncState(syncRoot, syncState);
       }
