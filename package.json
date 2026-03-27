@@ -20,5 +20,8 @@
     "postgres": "^3.4.8",
     "tsx": "^4.21.0",
     "vitest": "^4.1.1"
+  },
+  "dependencies": {
+    "@fontsource-variable/fira-code": "^5.2.7"
   }
 }

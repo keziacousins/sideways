@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libgdk-pixbuf-2.0-0 \
     fontconfig \
+    fonts-noto-color-emoji \
     wget \
     unzip \
     && rm -rf /var/lib/apt/lists/*

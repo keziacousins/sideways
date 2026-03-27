@@ -2,7 +2,7 @@
 # Deploy Sideways to localhost VM.
 #
 # Usage:
-#   ./scripts/deploy.sh          # full deploy (sync + build + restart)
+#   ./scripts/deploy.sh          # full deploy (sync + build + restart all)
 #   ./scripts/deploy.sh --quick  # sync + restart (skip build, use existing)
 #   ./scripts/deploy.sh --infra  # only sync and rebuild Docker infra
 
@@ -31,12 +31,16 @@ sync_infra() {
   rsync -az --delete \
     infra/compose.yml \
     infra/init-db.sql \
+    infra/.env.example \
     $VM:$INFRA_DIR/
 
   rsync -az --delete infra/hydra/ $VM:$INFRA_DIR/hydra/
   rsync -az --delete infra/kratos/ $VM:$INFRA_DIR/kratos/
   rsync -az --delete infra/scripts/ $VM:$INFRA_DIR/scripts/
   rsync -az --delete infra/weasyprint/ $VM:$INFRA_DIR/weasyprint/
+
+  # Create infra .env if missing
+  ssh $VM "test -f $INFRA_DIR/.env || cp $INFRA_DIR/.env.example $INFRA_DIR/.env"
 }
 
 rebuild_infra() {
@@ -70,17 +74,19 @@ sync_infra
 
 # ── Build on VM ──────────────────────────────────────────────────────
 
+# ── Create app .env if missing ───────────────────────────────────────
+
+ssh $VM "test -f $APP_DIR/.env || cp $APP_DIR/.env.example $APP_DIR/.env"
+
+# ── Build on VM ──────────────────────────────────────────────────────
+
 if ! $QUICK; then
   echo "==> Installing dependencies..."
   ssh $VM "cd $APP_DIR && pnpm install --frozen-lockfile"
 
   echo "==> Building web frontend..."
-  ssh $VM "cd $APP_DIR && pnpm --filter @sideways/web build"
+  ssh $VM "set -a && source $APP_DIR/.env && set +a && cd $APP_DIR && pnpm --filter @sideways/web build"
 fi
-
-# ── Create .env if missing ───────────────────────────────────────────
-
-ssh $VM "test -f $APP_DIR/.env || cp $APP_DIR/.env.example $APP_DIR/.env"
 
 # ── Deploy nginx config ──────────────────────────────────────────────
 
@@ -90,9 +96,14 @@ ssh $VM "sudo cp $APP_DIR/infra/nginx.conf /etc/nginx/sites-available/sideways &
   sudo rm -f /etc/nginx/sites-enabled/default && \
   sudo nginx -t && sudo systemctl reload nginx"
 
-# ── Restart services ─────────────────────────────────────────────────
+# ── Restart Docker services (picks up .env changes) ──────────────────
 
-echo "==> Restarting services..."
+echo "==> Restarting Docker services..."
+ssh $VM "cd $INFRA_DIR && docker compose up -d"
+
+# ── Restart app services ─────────────────────────────────────────────
+
+echo "==> Restarting app services..."
 ssh $VM "sudo systemctl restart sideways-api sideways-web"
 
 # ── Verify ───────────────────────────────────────────────────────────

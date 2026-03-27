@@ -43,7 +43,12 @@ export function buildPrintHTML(options: TemplateOptions): string {
     showToc = false,
   } = options;
 
-  const headings = showToc ? extractHeadings(html) : [];
+  // Replace checkbox inputs with styled spans — WeasyPrint can't render form elements
+  const printableHtml = html
+    .replace(/<input\s+type="checkbox"\s+checked(?:\s*="")?(?:\s+disabled)?\s*\/?>/gi, '<span class="print-check checked">✓</span> ')
+    .replace(/<input\s+type="checkbox"(?:\s+disabled)?\s*\/?>/gi, '<span class="print-check">○</span> ');
+
+  const headings = showToc ? extractHeadings(printableHtml) : [];
 
   const titlePage = showTitlePage
     ? `<div class="print-title-page">
@@ -82,7 +87,7 @@ export function buildPrintHTML(options: TemplateOptions): string {
   ${titlePage}
   ${toc}
   <div class="print-content">
-    ${html}
+    ${printableHtml}
   </div>
 </body>
 </html>`;

@@ -257,8 +257,28 @@ body {
 }
 
 /* Task lists */
-.print-content input[type="checkbox"] {
-  margin-right: 0.4em;
+.print-content ul:has(.print-check) {
+  list-style: none;
+  padding-left: 0;
+}
+
+.print-check {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  line-height: 1em;
+  text-align: center;
+  font-size: 0.85em;
+  border: 0.5pt solid #ccc;
+  border-radius: 2pt;
+  margin-right: 0.3em;
+  vertical-align: middle;
+  color: #999;
+}
+
+.print-check.checked {
+  color: #1a1a1a;
+  font-weight: 700;
 }
 
 /* ── Code ────────────────────────────────────────────────────── */
@@ -280,7 +300,7 @@ body {
   padding: 0.7em 0.9em;
   overflow: hidden;
   font-size: 8.5pt;
-  line-height: 1.2;
+  line-height: 1;
   /* Allow long code blocks to break across pages */
   page-break-inside: auto;
 }

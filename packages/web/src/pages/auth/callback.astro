@@ -29,8 +29,10 @@ if (!code) {
   return Astro.redirect("/auth/login?error=missing_code");
 }
 
-// Exchange code for tokens
-const redirectUri = `${Astro.url.origin}/auth/callback`;
+// Exchange code for tokens — use PUBLIC_URL, not Astro.url.origin,
+// because behind nginx the origin resolves to localhost:4000.
+const PUBLIC_URL = import.meta.env.PUBLIC_URL || Astro.url.origin;
+const redirectUri = `${PUBLIC_URL}/auth/callback`;
 const tokenRes = await fetch(`${API_URL}/api/auth/token`, {
   method: "POST",
   headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -68,10 +70,21 @@ try {
 } catch {}
 
 // Store in session
+console.log("[callback] session exists:", !!Astro.session);
+console.log("[callback] tokens received:", !!tokens.access_token, !!tokens.refresh_token);
+console.log("[callback] user:", userEmail);
+
 await Astro.session?.set("access_token", tokens.access_token);
 await Astro.session?.set("refresh_token", tokens.refresh_token);
 await Astro.session?.set("user_email", userEmail);
 await Astro.session?.set("user_name", userName);
 
-return Astro.redirect(returnTo);
+console.log("[callback] session set, redirecting to:", returnTo);
+
+// Don't use Astro.redirect() — it skips the session cookie.
+// Return a manual redirect response so Astro's session middleware can attach the Set-Cookie header.
+return new Response(null, {
+  status: 302,
+  headers: { Location: returnTo },
+});
 ---
