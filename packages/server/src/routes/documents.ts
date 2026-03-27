@@ -261,6 +261,15 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         .returning();
     }
 
+    // Resolve section slug to ID if provided
+    let sectionId: string | null | undefined = undefined;
+    if (body.sectionSlug) {
+      const section = await db.query.sections.findFirst({
+        where: and(eq(sections.spaceId, space.id), eq(sections.slug, body.sectionSlug)),
+      });
+      if (section) sectionId = section.id;
+    }
+
     const existing = await db.query.documents.findFirst({
       where: and(
         eq(documents.spaceId, space.id),
@@ -272,14 +281,17 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const derivedTitle = body.title || (hasContent ? extractTitle(content) : null);
 
     if (existing) {
+      const updates: Record<string, any> = {
+        title: derivedTitle ?? existing.title,
+        tags: body.tags ?? existing.tags,
+        position: body.position ?? existing.position,
+        updatedAt: new Date(),
+      };
+      if (sectionId !== undefined) updates.sectionId = sectionId;
+
       const [updated] = await db
         .update(documents)
-        .set({
-          title: derivedTitle ?? existing.title,
-          tags: body.tags ?? existing.tags,
-          position: body.position ?? existing.position,
-          updatedAt: new Date(),
-        })
+        .set(updates)
         .where(eq(documents.id, existing.id))
         .returning();
 
@@ -305,15 +317,18 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       return c.json(updated, 200);
     }
 
+    const insertValues: Record<string, any> = {
+      spaceId: space.id,
+      slug,
+      title: derivedTitle || slug,
+      tags: body.tags ?? [],
+      position: body.position ?? 0,
+    };
+    if (sectionId) insertValues.sectionId = sectionId;
+
     const [doc] = await db
       .insert(documents)
-      .values({
-        spaceId: space.id,
-        slug,
-        title: derivedTitle || slug,
-        tags: body.tags ?? [],
-        position: body.position ?? 0,
-      })
+      .values(insertValues)
       .returning();
 
     await db.insert(documentVersions).values({

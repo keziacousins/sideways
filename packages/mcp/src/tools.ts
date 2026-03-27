@@ -139,6 +139,48 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
   );
 
   server.tool(
+    "edit_doc",
+    'Apply search-and-replace edits to a document without rewriting the whole thing. Each edit specifies an exact string to find and its replacement. Edits are applied sequentially. If any "old" string is not found, the operation fails with an error showing which edit failed. Use read_doc first to see the current content. Example: edit_doc("finco", "api-design", [{ old: "Status: Draft", new: "Status: Approved" }])',
+    {
+      space: z.string().describe('Space slug, e.g. "finco"'),
+      slug: z.string().describe('Document slug, e.g. "api-design"'),
+      edits: z.array(z.object({
+        old: z.string().describe("Exact string to find in the document"),
+        new: z.string().describe("Replacement string"),
+      })).describe("List of search/replace pairs to apply sequentially"),
+    },
+    async ({ space, slug, edits }) => {
+      // Fetch current content
+      const doc = await apiFetch(`/api/documents/${space}/${slug}`);
+      let content: string = doc.content;
+
+      // Apply edits sequentially
+      for (let i = 0; i < edits.length; i++) {
+        const edit = edits[i];
+        const idx = content.indexOf(edit.old);
+        if (idx === -1) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Edit ${i + 1} failed: could not find "${edit.old.slice(0, 100)}${edit.old.length > 100 ? "..." : ""}" in the document. No changes were saved.`,
+            }],
+            isError: true,
+          };
+        }
+        content = content.slice(0, idx) + edit.new + content.slice(idx + edit.old.length);
+      }
+
+      // Save the edited content
+      await apiFetch(`/api/documents/${space}/${slug}`, {
+        method: "PUT",
+        body: JSON.stringify({ content }),
+      });
+
+      return { content: [{ type: "text" as const, text: `Applied ${edits.length} edit${edits.length !== 1 ? "s" : ""} to ${space}/${slug}` }] };
+    },
+  );
+
+  server.tool(
     "rename_doc",
     'Rename a document\'s title and/or slug without changing its content. Example: rename_doc("engineering", "old-slug", title="New Title", new_slug="new-slug")',
     {

@@ -70,7 +70,12 @@ app.all("/oauth2/*", async (c) => {
 });
 
 app.get("/.well-known/*", async (c) => {
-  const url = new URL(c.req.path, env.hydraPublicUrl);
+  const path = c.req.path;
+  // Don't proxy MCP OAuth discovery — we use API key auth, not OAuth
+  if (path.includes("oauth-protected-resource") || path.includes("oauth-authorization-server")) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  const url = new URL(path, env.hydraPublicUrl);
   const res = await fetch(url.toString());
   return new Response(res.body, {
     status: res.status,

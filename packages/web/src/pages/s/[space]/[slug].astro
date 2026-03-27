@@ -6,6 +6,7 @@ import "../../../styles/document.css";
 import "../../../styles/comments.css";
 
 import { apiFetch } from "../../../lib/api.ts";
+import { buildNavTree } from "../../../lib/nav.ts";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const { space: spaceSlug, slug } = Astro.params;
@@ -22,7 +23,8 @@ let doc: {
   versionCount: number;
   versionDate: string;
 } | null = null;
-let documents: { slug: string; title: string; tags: string[] }[] = [];
+let documents: { slug: string; title: string; tags: string[]; sectionId: string | null; position?: number }[] = [];
+let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 let rawContent = "";
 
 try {
@@ -30,14 +32,16 @@ try {
   if (spaceRes.ok) {
     space = await spaceRes.json();
 
-    const [docRes, rawRes, docsRes] = await Promise.all([
+    const [docRes, rawRes, docsRes, sectionsRes] = await Promise.all([
       apiFetch(`/api/documents/${spaceSlug}/${slug}/render`, accessToken),
       apiFetch(`/api/documents/${spaceSlug}/${slug}`, accessToken),
       apiFetch(`/api/documents?space=${spaceSlug}`, accessToken),
+      apiFetch(`/api/spaces/${spaceSlug}/sections`, accessToken),
     ]);
 
     if (docRes.ok) doc = await docRes.json();
     if (docsRes.ok) documents = await docsRes.json();
+    if (sectionsRes.ok) sections = await sectionsRes.json();
     if (rawRes.ok) {
       const rawDoc = await rawRes.json();
       rawContent = rawDoc.content || "";
@@ -48,11 +52,7 @@ try {
 }
 
 const html = doc?.html ?? "";
-const navItems = documents.map((d) => ({
-  slug: d.slug,
-  title: d.title,
-  type: "doc" as const,
-}));
+const navItems = buildNavTree(sections, documents);
 ---
 
 <BaseLayout title={doc?.title ?? "Not Found"} sidebar={!!space}>

@@ -3,31 +3,31 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import Sidebar from "../../components/Sidebar.astro";
 
 import { apiFetch } from "../../lib/api.ts";
+import { buildNavTree } from "../../lib/nav.ts";
 
 const { space: spaceSlug } = Astro.params;
 const { accessToken } = Astro.locals;
 
 let space: { name: string; slug: string; description: string | null; visibility: string } | null = null;
-let documents: { slug: string; title: string; tags: string[] }[] = [];
+let documents: { slug: string; title: string; tags: string[]; sectionId: string | null; position?: number }[] = [];
+let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 
 try {
   const spaceRes = await apiFetch(`/api/spaces/${spaceSlug}`, accessToken);
   if (spaceRes.ok) {
     space = await spaceRes.json();
-    const docsRes = await apiFetch(`/api/documents?space=${spaceSlug}`, accessToken);
-    if (docsRes.ok) {
-      documents = await docsRes.json();
-    }
+    const [docsRes, sectionsRes] = await Promise.all([
+      apiFetch(`/api/documents?space=${spaceSlug}`, accessToken),
+      apiFetch(`/api/spaces/${spaceSlug}/sections`, accessToken),
+    ]);
+    if (docsRes.ok) documents = await docsRes.json();
+    if (sectionsRes.ok) sections = await sectionsRes.json();
   }
 } catch {
   // API not available
 }
 
-const navItems = documents.map((doc) => ({
-  slug: doc.slug,
-  title: doc.title,
-  type: "doc" as const,
-}));
+const navItems = buildNavTree(sections, documents);
 ---
 
 <BaseLayout title={space?.name ?? "Not Found"} sidebar={!!space}>
