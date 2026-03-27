@@ -146,6 +146,100 @@ export function findMarkdownFiles(dir: string): string[] {
 }
 
 /**
+ * Recursively find all .md files, returning relative paths from the root dir.
+ * Also maps directory structure to section/parent relationships.
+ *
+ * Convention:
+ * - First-level subdirectories = sections
+ * - Deeper directories = doc nesting (parent is index.md or directory name)
+ * - index.md in a directory = the parent page for that directory's other files
+ */
+export interface DiscoveredFile {
+  /** Relative path from sync root, e.g. "getting-started/installation.md" */
+  relativePath: string;
+  /** Filename only, e.g. "installation.md" */
+  filename: string;
+  /** Document slug derived from filename */
+  slug: string;
+  /** Section slug (first-level directory) or null for root files */
+  section: string | null;
+  /** Parent doc slug (from parent directory's index.md or dir name) or null */
+  parentSlug: string | null;
+  /** Nesting depth: 0 = root, 1 = in section, 2+ = nested under parent */
+  depth: number;
+}
+
+export function discoverFiles(rootDir: string): DiscoveredFile[] {
+  const results: DiscoveredFile[] = [];
+
+  function walk(dir: string, relPath: string, depth: number, section: string | null, parentSlug: string | null) {
+    if (!existsSync(dir)) return;
+    const entries = readdirSync(dir).sort();
+
+    // Find index.md first — it becomes the parent for sibling files
+    const hasIndex = entries.includes("index.md") && statSync(join(dir, "index.md")).isFile();
+    const dirSlug = relPath ? slugFromFilename(relPath.split("/").pop()!) : null;
+
+    // The parent slug for files in this directory:
+    // - If there's an index.md at depth >= 2, it's the parent
+    // - Otherwise inherit from caller
+    let effectiveParent = parentSlug;
+
+    // Process index.md first if present (at depth >= 1)
+    if (hasIndex && depth >= 1) {
+      const indexSlug = dirSlug || slugFromFilename("index");
+      results.push({
+        relativePath: relPath ? `${relPath}/index.md` : "index.md",
+        filename: "index.md",
+        slug: indexSlug,
+        section: depth === 1 ? dirSlug : section,
+        parentSlug: depth >= 2 ? parentSlug : null,
+        depth,
+      });
+      effectiveParent = indexSlug;
+    }
+
+    // Process .md files (except index.md)
+    for (const entry of entries) {
+      if (entry === "index.md") continue;
+      const fullPath = join(dir, entry);
+      const stat = statSync(fullPath);
+
+      if (stat.isFile() && entry.endsWith(".md")) {
+        const fileSlug = slugFromFilename(entry);
+        results.push({
+          relativePath: relPath ? `${relPath}/${entry}` : entry,
+          filename: entry,
+          slug: fileSlug,
+          section: depth >= 1 ? (section || dirSlug) : null,
+          parentSlug: depth >= 2 ? effectiveParent : (hasIndex && depth === 1 ? effectiveParent : null),
+          depth,
+        });
+      }
+    }
+
+    // Recurse into subdirectories
+    for (const entry of entries) {
+      const fullPath = join(dir, entry);
+      if (entry.startsWith(".") || entry === "node_modules") continue;
+      const stat = statSync(fullPath);
+      if (stat.isDirectory()) {
+        const childRel = relPath ? `${relPath}/${entry}` : entry;
+        const childSection = depth === 0 ? slugFromFilename(entry) : section;
+        // The parent for files in a subdirectory is the matching .md file
+        // e.g. installation/ → parent is "installation" (from installation.md)
+        const dirAsSlug = slugFromFilename(entry);
+        const childParent = depth >= 1 ? dirAsSlug : null;
+        walk(fullPath, childRel, depth + 1, childSection, childParent);
+      }
+    }
+  }
+
+  walk(rootDir, "", 0, null, null);
+  return results;
+}
+
+/**
  * Compare local and remote state to determine sync status for each file.
  */
 export type FileStatus = "unchanged" | "local-modified" | "remote-modified" | "new-local" | "new-remote" | "deleted" | "conflict";

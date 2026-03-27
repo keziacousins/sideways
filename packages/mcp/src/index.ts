@@ -25,7 +25,7 @@ async function apiFetch(path: string, options?: RequestInit) {
 }
 
 const server = new McpServer(
-  { name: "sideways", version: "0.0.1" },
+  { name: "sideways", version: "0.0.2" },
   { instructions: INSTRUCTIONS },
 );
 

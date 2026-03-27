@@ -18,14 +18,20 @@ import {
   parseFrontmatter,
   serializeFrontmatter,
   computeDiff,
+  discoverFiles,
+  type DiscoveredFile,
 } from "./sync.js";
 
 const program = new Command();
 
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const rootPkg = require("../../../package.json");
+
 program
   .name("sideways")
   .description("Sideways CLI — push, pull, and manage documentation")
-  .version("0.0.1");
+  .version(rootPkg.version);
 
 // ── init ──────────────────────────────────────────────────────────────
 
@@ -115,6 +121,177 @@ program
         return;
       }
 
+      // Recursive pull when config.root is set
+      if (config.root) {
+        const syncRoot = resolve(config.rootDir, config.root);
+        mkdirSync(syncRoot, { recursive: true });
+
+        // Fetch all docs and sections
+        const [allDocs, allSections] = await Promise.all([
+          client.listDocuments(space),
+          client.getSyncInfo(space),
+        ]);
+
+        // Fetch section list for slug mapping
+        let sections: { id: string; slug: string }[] = [];
+        try {
+          sections = await client.listSections(space);
+        } catch {}
+
+        const sectionSlugById = new Map(sections.map((s: any) => [s.id, s.slug]));
+        const docSlugById = new Map(allDocs.map((d: any) => [d.id, d.slug]));
+        const remoteHashMap = new Map(allSections.map((r: any) => [r.slug, r]));
+
+        const syncState = readSyncState(syncRoot, space);
+        let totalPulled = 0;
+        let totalSkipped = 0;
+
+        // Build path for each doc based on section + parent hierarchy
+        const hasChildrenSet = new Set(allDocs.filter((d: any) => d.parentId).map((d: any) => d.parentId));
+
+        function buildDocPath(doc: any): string {
+          const parts: string[] = [];
+
+          // Walk parent chain to build directory path (root-to-leaf order)
+          const parentChain: string[] = [];
+          let currentParentId = doc.parentId;
+          const visited = new Set<string>();
+          while (currentParentId && !visited.has(currentParentId)) {
+            visited.add(currentParentId);
+            const parentSlug = docSlugById.get(currentParentId);
+            if (parentSlug) parentChain.unshift(parentSlug);
+            const parentDoc = allDocs.find((d: any) => d.id === currentParentId);
+            currentParentId = parentDoc?.parentId ?? null;
+          }
+
+          // Section directory (only for docs without parents — parents already encode the section)
+          if (!doc.parentId && doc.sectionId) {
+            const sectionSlug = sectionSlugById.get(doc.sectionId);
+            if (sectionSlug) parts.push(sectionSlug);
+          } else if (doc.parentId && parentChain.length > 0) {
+            // Find the root parent's section for the top-level directory
+            let rootParentId = doc.parentId;
+            const rootVisited = new Set<string>();
+            while (rootParentId && !rootVisited.has(rootParentId)) {
+              rootVisited.add(rootParentId);
+              const p = allDocs.find((d: any) => d.id === rootParentId);
+              if (!p?.parentId) break;
+              rootParentId = p.parentId;
+            }
+            const rootParent = allDocs.find((d: any) => d.id === rootParentId);
+            if (rootParent?.sectionId) {
+              const secSlug = sectionSlugById.get(rootParent.sectionId);
+              // Only add section dir if the root parent isn't the section index itself
+              // (otherwise the parent chain already contains it)
+              if (secSlug && secSlug !== parentChain[0]) {
+                parts.push(secSlug);
+              }
+            }
+          }
+
+          // Add parent chain as directories
+          parts.push(...parentChain);
+
+          // Doc with children → directory/index.md
+          // Doc whose slug matches section → section/index.md (section dir already in parts)
+          const hasChildren = hasChildrenSet.has(doc.id);
+          const sectionSlug = doc.sectionId ? sectionSlugById.get(doc.sectionId) : null;
+          const isSectionIndex = sectionSlug && doc.slug === sectionSlug && !doc.parentId;
+          if (isSectionIndex) {
+            // Section dir is already in parts, just add index.md
+            return parts.length > 0 ? join(...parts, "index.md") : "index.md";
+          }
+          if (hasChildren) {
+            parts.push(doc.slug);
+            return parts.length > 0 ? join(...parts, "index.md") : "index.md";
+          }
+
+          return parts.length > 0 ? join(...parts, `${doc.slug}.md`) : `${doc.slug}.md`;
+        }
+
+        // Sort docs: parents before children (by depth of parent chain)
+        const docsWithPaths = allDocs.map((doc: any) => ({
+          doc,
+          relativePath: buildDocPath(doc),
+        }));
+
+        for (const { doc, relativePath } of docsWithPaths) {
+          const filePath = join(syncRoot, relativePath);
+          const tracked = syncState.files[relativePath];
+          const remote = remoteHashMap.get(doc.slug);
+
+          // Check for conflicts
+          if (tracked && !opts.force) {
+            try {
+              const localContent = readFileSync(filePath, "utf-8");
+              const localHash = hashLocalFile(localContent);
+              if (localHash !== tracked.localHash && remote && remote.contentHash !== tracked.remoteHash) {
+                console.log(`  conflict: ${relativePath} (use --force to overwrite)`);
+                totalSkipped++;
+                continue;
+              }
+            } catch {}
+          }
+
+          // Fetch full doc content
+          const fullDoc = await client.getDocument(space, doc.slug);
+          let content = fullDoc.content;
+
+          // Build frontmatter
+          const fm: Record<string, any> = {};
+          const headingMatch = content.match(/^#\s+(.+)$/m);
+          const headingTitle = headingMatch ? headingMatch[1].trim() : null;
+          if (fullDoc.title && fullDoc.title !== titleFromSlug(doc.slug) && fullDoc.title !== headingTitle) {
+            fm.title = fullDoc.title;
+          }
+          if (fullDoc.tags?.length > 0) fm.tags = fullDoc.tags;
+
+          // Embed comments
+          if (!opts.clean) {
+            try {
+              const rawComments = await client.getComments(space, doc.slug, opts.includeResolved);
+              if (rawComments.length > 0) {
+                const serialized: SerializedComment[] = rawComments.map((c: any) => ({
+                  id: c.id, author: c.author?.name || "Unknown", authorEmail: c.author?.email,
+                  date: c.createdAt?.slice(0, 10) || "", body: c.body,
+                  anchorText: c.anchorText, anchorSection: c.anchorSection,
+                  anchorContext: c.anchorContext, parentId: c.parentId, resolved: c.resolved,
+                }));
+                content = embedComments(content, serialized);
+              }
+            } catch {}
+          }
+
+          const output = Object.keys(fm).length > 0 ? serializeFrontmatter(fm, content) : content;
+
+          // Ensure directory exists and write
+          mkdirSync(join(syncRoot, relativePath, ".."), { recursive: true });
+          writeFileSync(filePath, output);
+
+          syncState.files[relativePath] = {
+            slug: doc.slug,
+            remoteVersion: remote?.version ?? 1,
+            localHash: hashLocalFile(output),
+            remoteHash: remote?.contentHash ?? hashLocalFile(output),
+          };
+
+          const isNew = !tracked;
+          console.log(`  ${isNew ? "new" : "updated"}: ${relativePath}`);
+          totalPulled++;
+        }
+
+        syncState.lastSync = new Date().toISOString();
+        writeSyncState(syncRoot, syncState);
+
+        if (totalPulled === 0) {
+          console.log("Nothing to pull.");
+        } else {
+          console.log(`\nPulled ${totalPulled} file(s)${totalSkipped > 0 ? `, ${totalSkipped} skipped` : ""}`);
+        }
+        return;
+      }
+
+      // Legacy: Pull via explicit mappings
       const targets = resolveSyncTargets(config, path);
 
       let totalPulled = 0;
@@ -260,7 +437,106 @@ program
         return;
       }
 
-      // Push all changed files across sync targets
+      // Recursive push when config.root is set
+      if (config.root) {
+        const syncRoot = resolve(config.rootDir, config.root);
+        await ensureSpace(client, space, config.spaceName || undefined);
+
+        const files = discoverFiles(syncRoot);
+        const syncState = readSyncState(syncRoot, space);
+
+        // Create sections for all first-level directories
+        const sections = new Set(files.map(f => f.section).filter(Boolean) as string[]);
+        for (const section of sections) {
+          await client.createSection(space, section).catch(() => {});
+        }
+
+        // Get all remote files for diff
+        const remoteFiles = await client.getSyncInfo(space);
+        const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
+
+        let totalPushed = 0;
+        // Push in order: parents before children (sorted by depth)
+        const sorted = [...files].sort((a, b) => a.depth - b.depth);
+
+        for (const file of sorted) {
+          const filePath = join(syncRoot, file.relativePath);
+          const raw = readFileSync(filePath, "utf-8");
+          const localHash = hashLocalFile(raw);
+          const tracked = syncState.files[file.relativePath];
+          const remote = remoteMap.get(file.slug);
+
+          // Determine if we need to push
+          let status: string;
+          if (!tracked && !remote) status = "new-local";
+          else if (!tracked && remote) status = "conflict";
+          else if (tracked && !remote) status = "new-local";
+          else if (tracked) {
+            const localChanged = localHash !== tracked.localHash;
+            const remoteChanged = remote && remote.contentHash !== tracked.remoteHash;
+            if (localChanged && remoteChanged) status = "conflict";
+            else if (localChanged) status = "local-modified";
+            else if (remoteChanged) status = "remote-modified";
+            else status = "unchanged";
+          } else status = "unchanged";
+
+          if (status === "unchanged" || status === "remote-modified") continue;
+          if (status === "conflict" && !opts.force) {
+            console.log(`  conflict: ${file.relativePath} (use --force to overwrite)`);
+            continue;
+          }
+
+          if (opts.dryRun) {
+            console.log(`  would push: ${file.relativePath} → ${file.slug} (${status})`);
+            totalPushed++;
+            continue;
+          }
+
+          const { clean } = extractComments(raw);
+          const { frontmatter, content } = parseFrontmatter(clean);
+          const tags = frontmatter.tags || [];
+          const body: Record<string, any> = { content, tags };
+          if (frontmatter.title) body.title = frontmatter.title;
+          if (file.section) body.sectionSlug = file.section;
+          if (file.parentSlug) body.parentSlug = file.parentSlug;
+
+          await client.putDocument(space, file.slug, body);
+
+          syncState.files[file.relativePath] = {
+            slug: file.slug,
+            remoteVersion: (tracked?.remoteVersion ?? 0) + 1,
+            localHash: localHash,
+            remoteHash: localHash,
+          };
+
+          console.log(`  pushed: ${file.relativePath} → ${file.slug} (${status})`);
+          totalPushed++;
+        }
+
+        if (!opts.dryRun) {
+          // Refresh remote state
+          const updatedRemote = await client.getSyncInfo(space);
+          const remoteHashMap = new Map(updatedRemote.map((r: any) => [r.slug, r]));
+          for (const entry of Object.values(syncState.files)) {
+            const remote = remoteHashMap.get(entry.slug);
+            if (remote) {
+              entry.remoteHash = remote.contentHash;
+              entry.remoteVersion = remote.version;
+            }
+          }
+          syncState.lastSync = new Date().toISOString();
+          writeSyncState(syncRoot, syncState);
+        }
+
+        if (totalPushed === 0 && !opts.dryRun) {
+          console.log("Nothing to push.");
+        } else if (!opts.dryRun) {
+          console.log(`\nPushed ${totalPushed} file(s)`);
+        }
+        return;
+      }
+
+      // Legacy: Push via explicit mappings
       const targets = resolveSyncTargets(config, path?.endsWith(".md") ? undefined : path);
 
       await ensureSpace(client, space, config.spaceName || undefined);
@@ -304,8 +580,6 @@ program
 
           const tags = frontmatter.tags || [];
           const body: Record<string, any> = { content, tags };
-          // Only send title if explicitly set in frontmatter — otherwise let
-          // the server extract it from the first # heading
           if (frontmatter.title) body.title = frontmatter.title;
 
           await client.putDocument(space, diff.slug, body);

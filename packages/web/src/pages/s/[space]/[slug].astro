@@ -23,7 +23,7 @@ let doc: {
   versionCount: number;
   versionDate: string;
 } | null = null;
-let documents: { slug: string; title: string; tags: string[]; sectionId: string | null; position?: number }[] = [];
+let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number }[] = [];
 let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 let rawContent = "";
 
@@ -53,6 +53,12 @@ try {
 
 const html = doc?.html ?? "";
 const navItems = buildNavTree(sections, documents);
+
+// Find child pages of the current doc
+const currentDoc = documents.find(d => d.slug === slug);
+const childPages = currentDoc
+  ? documents.filter(d => d.parentId === currentDoc.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  : [];
 ---
 
 <BaseLayout title={doc?.title ?? "Not Found"} sidebar={!!space}>
@@ -156,6 +162,25 @@ const navItems = buildNavTree(sections, documents);
       <article class="sw-doc-content" id="doc-view">
         <Fragment set:html={html} />
       </article>
+
+      {childPages.length > 0 && (
+        <nav class="child-pages">
+          <h3 class="child-pages-heading">In this section</h3>
+          <ul class="child-pages-list">
+            {childPages.map((child) => (
+              <li>
+                <a href={`/s/${spaceSlug}/${child.slug}`} class="child-page-link">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span>{child.title}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
 
       <div class="doc-editor" id="doc-editor" style="display: none;">
         <div class="editor-panes">
@@ -424,6 +449,52 @@ const navItems = buildNavTree(sections, documents);
   }
 
   /* ── Editor ──────────────────────────── */
+  .child-pages {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--sw-border);
+    max-width: var(--sw-content-max);
+  }
+
+  .child-pages-heading {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-sm);
+    font-weight: 500;
+    color: var(--sw-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.75rem;
+  }
+
+  .child-pages-list {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .child-page-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-secondary);
+    text-decoration: none;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .child-page-link:hover {
+    background: var(--sw-ink-light);
+    color: var(--sw-text-primary);
+  }
+
+  .child-page-link svg {
+    color: var(--sw-text-ghost);
+    flex-shrink: 0;
+  }
+
   .doc-editor {
     display: flex;
     flex-direction: column;

@@ -238,6 +238,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       tags?: string[];
       position?: number;
       sectionSlug?: string;
+      parentSlug?: string;
     }>();
 
     const userId = await getUserId(c, db);
@@ -270,6 +271,15 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       if (section) sectionId = section.id;
     }
 
+    // Resolve parent doc slug to ID if provided
+    let parentId: string | null | undefined = undefined;
+    if (body.parentSlug) {
+      const parent = await db.query.documents.findFirst({
+        where: and(eq(documents.spaceId, space.id), eq(documents.slug, body.parentSlug)),
+      });
+      if (parent) parentId = parent.id;
+    }
+
     const existing = await db.query.documents.findFirst({
       where: and(
         eq(documents.spaceId, space.id),
@@ -288,6 +298,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         updatedAt: new Date(),
       };
       if (sectionId !== undefined) updates.sectionId = sectionId;
+      if (parentId !== undefined) updates.parentId = parentId;
 
       const [updated] = await db
         .update(documents)
@@ -325,6 +336,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       position: body.position ?? 0,
     };
     if (sectionId) insertValues.sectionId = sectionId;
+    if (parentId) insertValues.parentId = parentId;
 
     const [doc] = await db
       .insert(documents)
@@ -422,6 +434,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       position?: number;
       space?: string;
       section?: string | null;
+      parent?: string | null;
     }>();
 
     const updates: Record<string, any> = {};
@@ -429,6 +442,17 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     if (body.title !== undefined) updates.title = body.title;
     if (body.tags !== undefined) updates.tags = body.tags;
     if (body.position !== undefined) updates.position = body.position;
+    if (body.parent !== undefined) {
+      if (body.parent === null) {
+        updates.parentId = null;
+      } else {
+        const parentDoc = await db.query.documents.findFirst({
+          where: and(eq(documents.spaceId, space.id), eq(documents.slug, body.parent)),
+        });
+        if (!parentDoc) return c.json({ error: "Parent document not found" }, 404);
+        updates.parentId = parentDoc.id;
+      }
+    }
     if (body.section !== undefined) {
       if (body.section === null) {
         updates.sectionId = null;

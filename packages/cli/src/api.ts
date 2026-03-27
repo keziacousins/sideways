@@ -77,7 +77,7 @@ export function createClient(baseUrl: string) {
     putDocument(
       space: string,
       slug: string,
-      body: { title?: string; content?: string; tags?: string[] },
+      body: { title?: string; content?: string; tags?: string[]; sectionSlug?: string; parentSlug?: string },
     ) {
       return request(`/api/documents/${space}/${slug}`, {
         method: "PUT",
@@ -155,6 +155,10 @@ export function createClient(baseUrl: string) {
 
     deleteSpace(slug: string) {
       return request(`/api/spaces/${slug}`, { method: "DELETE" });
+    },
+
+    listSections(space: string) {
+      return request(`/api/spaces/${space}/sections`);
     },
 
     createSection(space: string, slug: string, title?: string) {

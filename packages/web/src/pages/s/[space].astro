@@ -9,7 +9,7 @@ const { space: spaceSlug } = Astro.params;
 const { accessToken } = Astro.locals;
 
 let space: { name: string; slug: string; description: string | null; visibility: string } | null = null;
-let documents: { slug: string; title: string; tags: string[]; sectionId: string | null; position?: number }[] = [];
+let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number }[] = [];
 let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 
 try {

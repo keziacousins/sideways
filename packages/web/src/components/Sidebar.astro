@@ -15,6 +15,13 @@ interface Props {
 }
 
 const { spaceSlug, spaceName, items, activeSlug } = Astro.props;
+
+/** Check if a nav item or any of its descendants contains the active slug */
+function containsActive(item: NavItem, slug?: string): boolean {
+  if (!slug) return false;
+  if (item.slug === slug) return true;
+  return item.children?.some(c => containsActive(c, slug)) ?? false;
+}
 ---
 
 <nav class="sidebar-nav">
@@ -26,6 +33,7 @@ const { spaceSlug, spaceName, items, activeSlug } = Astro.props;
     {items.map((item) => (
       <li class:list={["nav-item", { active: item.slug === activeSlug }]}>
         {item.type === "section" ? (
+          /* Section: collapsible, not clickable */
           <details open>
             <summary class="nav-section">
               <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -46,31 +54,77 @@ const { spaceSlug, spaceName, items, activeSlug } = Astro.props;
                           <span>{child.title}</span>
                         </summary>
                         {child.children && (
-                          <ul class="nav-children nav-children-deep">
-                            {child.children.map((grandchild) => (
-                              <li class:list={["nav-item", { active: grandchild.slug === activeSlug }]}>
-                                <a href={`/s/${spaceSlug}/${grandchild.slug}`} class="nav-link nav-link-deep">
-                                  {grandchild.title}
-                                </a>
+                          <ul class="nav-children">
+                            {child.children.map((gc) => (
+                              <li class:list={["nav-item", { active: gc.slug === activeSlug }]}>
+                                <a href={`/s/${spaceSlug}/${gc.slug}`} class="nav-link nav-link-deep">{gc.title}</a>
                               </li>
                             ))}
                           </ul>
                         )}
                       </details>
+                    ) : child.children?.length ? (
+                      /* Doc with children: clickable + collapsible */
+                      <details open={containsActive(child, activeSlug)}>
+                        <summary class="nav-doc-parent">
+                          <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6" />
+                          </svg>
+                          <a href={`/s/${spaceSlug}/${child.slug}`} class="nav-link nav-link-inline">{child.title}</a>
+                        </summary>
+                        <ul class="nav-children">
+                          {child.children.map((gc) => (
+                            <li class:list={["nav-item", { active: gc.slug === activeSlug }]}>
+                              {gc.children?.length ? (
+                                <details open={containsActive(gc, activeSlug)}>
+                                  <summary class="nav-doc-parent nav-doc-parent-deep">
+                                    <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                      <polyline points="9 18 15 12 9 6" />
+                                    </svg>
+                                    <a href={`/s/${spaceSlug}/${gc.slug}`} class="nav-link nav-link-inline">{gc.title}</a>
+                                  </summary>
+                                  <ul class="nav-children">
+                                    {gc.children.map((ggc) => (
+                                      <li class:list={["nav-item", { active: ggc.slug === activeSlug }]}>
+                                        <a href={`/s/${spaceSlug}/${ggc.slug}`} class="nav-link nav-link-deepest">{ggc.title}</a>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </details>
+                              ) : (
+                                <a href={`/s/${spaceSlug}/${gc.slug}`} class="nav-link nav-link-deep">{gc.title}</a>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
                     ) : (
-                      <a href={`/s/${spaceSlug}/${child.slug}`} class="nav-link">
-                        {child.title}
-                      </a>
+                      <a href={`/s/${spaceSlug}/${child.slug}`} class="nav-link">{child.title}</a>
                     )}
                   </li>
                 ))}
               </ul>
             )}
           </details>
+        ) : item.children?.length ? (
+          /* Top-level doc with children: clickable + collapsible */
+          <details open={containsActive(item, activeSlug)}>
+            <summary class="nav-doc-parent nav-doc-parent-top">
+              <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <a href={`/s/${spaceSlug}/${item.slug}`} class="nav-link nav-link-inline">{item.title}</a>
+            </summary>
+            <ul class="nav-children">
+              {item.children.map((child) => (
+                <li class:list={["nav-item", { active: child.slug === activeSlug }]}>
+                  <a href={`/s/${spaceSlug}/${child.slug}`} class="nav-link">{child.title}</a>
+                </li>
+              ))}
+            </ul>
+          </details>
         ) : (
-          <a href={`/s/${spaceSlug}/${item.slug}`} class="nav-link">
-            {item.title}
-          </a>
+          <a href={`/s/${spaceSlug}/${item.slug}`} class="nav-link nav-link-top">{item.title}</a>
         )}
       </li>
     ))}
@@ -166,12 +220,53 @@ const { spaceSlug, spaceName, items, activeSlug } = Astro.props;
   }
 
   .nav-subsection {
-    padding-left: 2.25rem;
+    padding-left: 2.6rem;
     font-size: 0.65rem;
+  }
+
+  .nav-doc-parent {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0 0 0 2.1rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .nav-doc-parent::-webkit-details-marker {
+    display: none;
+  }
+
+  .nav-doc-parent-top {
+    padding-left: 0.85rem;
+  }
+
+  .nav-link-inline {
+    display: block;
+    padding: 0.35rem 0.4rem;
+    color: var(--sw-text-secondary);
+    text-decoration: none;
+    transition: color var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .nav-link-inline:hover {
+    color: var(--sw-text-primary);
+  }
+
+  .nav-link-top {
+    padding-left: 1.25rem;
   }
 
   .nav-link-deep {
     padding-left: 3.75rem;
+  }
+
+  .nav-doc-parent-deep {
+    padding-left: 3.25rem;
+  }
+
+  .nav-link-deepest {
+    padding-left: 4.75rem;
   }
 
   .nav-item.active > .nav-link,
@@ -179,5 +274,9 @@ const { spaceSlug, spaceName, items, activeSlug } = Astro.props;
     color: var(--sw-accent);
     border-left-color: var(--sw-accent);
     background: var(--sw-accent-glow);
+  }
+
+  .nav-item.active > details > .nav-doc-parent .nav-link-inline {
+    color: var(--sw-accent);
   }
 </style>

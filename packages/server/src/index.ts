@@ -25,7 +25,11 @@ app.use("*", requestLogMiddleware);
 // Auth middleware on all routes — sets user if token present, null otherwise
 app.use("*", authMiddleware(db));
 
-app.get("/health", (c) => c.json({ status: "ok" }));
+import { createRequire } from "node:module";
+const _require = createRequire(import.meta.url);
+const rootPkg = _require("../../../package.json");
+
+app.get("/health", (c) => c.json({ status: "ok", version: rootPkg.version }));
 
 // Hydra public proxy — browser hits localhost, we forward to Hydra.
 // Preserves cookies/CSRF because the browser stays on localhost.

@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { apiFetch } from "../lib/api.ts";
+import rootPkg from "../../../../package.json";
 
 const { accessToken } = Astro.locals;
 
@@ -82,8 +83,8 @@ try {
       ))}
     </div>
 
-    <div class="setup-link">
-      <a href="/setup">
+    <div class="home-footer">
+      <a href="/setup" class="setup-link">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
         </svg>
@@ -92,6 +93,7 @@ try {
           <polyline points="9 18 15 12 9 6" />
         </svg>
       </a>
+      <span class="version-label">v{rootPkg.version}</span>
     </div>
   </div>
 </BaseLayout>
@@ -220,12 +222,15 @@ try {
     color: var(--sw-text-ghost);
   }
 
-  .setup-link {
+  .home-footer {
     margin-top: 2.5rem;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
   }
 
-  .setup-link a {
+  .setup-link {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -235,8 +240,13 @@ try {
     transition: color var(--sw-duration-fast) var(--sw-ease);
   }
 
-  .setup-link a:hover {
+  .setup-link:hover {
     color: var(--sw-accent);
+  }
+
+  .version-label {
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-ghost);
   }
 
   #create-space-area {

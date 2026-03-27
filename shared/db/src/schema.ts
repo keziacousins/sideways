@@ -61,6 +61,7 @@ export const documents = pgTable("documents", {
   id: uuid("id").primaryKey().defaultRandom(),
   spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
   sectionId: uuid("section_id").references(() => sections.id, { onDelete: "set null" }),
+  parentId: uuid("parent_id").references((): any => documents.id, { onDelete: "set null" }),
   slug: text("slug").notNull(),
   title: text("title").notNull(),
   position: integer("position").notNull().default(0),
@@ -71,6 +72,7 @@ export const documents = pgTable("documents", {
   uniqueIndex("documents_space_slug_idx").on(t.spaceId, t.slug),
   index("documents_space_idx").on(t.spaceId),
   index("documents_section_idx").on(t.sectionId),
+  index("documents_parent_idx").on(t.parentId),
 ]);
 
 export const documentVersions = pgTable("document_versions", {

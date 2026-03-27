@@ -56,7 +56,7 @@ export function createMcpRoutes(db: Database) {
     logger.debug({ method }, "MCP request");
 
     // Stateless: fresh server + transport per request, no session tracking
-    const server = new McpServer({ name: "sideways", version: "0.0.1" }, { instructions: INSTRUCTIONS });
+    const server = new McpServer({ name: "sideways", version: "0.0.2" }, { instructions: INSTRUCTIONS });
     registerTools(server, makeApiFetch(apiKey));
 
     const transport = new WebStandardStreamableHTTPServerTransport({

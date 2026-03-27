@@ -1,6 +1,9 @@
 /**
  * Build a hierarchical nav tree from sections and documents.
- * Top-level docs (no section) appear first, then sections with their children.
+ * Supports both section grouping and document nesting (parentId).
+ *
+ * Hierarchy: sections contain docs; docs can nest under other docs.
+ * Top-level docs (no section, no parent) appear before sections.
  */
 
 interface Section {
@@ -12,9 +15,11 @@ interface Section {
 }
 
 interface Doc {
+  id?: string;
   slug: string;
   title: string;
   sectionId: string | null;
+  parentId?: string | null;
   tags?: string[];
   position?: number;
 }
@@ -26,47 +31,69 @@ export interface NavItem {
   children?: NavItem[];
 }
 
+/** Recursively build doc tree from a list of docs sharing a parent */
+function buildDocChildren(parentId: string, docsByParent: Map<string | null, Doc[]>): NavItem[] {
+  const children = (docsByParent.get(parentId) || []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  return children.map(d => {
+    const nested = d.id ? buildDocChildren(d.id, docsByParent) : [];
+    const item: NavItem = { slug: d.slug, title: d.title, type: "doc" };
+    if (nested.length > 0) item.children = nested;
+    return item;
+  });
+}
+
+/** Build doc items for a flat list (docs without children concept, or root-level) */
+function buildDocItems(docs: Doc[], docsByParent: Map<string | null, Doc[]>): NavItem[] {
+  return docs.sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map(d => {
+    const nested = d.id ? buildDocChildren(d.id, docsByParent) : [];
+    const item: NavItem = { slug: d.slug, title: d.title, type: "doc" };
+    if (nested.length > 0) item.children = nested;
+    return item;
+  });
+}
+
 export function buildNavTree(sections: Section[], documents: Doc[]): NavItem[] {
   const items: NavItem[] = [];
 
-  // Index sections by ID
-  const sectionMap = new Map<string, Section>();
-  for (const s of sections) sectionMap.set(s.id, s);
-
-  // Group docs by sectionId
-  const docsBySection = new Map<string | null, Doc[]>();
+  // Group docs by parentId for nesting
+  const docsByParent = new Map<string | null, Doc[]>();
   for (const d of documents) {
-    const key = d.sectionId;
-    if (!docsBySection.has(key)) docsBySection.set(key, []);
-    docsBySection.get(key)!.push(d);
+    const key = d.parentId ?? null;
+    if (!docsByParent.has(key)) docsByParent.set(key, []);
+    docsByParent.get(key)!.push(d);
   }
 
-  // Top-level docs (no section)
-  const topDocs = (docsBySection.get(null) || []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-  for (const d of topDocs) {
-    items.push({ slug: d.slug, title: d.title, type: "doc" });
+  // Root docs = no parent AND no section
+  const rootDocs = (docsByParent.get(null) || []).filter(d => !d.sectionId);
+  items.push(...buildDocItems(rootDocs, docsByParent));
+
+  // Group root-level docs by sectionId (only those with no parent)
+  const docsBySection = new Map<string, Doc[]>();
+  for (const d of (docsByParent.get(null) || [])) {
+    if (d.sectionId) {
+      if (!docsBySection.has(d.sectionId)) docsBySection.set(d.sectionId, []);
+      docsBySection.get(d.sectionId)!.push(d);
+    }
   }
 
-  // Sections sorted by position, with their child docs
-  const sortedSections = [...sections].filter(s => !s.parentId).sort((a, b) => a.position - b.position);
-  for (const s of sortedSections) {
+  // Sections sorted by position, with their child docs (which may have nested children)
+  const topSections = [...sections].filter(s => !s.parentId).sort((a, b) => a.position - b.position);
+  for (const s of topSections) {
     const children: NavItem[] = [];
 
     // Docs in this section
-    const sectionDocs = (docsBySection.get(s.id) || []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-    for (const d of sectionDocs) {
-      children.push({ slug: d.slug, title: d.title, type: "doc" });
-    }
+    const sectionDocs = docsBySection.get(s.id) || [];
+    children.push(...buildDocItems(sectionDocs, docsByParent));
 
     // Nested sub-sections
     const subSections = [...sections].filter(sub => sub.parentId === s.id).sort((a, b) => a.position - b.position);
     for (const sub of subSections) {
-      const subDocs = (docsBySection.get(sub.id) || []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      const subDocs = docsBySection.get(sub.id) || [];
       children.push({
         slug: sub.slug,
         title: sub.title,
         type: "section",
-        children: subDocs.map(d => ({ slug: d.slug, title: d.title, type: "doc" as const })),
+        children: buildDocItems(subDocs, docsByParent),
       });
     }
 

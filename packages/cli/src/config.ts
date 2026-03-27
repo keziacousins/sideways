@@ -12,6 +12,8 @@ export interface ProjectConfig {
   spaceName: string | null;
   api: string;
   mappings: DirMapping[];
+  /** If set, recursive sync from this directory. First-level dirs = sections, deeper = doc nesting. */
+  root: string | null;
   /** Absolute path to the directory containing .sideways.yml */
   rootDir: string;
 }
@@ -37,6 +39,7 @@ export function findConfig(from: string = process.cwd()): ProjectConfig | null {
           local: m.local,
           section: m.section || null,
         })),
+        root: parsed.root ?? null,
         rootDir: dir,
       };
     }
@@ -57,7 +60,7 @@ export function createConfig(
   name?: string,
 ): string {
   const configPath = resolve(dir, CONFIG_FILENAME);
-  const data: Record<string, any> = { space, api };
+  const data: Record<string, any> = { space, api, root: "." };
   if (name && name !== space) data.name = name;
   const content = stringify(data);
   writeFileSync(configPath, content);
