@@ -68,6 +68,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.11(hono@4.12.9)
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.28.0
+        version: 1.28.0(zod@4.3.6)
       '@ory/client':
         specifier: ^1.22.32
         version: 1.22.32
@@ -77,6 +80,9 @@ importers:
       '@sideways/markdown':
         specifier: workspace:*
         version: link:../../shared/markdown
+      '@sideways/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@sideways/storage':
         specifier: workspace:*
         version: link:../../shared/storage
@@ -95,6 +101,9 @@ importers:
       postgres:
         specifier: ^3.4.5
         version: 3.4.8
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       tsx:
         specifier: ^4.19.0

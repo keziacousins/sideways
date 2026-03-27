@@ -9,15 +9,18 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "@ory/client": "^1.22.32",
     "@sideways/db": "workspace:*",
     "@sideways/markdown": "workspace:*",
+    "@sideways/mcp": "workspace:*",
     "@sideways/storage": "workspace:*",
     "@sideways/types": "workspace:*",
     "drizzle-orm": "^0.44.0",
     "hono": "^4.7.0",
     "jose": "^6.2.2",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

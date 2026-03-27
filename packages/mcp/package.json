@@ -2,6 +2,11 @@
   "name": "@sideways/mcp",
   "version": "0.0.1",
   "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tools": "./src/tools.ts"
+  },
   "bin": {
     "sideways-mcp": "./bin/sideways-mcp"
   },
