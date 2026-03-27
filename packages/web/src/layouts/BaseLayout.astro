@@ -63,9 +63,26 @@ const { title, sidebar = false } = Astro.props;
     animation: slideInLeft var(--sw-duration-slow) var(--sw-ease) both;
   }
 
+  .sw-sidebar {
+    transition: width var(--sw-duration) var(--sw-ease),
+                opacity var(--sw-duration) var(--sw-ease),
+                padding var(--sw-duration) var(--sw-ease);
+  }
+
   @media (max-width: 900px) {
     .sw-sidebar {
       display: none;
+    }
+  }
+
+  /* Collapse sidebar when comments panel is open on mid-width screens */
+  @media (max-width: 1200px) and (min-width: 901px) {
+    :global(html.comments-open) .sw-sidebar {
+      width: 0;
+      opacity: 0;
+      padding: 0;
+      overflow: hidden;
+      border-right: none;
     }
   }
 </style>

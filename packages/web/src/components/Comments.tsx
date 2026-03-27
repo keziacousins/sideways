@@ -28,7 +28,13 @@ export default function Comments({
   refreshToken: initialRefreshToken,
 }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpenState] = useState(false);
+
+  const setIsOpen = (open: boolean) => {
+    setIsOpenState(open);
+    // Notify layout to collapse/expand sidebar on narrow screens
+    document.documentElement.classList.toggle("comments-open", open);
+  };
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
   const [anchorText, setAnchorText] = useState<string | null>(null);
@@ -138,6 +144,51 @@ export default function Comments({
       );
   }, []);
 
+  // Mark anchor text in the document with subtle highlights
+  useEffect(() => {
+    const docContent = document.querySelector(".sw-doc-content");
+    if (!docContent) return;
+
+    // Remove previous markers
+    docContent.querySelectorAll(".comment-marker").forEach((el) => {
+      const parent = el.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(el.textContent || ""), el);
+        parent.normalize();
+      }
+    });
+
+    // Add markers for each anchored, unresolved comment
+    const anchored = comments.filter((c) => c.anchorText && !c.parentId && !c.resolved);
+    for (const comment of anchored) {
+      const text = comment.anchorText!;
+      const walker = document.createTreeWalker(docContent, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode as Text;
+        const idx = textNode.textContent?.indexOf(text.slice(0, 60)) ?? -1;
+        if (idx >= 0) {
+          const range = document.createRange();
+          range.setStart(textNode, idx);
+          range.setEnd(textNode, Math.min(idx + text.length, textNode.length));
+          const mark = document.createElement("span");
+          mark.className = "comment-marker";
+          mark.dataset.commentId = comment.id;
+          mark.title = "View comment";
+          mark.addEventListener("click", () => {
+            setIsOpen(true);
+            // Scroll the comment into view in the panel
+            setTimeout(() => {
+              const el = document.querySelector(`[data-comment-thread="${comment.id}"]`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 100);
+          });
+          range.surroundContents(mark);
+          break; // Only mark first occurrence
+        }
+      }
+    }
+  }, [comments]);
+
   const submitComment = async () => {
     if (!newComment.trim()) return;
     setError(null);
@@ -201,7 +252,7 @@ export default function Comments({
   const totalCount = topLevel.length + resolved.length;
 
   return (
-    <>
+    <div className="comments-wrapper">
       <button
         className="comments-toggle"
         onClick={() => setIsOpen(!isOpen)}
@@ -296,7 +347,7 @@ export default function Comments({
             )}
 
             {topLevel.map((comment) => (
-              <div key={comment.id} className="comment-thread">
+              <div key={comment.id} className="comment-thread" data-comment-thread={comment.id}>
                 <CommentItem
                   comment={comment}
                   onReply={() => {
@@ -331,7 +382,7 @@ export default function Comments({
                   {resolved.length} resolved comment{resolved.length !== 1 ? "s" : ""}
                 </summary>
                 {resolved.map((comment) => (
-                  <div key={comment.id} className="comment-thread resolved">
+                  <div key={comment.id} className="comment-thread resolved" data-comment-thread={comment.id}>
                     <CommentItem
                       comment={comment}
                       onReply={() => {
@@ -364,7 +415,7 @@ export default function Comments({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

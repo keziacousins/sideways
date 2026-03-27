@@ -15,16 +15,22 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const refreshToken = await session?.get("refresh_token");
 
   if (accessToken) {
-    // Check if JWT is expired or about to expire
+    let needsRefresh = false;
+
     try {
       const payload = JSON.parse(
         Buffer.from(accessToken.split(".")[1], "base64").toString(),
       );
       const expiresAt = payload.exp * 1000;
+      needsRefresh = Date.now() > expiresAt - 30_000;
+    } catch {
+      // Can't decode JWT — treat as expired
+      needsRefresh = true;
+    }
 
-      if (Date.now() > expiresAt - 30_000) {
-        // Expired or expiring within 30s — refresh
-        if (refreshToken) {
+    if (needsRefresh) {
+      if (refreshToken) {
+        try {
           const res = await fetch(`${API_URL}/api/auth/token`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -43,16 +49,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
               await session?.set("refresh_token", tokens.refresh_token);
             }
           } else {
-            // Refresh failed — clear tokens
+            // Refresh token rejected — session is dead
             accessToken = null;
             await session?.set("access_token", null);
+            await session?.set("refresh_token", null);
           }
-        } else {
-          accessToken = null;
+        } catch {
+          // Network error reaching API — keep stale token rather than
+          // logging user out due to a transient failure
+          console.error("[middleware] Token refresh failed (network error)");
         }
+      } else {
+        // No refresh token — can't renew
+        accessToken = null;
+        await session?.set("access_token", null);
       }
-    } catch {
-      // Not a valid JWT — use as-is or clear
     }
   }
 

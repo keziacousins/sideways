@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
 import { type Database, spaces, sections, spaceMembers, users } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
+import { canWriteSpace } from "../middleware/visibility.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -63,7 +64,11 @@ export function createSpaceRoutes(db: Database) {
       where: eq(spaces.slug, c.req.param("slug")),
     });
     if (!space) return c.json({ error: "Not found" }, 404);
-    return c.json(space);
+
+    const user = c.get("user") as AuthUser | null;
+    const canWrite = await canWriteSpace(db, space.id, space.ownerId, user);
+
+    return c.json({ ...space, canWrite });
   });
 
   /** Create or update a space */

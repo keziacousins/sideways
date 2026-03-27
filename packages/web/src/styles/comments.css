@@ -6,32 +6,41 @@
 .comments-toggle {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 30px;
+  padding: 0 0.4rem;
   background: none;
   border: none;
-  color: var(--sw-text-secondary);
-  font-size: var(--sw-text-sm);
+  border-radius: var(--sw-radius-sm);
+  color: var(--sw-text-tertiary);
+  font-size: var(--sw-text-xs);
   font-family: var(--sw-font-body);
   cursor: pointer;
-  transition: color var(--sw-duration-fast) var(--sw-ease);
+  transition: all var(--sw-duration-fast) var(--sw-ease);
 }
 
 .comments-toggle:hover {
   color: var(--sw-text-primary);
+  background: var(--sw-ink-lighter);
+}
+
+/* Hide text label but keep the badge visible */
+.comments-toggle span:not(.comments-badge) {
+  display: none;
 }
 
 .comments-badge {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 0.3em;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 0.25em;
   background: var(--sw-accent);
   color: var(--sw-ink-deepest);
-  border-radius: 9px;
-  font-size: 10px;
+  border-radius: 8px;
+  font-size: 9px;
   font-weight: 700;
 }
 
@@ -59,28 +68,40 @@
   box-shadow: 0 2px 12px rgba(226, 163, 54, 0.4);
 }
 
+/* ── Panel wrapper ────────────────────────────────────────────── */
+.comments-wrapper {
+  position: relative;
+}
+
 /* ── Panel ────────────────────────────────────────────────────── */
 .comments-panel-overlay {
   position: fixed;
-  top: var(--sw-header-height);
-  right: 0;
-  width: min(360px, 100vw);
-  height: calc(100vh - var(--sw-header-height));
-  background: var(--sw-ink-deepest);
-  border-left: 1px solid var(--sw-border);
+  top: calc(var(--sw-header-height) + 48px);
+  right: 12px;
+  bottom: 12px;
+  width: min(360px, calc(100vw - 24px));
+  background: var(--sw-ink-light);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--sw-radius-lg);
   overflow-y: auto;
+  overflow-x: hidden;
   z-index: 90;
-  animation: slideInRight var(--sw-duration) var(--sw-ease) both;
+  animation: panelIn var(--sw-duration) var(--sw-ease) both;
   display: flex;
   flex-direction: column;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .comments-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--sw-border);
   flex-shrink: 0;
 }
@@ -286,7 +307,7 @@
   font-family: var(--sw-font-mono);
   color: var(--sw-text-tertiary);
   padding: 0.3rem 0.5rem;
-  background: var(--sw-ink-light);
+  background: var(--sw-ink);
   border-radius: var(--sw-radius-sm);
   border-left: 2px solid var(--sw-accent-dim);
   margin-bottom: 0.4rem;
@@ -382,6 +403,19 @@
 
 .resolved-section[open] summary::before {
   content: "▼ ";
+}
+
+/* ── Inline comment markers in document ───────────────────────── */
+.comment-marker {
+  border-bottom: 2px solid var(--sw-accent-dim);
+  cursor: pointer;
+  transition: all var(--sw-duration-fast) var(--sw-ease);
+  border-radius: 1px;
+}
+
+.comment-marker:hover {
+  background: var(--sw-accent-glow);
+  border-bottom-color: var(--sw-accent);
 }
 
 /* ── Scroll-to highlight ──────────────────────────────────────── */
