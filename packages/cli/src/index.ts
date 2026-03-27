@@ -91,6 +91,22 @@ program
             : content;
 
           writeFileSync(filePath, output);
+
+          // Update sync state for this file
+          const syncInfo = await client.getSyncInfo(space).catch(() => []);
+          const remote = syncInfo.find((r: any) => r.slug === slug);
+          if (remote) {
+            const syncState = readSyncState(outDir, space);
+            syncState.files[filename] = {
+              slug,
+              remoteVersion: remote.version,
+              localHash: hashLocalFile(output),
+              remoteHash: remote.contentHash,
+            };
+            syncState.lastSync = new Date().toISOString();
+            writeSyncState(outDir, syncState);
+          }
+
           console.log(`Pulled ${space}/${slug} → ${filePath}`);
         } catch {
           console.error(`Document "${slug}" not found in space "${space}".`);
