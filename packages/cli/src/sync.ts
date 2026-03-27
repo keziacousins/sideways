@@ -169,7 +169,19 @@ export interface DiscoveredFile {
   depth: number;
 }
 
-export function discoverFiles(rootDir: string): DiscoveredFile[] {
+const DEFAULT_IGNORE = [
+  "node_modules", "venv", ".venv", "__pycache__", ".git",
+  "dist", "build", ".next", ".nuxt", ".output",
+  "vendor", "target", ".tox", "env",
+];
+
+function shouldIgnore(name: string, extraIgnore: string[] = []): boolean {
+  if (name.startsWith(".")) return true;
+  const all = [...DEFAULT_IGNORE, ...extraIgnore];
+  return all.includes(name);
+}
+
+export function discoverFiles(rootDir: string, ignore: string[] = []): DiscoveredFile[] {
   const results: DiscoveredFile[] = [];
 
   function walk(dir: string, relPath: string, depth: number, section: string | null, parentSlug: string | null) {
@@ -221,7 +233,7 @@ export function discoverFiles(rootDir: string): DiscoveredFile[] {
     // Recurse into subdirectories
     for (const entry of entries) {
       const fullPath = join(dir, entry);
-      if (entry.startsWith(".") || entry === "node_modules") continue;
+      if (shouldIgnore(entry, ignore)) continue;
       const stat = statSync(fullPath);
       if (stat.isDirectory()) {
         const childRel = relPath ? `${relPath}/${entry}` : entry;

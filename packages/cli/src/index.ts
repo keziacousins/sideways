@@ -286,7 +286,7 @@ program
       await ensureSpace(client, space, config.spaceName || undefined);
 
       // Discover all files from the sync root
-      const allFiles = discoverFiles(syncRoot);
+      const allFiles = discoverFiles(syncRoot, config.ignore);
 
       // If path targets a single file, filter to just that
       let files = allFiles;
@@ -434,7 +434,7 @@ program
 
     await requireSpace(client, space);
 
-    const files = discoverFiles(syncRoot);
+    const files = discoverFiles(syncRoot, config.ignore);
     const remoteFiles = await client.getSyncInfo(space);
     const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
     const syncState = readSyncState(syncRoot, space);
@@ -515,7 +515,7 @@ program
       process.exit(1);
     }
 
-    const files = discoverFiles(syncRoot);
+    const files = discoverFiles(syncRoot, config.ignore);
     const file = files.find(f => f.slug === slug);
     if (!file) {
       console.error(`No local file found for slug "${slug}"`);
