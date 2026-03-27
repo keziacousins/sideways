@@ -261,7 +261,7 @@
 }
 
 .comment-thread.resolved {
-  opacity: 0.5;
+  /* No dimming — resolved comments are still readable */
 }
 
 .comment-item {
