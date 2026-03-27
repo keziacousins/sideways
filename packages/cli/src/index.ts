@@ -780,4 +780,55 @@ program
     }
   });
 
+// ── export ────────────────────────────────────────────────────────────
+
+program
+  .command("export <slug>")
+  .description("Export a document as PDF")
+  .option("--space <space>", "Override space from config")
+  .option("--format <format>", "Output format", "pdf")
+  .option("--output <file>", "Output file path (default: <slug>.pdf)")
+  .option("--no-toc", "Exclude table of contents")
+  .option("--no-title-page", "Exclude title page")
+  .action(
+    async (
+      slug: string,
+      opts: {
+        space?: string;
+        format: string;
+        output?: string;
+        toc: boolean;
+        titlePage: boolean;
+      },
+    ) => {
+      if (opts.format !== "pdf") {
+        console.error(`Unsupported format: ${opts.format}. Only "pdf" is supported.`);
+        process.exit(1);
+      }
+
+      const config = requireConfig();
+      const space = opts.space || config.space;
+      const client = createClient(config.api);
+
+      await requireSpace(client, space, { createHint: false });
+
+      const outputPath = opts.output || `${slug}.pdf`;
+
+      try {
+        console.log(`Exporting ${space}/${slug} as PDF…`);
+        const res = await client.downloadPdf(space, slug, {
+          toc: opts.toc,
+          titlePage: opts.titlePage,
+        });
+
+        const buffer = Buffer.from(await res.arrayBuffer());
+        writeFileSync(outputPath, buffer);
+        console.log(`Written to ${outputPath} (${(buffer.length / 1024).toFixed(1)} KB)`);
+      } catch (err: any) {
+        console.error(`Export failed: ${err.message}`);
+        process.exit(1);
+      }
+    },
+  );
+
 program.parse();

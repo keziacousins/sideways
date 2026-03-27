@@ -131,6 +131,14 @@ services:
       - seaweedfs-master
       - seaweedfs-volume
 
+  # --- WeasyPrint (PDF rendering) ---
+
+  weasyprint:
+    build: ./weasyprint
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+
   # --- Mail (dev only) ---
 
   mailhog:

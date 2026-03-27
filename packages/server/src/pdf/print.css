@@ -1,0 +1,408 @@
+/* ═══════════════════════════════════════════════════════════════
+   SIDEWAYS PRINT STYLESHEET
+   Paper-optimized CSS for WeasyPrint PDF rendering.
+   No flexbox, no grid, no CSS variables — block layout only.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Page defaults ───────────────────────────────────────────── */
+@page {
+  size: A4;
+  margin: 2.5cm 2cm 2.5cm 2cm;
+
+  @top-right {
+    content: string(doc-title);
+    font-family: "Inter", sans-serif;
+    font-size: 8pt;
+    color: #aaa;
+  }
+
+  @bottom-center {
+    content: counter(page);
+    font-family: "Inter", sans-serif;
+    font-size: 8.5pt;
+    color: #999;
+  }
+}
+
+/* Title page: no header, no footer, no page number */
+@page title-page {
+  margin: 0;
+  @top-right { content: none; }
+  @bottom-center { content: none; }
+}
+
+/* TOC page: no doc-title header, but keep page number */
+@page toc-page {
+  @top-right { content: none; }
+}
+
+/* First content page: suppress header (title is already visible) */
+@page content-first {
+  @top-right { content: none; }
+}
+
+/* ── Base ─────────────────────────────────────────────────────── */
+body {
+  font-family: "Inter", sans-serif;
+  font-size: 11pt;
+  line-height: 1.65;
+  color: #1a1a1a;
+  margin: 0;
+  padding: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TITLE PAGE
+   ══════════════════════════════════════════════════════════════ */
+.print-title-page {
+  page: title-page;
+  page-break-after: always;
+  padding: 2.5cm 2cm;
+  padding-top: 7cm;
+}
+
+.print-title-page h1 {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 32pt;
+  font-weight: 400;
+  color: #1a1a1a;
+  margin: 0 0 0.3em;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.print-title-page .print-subtitle {
+  font-family: "Inter", sans-serif;
+  font-size: 13pt;
+  color: #666;
+  margin: 0 0 3em;
+  font-weight: 400;
+}
+
+.print-title-page .print-meta {
+  font-family: "Inter", sans-serif;
+  font-size: 9.5pt;
+  color: #999;
+  border-top: 0.5pt solid #ddd;
+  padding-top: 1em;
+}
+
+.print-title-page .print-meta span {
+  display: block;
+  margin-bottom: 0.25em;
+}
+
+.print-title-page .print-rule {
+  width: 4cm;
+  height: 0.5pt;
+  background: #c8a84e;
+  margin-bottom: 2em;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TABLE OF CONTENTS
+   ══════════════════════════════════════════════════════════════ */
+.print-toc {
+  page: toc-page;
+  page-break-after: always;
+}
+
+.print-toc h2 {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 20pt;
+  font-weight: 400;
+  margin: 0 0 1.2em;
+  color: #1a1a1a;
+  letter-spacing: -0.01em;
+}
+
+.print-toc ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.print-toc li {
+  margin-bottom: 0.15em;
+  line-height: 1.8;
+}
+
+.print-toc li.toc-h2 {
+  font-size: 10.5pt;
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.print-toc li.toc-h3 {
+  font-size: 9.5pt;
+  font-weight: 400;
+  padding-left: 1.5em;
+  color: #555;
+}
+
+.print-toc a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.print-toc a::after {
+  content: leader('. ') target-counter(attr(href url), page);
+  font-size: 9.5pt;
+  font-weight: 400;
+  color: #444;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CONTENT
+   ══════════════════════════════════════════════════════════════ */
+.print-content {
+  max-width: 100%;
+}
+
+/* Running header: set the string from the document title (h1) */
+.print-content h1 {
+  string-set: doc-title content();
+}
+
+/* ── Headings ────────────────────────────────────────────────── */
+.print-content h1,
+.print-content h2,
+.print-content h3,
+.print-content h4,
+.print-content h5,
+.print-content h6 {
+  font-family: "Newsreader", Georgia, serif;
+  color: #1a1a1a;
+  line-height: 1.2;
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+  font-weight: 500;
+  page-break-after: avoid;
+  page-break-inside: avoid;
+}
+
+/* h1: document title — no page break, it's the start of content */
+.print-content h1 {
+  font-size: 22pt;
+  font-weight: 400;
+  padding-bottom: 0.35em;
+  border-bottom: 0.5pt solid #ddd;
+  margin-top: 0;
+  letter-spacing: -0.01em;
+}
+
+/* h2: major sections — no forced page break (let content flow naturally) */
+.print-content h2 {
+  font-size: 16pt;
+  padding-bottom: 0.2em;
+  border-bottom: 0.5pt solid #eee;
+  margin-top: 2.5em;
+}
+
+/* h3: subsections */
+.print-content h3 {
+  font-size: 12.5pt;
+  margin-top: 1.8em;
+}
+
+/* h4: label-style */
+.print-content h4 {
+  font-family: "Inter", sans-serif;
+  font-size: 9.5pt;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #666;
+  margin-top: 1.5em;
+}
+
+/* ── Paragraphs ──────────────────────────────────────────────── */
+.print-content p {
+  margin: 0 0 0.9em;
+  orphans: 3;
+  widows: 3;
+}
+
+.print-content strong {
+  font-weight: 600;
+}
+
+.print-content em {
+  font-family: "Newsreader", Georgia, serif;
+  font-style: italic;
+}
+
+/* ── Links ───────────────────────────────────────────────────── */
+.print-content a {
+  color: #1a1a1a;
+  text-decoration: underline;
+  text-decoration-color: #bbb;
+}
+
+/* ── Lists ───────────────────────────────────────────────────── */
+.print-content ul,
+.print-content ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.5em;
+}
+
+.print-content li {
+  margin-bottom: 0.25em;
+}
+
+.print-content li > ul,
+.print-content li > ol {
+  margin-top: 0.25em;
+  margin-bottom: 0;
+}
+
+/* Task lists */
+.print-content input[type="checkbox"] {
+  margin-right: 0.4em;
+}
+
+/* ── Code ────────────────────────────────────────────────────── */
+.print-content code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.85em;
+  background: #f5f5f5;
+  border: 0.5pt solid #e0e0e0;
+  border-radius: 2pt;
+  padding: 0.1em 0.3em;
+  color: #c7254e;
+}
+
+.print-content pre {
+  margin: 0 0 1.2em;
+  background: #f8f8f8;
+  border: 0.5pt solid #e0e0e0;
+  border-radius: 3pt;
+  padding: 0.7em 0.9em;
+  overflow: hidden;
+  font-size: 8.5pt;
+  line-height: 1.45;
+  /* Allow long code blocks to break across pages */
+  page-break-inside: auto;
+}
+
+.print-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #1a1a1a;
+  font-size: 8.5pt;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* ── Blockquotes ─────────────────────────────────────────────── */
+.print-content blockquote {
+  margin: 0 0 0.9em;
+  padding: 0.5em 1em;
+  border-left: 2pt solid #c8a84e;
+  background: #fdf8ec;
+  color: #444;
+  font-family: "Newsreader", Georgia, serif;
+  font-style: italic;
+  font-size: 11pt;
+}
+
+.print-content blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Callouts ────────────────────────────────────────────────── */
+.print-content .callout,
+.print-content .admonition {
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  border-left: 2pt solid;
+  font-size: 10pt;
+  page-break-inside: avoid;
+}
+
+.print-content .callout-tip {
+  background: #f0f7ff;
+  border-color: #4a90d9;
+}
+
+.print-content .callout-warning {
+  background: #fff8ee;
+  border-color: #d4a017;
+}
+
+.print-content .callout-note {
+  background: #f5f5f5;
+  border-color: #999;
+}
+
+/* ── Tables ──────────────────────────────────────────────────── */
+.print-content table {
+  width: 100%;
+  margin: 0 0 1.2em;
+  border-collapse: collapse;
+  font-size: 9pt;
+  page-break-inside: auto;
+}
+
+.print-content thead {
+  display: table-header-group;
+}
+
+.print-content tr {
+  page-break-inside: avoid;
+}
+
+.print-content th,
+.print-content td {
+  padding: 0.35em 0.6em;
+  border: 0.5pt solid #ccc;
+  text-align: left;
+}
+
+.print-content th {
+  background: #f0f0f0;
+  font-weight: 600;
+  font-size: 8.5pt;
+}
+
+/* ── Horizontal Rules ────────────────────────────────────────── */
+.print-content hr {
+  border: none;
+  border-top: 0.5pt solid #ddd;
+  margin: 2em 0;
+}
+
+/* ── Images ──────────────────────────────────────────────────── */
+.print-content img {
+  max-width: 100%;
+  height: auto;
+  margin: 1em 0;
+  page-break-inside: avoid;
+}
+
+/* ── KaTeX ───────────────────────────────────────────────────── */
+.print-content .katex {
+  color: #1a1a1a;
+}
+
+/* ── Heading anchors — hide autolink wrapper ─────────────────── */
+.print-content h1 a,
+.print-content h2 a,
+.print-content h3 a,
+.print-content h4 a,
+.print-content h5 a,
+.print-content h6 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── Syntax highlighting (print-friendly, muted) ─────────────── */
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: #8250df; }
+.hljs-string, .hljs-attr { color: #0a3069; }
+.hljs-comment { color: #6e7781; font-style: italic; }
+.hljs-number, .hljs-literal { color: #0550ae; }
+.hljs-function .hljs-title, .hljs-title.function_ { color: #6639ba; }
+.hljs-type, .hljs-title.class_ { color: #953800; }
+.hljs-variable, .hljs-template-variable { color: #953800; }
+.hljs-meta { color: #0550ae; }

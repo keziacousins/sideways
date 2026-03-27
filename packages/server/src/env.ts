@@ -22,4 +22,6 @@ export const env = {
     process.env.KRATOS_PUBLIC_URL || "http://localhost:4433",
   kratosAdminUrl:
     process.env.KRATOS_ADMIN_URL || "http://localhost:4434",
+  weasyPrintUrl:
+    process.env.WEASYPRINT_URL || "http://localhost:5001",
 };

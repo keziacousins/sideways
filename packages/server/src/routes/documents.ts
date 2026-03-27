@@ -13,6 +13,8 @@ import {
 import type { Storage } from "@sideways/storage";
 import type { AuthUser } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
+import { buildPrintHTML } from "../pdf/template.js";
+import { env } from "../env.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -579,6 +581,75 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     }
 
     return c.json({ reordered: items.length });
+  });
+
+  /** Export a document as PDF */
+  router.get("/:space/:slug/pdf", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const doc = await db.query.documents.findFirst({
+      where: and(
+        eq(documents.spaceId, space.id),
+        eq(documents.slug, c.req.param("slug")),
+      ),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
+
+    const latestVersion = await db.query.documentVersions.findFirst({
+      where: eq(documentVersions.documentId, doc.id),
+      orderBy: desc(documentVersions.version),
+    });
+    if (!latestVersion) return c.json({ error: "No versions" }, 404);
+
+    // Render markdown to HTML with pdf target
+    const html = await renderMarkdown(latestVersion.content, { target: "pdf" });
+
+    // Build the full print HTML document
+    const showToc = c.req.query("toc") !== "false";
+    const showTitlePage = c.req.query("title-page") !== "false";
+
+    const printHTML = buildPrintHTML({
+      title: doc.title,
+      spaceName: space.name,
+      html,
+      date: new Date().toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+      }),
+      showTitlePage,
+      showToc,
+    });
+
+    // Send to WeasyPrint service
+    try {
+      const pdfRes = await fetch(`${env.weasyPrintUrl}/render`, {
+        method: "POST",
+        headers: { "Content-Type": "text/html" },
+        body: printHTML,
+      });
+
+      if (!pdfRes.ok) {
+        const err = await pdfRes.text();
+        return c.json({ error: `PDF rendering failed: ${err}` }, 502);
+      }
+
+      const pdfBytes = await pdfRes.arrayBuffer();
+      const filename = `${doc.slug}.pdf`;
+
+      return new Response(pdfBytes, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+        },
+      });
+    } catch (e: any) {
+      return c.json(
+        { error: `WeasyPrint service unavailable: ${e.message}` },
+        503,
+      );
+    }
   });
 
   return router;

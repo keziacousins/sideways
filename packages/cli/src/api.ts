@@ -180,5 +180,41 @@ export function createClient(baseUrl: string) {
     deleteKey(id: string) {
       return request(`/api/keys/${id}`, { method: "DELETE" });
     },
+
+    /** Download PDF — returns raw Response (not parsed JSON) */
+    async downloadPdf(
+      space: string,
+      slug: string,
+      opts?: { toc?: boolean; titlePage?: boolean },
+    ): Promise<Response> {
+      const creds = getStoredCredentials();
+      const headers: Record<string, string> = {};
+      if (creds?.api_key) headers["Authorization"] = `Bearer ${creds.api_key}`;
+
+      const params = new URLSearchParams();
+      if (opts?.toc === false) params.set("toc", "false");
+      if (opts?.titlePage === false) params.set("title-page", "false");
+      const qs = params.toString() ? `?${params}` : "";
+
+      const res = await fetch(
+        `${baseUrl}/api/documents/${space}/${slug}/pdf${qs}`,
+        { headers },
+      );
+
+      if (!res.ok) {
+        const body = await res.text();
+        if (res.status === 404) {
+          console.error("Document not found.");
+          process.exit(1);
+        }
+        if (res.status === 503) {
+          console.error("PDF service unavailable. Is WeasyPrint running?");
+          process.exit(1);
+        }
+        throw new Error(`PDF export failed (${res.status}): ${body}`);
+      }
+
+      return res;
+    },
   };
 }
