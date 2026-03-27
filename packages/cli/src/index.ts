@@ -742,12 +742,15 @@ program
 
     for (const c of comments) {
       const author = c.author?.name || "Unknown";
-      const date = c.createdAt?.slice(0, 10) || "";
-      const resolved = c.resolved ? " [RESOLVED]" : "";
+      const email = c.author?.email ? ` <${c.author.email}>` : "";
+      const time = c.createdAt ? new Date(c.createdAt).toLocaleString() : "";
+      const resolved = c.resolved ? " \x1b[33m[RESOLVED]\x1b[0m" : "";
       const reply = c.parentId ? "  ↳ " : "";
-      const anchor = c.anchorText ? `\n    anchor: "${c.anchorText.slice(0, 60)}${c.anchorText.length > 60 ? "..." : ""}"` : "";
+      const section = c.anchorSection ? `\n${reply}    section: ${c.anchorSection}` : "";
+      const anchor = c.anchorText ? `\n${reply}    anchor: "${c.anchorText}"` : "";
 
-      console.log(`${reply}\x1b[2m${c.id.slice(0, 8)}\x1b[0m  ${author}  ${date}${resolved}${anchor}`);
+      console.log(`${reply}\x1b[2m${c.id}\x1b[0m`);
+      console.log(`${reply}  ${author}${email}  ${time}${resolved}${section}${anchor}`);
       console.log(`${reply}  ${c.body}`);
       console.log();
     }
