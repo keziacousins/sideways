@@ -721,6 +721,74 @@ program
     console.log(`Removed member ${memberId}`);
   });
 
+// ── comments ──────────────────────────────────────────────────────────
+
+program
+  .command("comments <slug>")
+  .description("List comments on a document")
+  .option("--space <space>", "Override space from config")
+  .option("--resolved", "Include resolved comments")
+  .action(async (input: string, opts: { space?: string; resolved?: boolean }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+    const slug = toSlug(input);
+
+    const comments = await client.getComments(space, slug, opts.resolved);
+    if (comments.length === 0) {
+      console.log("No comments.");
+      return;
+    }
+
+    for (const c of comments) {
+      const author = c.author?.name || "Unknown";
+      const date = c.createdAt?.slice(0, 10) || "";
+      const resolved = c.resolved ? " [RESOLVED]" : "";
+      const reply = c.parentId ? "  ↳ " : "";
+      const anchor = c.anchorText ? `\n    anchor: "${c.anchorText.slice(0, 60)}${c.anchorText.length > 60 ? "..." : ""}"` : "";
+
+      console.log(`${reply}\x1b[2m${c.id.slice(0, 8)}\x1b[0m  ${author}  ${date}${resolved}${anchor}`);
+      console.log(`${reply}  ${c.body}`);
+      console.log();
+    }
+  });
+
+program
+  .command("comment <slug> <body>")
+  .description("Add a comment to a document")
+  .option("--space <space>", "Override space from config")
+  .option("--anchor <text>", "Anchor comment to specific text in the document")
+  .option("--section <path>", "Section heading path for the anchor")
+  .option("--reply <id>", "Reply to an existing comment")
+  .action(async (input: string, body: string, opts: { space?: string; anchor?: string; section?: string; reply?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+    const slug = toSlug(input);
+
+    const payload: Record<string, any> = { body };
+    if (opts.anchor) payload.anchorText = opts.anchor;
+    if (opts.section) payload.anchorSection = opts.section;
+    if (opts.reply) payload.parentId = opts.reply;
+
+    const result = await client.addComment(space, slug, payload as any);
+    console.log(`Comment added (${result.id.slice(0, 8)})`);
+  });
+
+program
+  .command("resolve <slug> <comment-id>")
+  .description("Toggle resolve/reopen on a comment")
+  .option("--space <space>", "Override space from config")
+  .action(async (input: string, commentId: string, opts: { space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+    const slug = toSlug(input);
+
+    const result = await client.resolveComment(space, slug, commentId);
+    console.log(`Comment ${result.resolved ? "resolved" : "reopened"}`);
+  });
+
 // ── export ────────────────────────────────────────────────────────────
 
 program

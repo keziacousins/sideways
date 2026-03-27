@@ -177,6 +177,24 @@ export function createClient(baseUrl: string) {
       return request(`/api/comments/${space}/${slug}${qs}`);
     },
 
+    addComment(space: string, slug: string, body: {
+      body: string;
+      anchorText?: string;
+      anchorSection?: string;
+      parentId?: string;
+    }) {
+      return request(`/api/comments/${space}/${slug}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
+
+    resolveComment(space: string, slug: string, commentId: string) {
+      return request(`/api/comments/${space}/${slug}/${commentId}/resolve`, {
+        method: "POST",
+      });
+    },
+
     listKeys() {
       return request("/api/keys");
     },
