@@ -57,8 +57,37 @@ try {
         </a>
       ))}
     </div>
+
+    <div class="cli-section">
+      <h3 class="cli-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
+        </svg>
+        CLI
+      </h3>
+      <p class="cli-desc">Sync docs from your filesystem. Requires Node.js 18+.</p>
+      <div class="cli-install">
+        <code id="install-cmd">curl -fsSL {import.meta.env.PUBLIC_URL || Astro.url.origin}/install.sh | sh -s -- {import.meta.env.PUBLIC_URL || Astro.url.origin}</code>
+        <button class="cli-copy" id="copy-install" title="Copy">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        </button>
+      </div>
+    </div>
   </div>
 </BaseLayout>
+
+<script>
+  document.getElementById("copy-install")?.addEventListener("click", () => {
+    const cmd = document.getElementById("install-cmd")?.textContent || "";
+    navigator.clipboard.writeText(cmd).then(() => {
+      const btn = document.getElementById("copy-install");
+      if (btn) { btn.innerHTML = "✓"; setTimeout(() => { btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; }, 1500); }
+    });
+  });
+</script>
 
 <style>
   .home {
@@ -181,5 +210,69 @@ try {
     text-align: center;
     background: var(--sw-ink);
     color: var(--sw-text-ghost);
+  }
+
+  .cli-section {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--sw-border);
+  }
+
+  .cli-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm);
+    font-weight: 600;
+    color: var(--sw-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
+  }
+
+  .cli-desc {
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-tertiary);
+    margin-bottom: 0.75rem;
+  }
+
+  .cli-install {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.8rem;
+    background: var(--sw-ink-deepest);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-mono);
+    font-size: var(--sw-text-xs);
+    overflow-x: auto;
+  }
+
+  .cli-install code {
+    flex: 1;
+    color: var(--sw-text-primary);
+    white-space: nowrap;
+  }
+
+  .cli-copy {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: none;
+    border: none;
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-tertiary);
+    cursor: pointer;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .cli-copy:hover {
+    color: var(--sw-text-primary);
+    background: var(--sw-ink-lighter);
   }
 </style>

@@ -6,7 +6,7 @@
     "sideways": "./bin/sideways"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/sideways.cjs",
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
@@ -15,7 +15,8 @@
     "yaml": "^2.7.0"
   },
   "devDependencies": {
-    "tsx": "^4.19.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.27.4",
+    "tsx": "^4.19.0"
   }
 }
