@@ -7,4 +7,5 @@ export default defineConfig({
   adapter: node({ mode: "standalone" }),
   integrations: [react()],
   server: { port: 4000 },
+  security: { checkOrigin: false },
 });

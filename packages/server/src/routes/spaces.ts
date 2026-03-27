@@ -92,6 +92,15 @@ export function createSpaceRoutes(db: Database) {
     });
 
     if (existing) {
+      // Only owner can change visibility
+      if (body.visibility && body.visibility !== existing.visibility && existing.ownerId !== ownerId) {
+        return c.json({ error: "Only the space owner can change visibility" }, 403);
+      }
+      // Must have write access to update
+      const user = c.get("user") as AuthUser | null;
+      if (!await canWriteSpace(db, existing.id, existing.ownerId, user)) {
+        return c.json({ error: "You don't have permission to update this space" }, 403);
+      }
       const [updated] = await db
         .update(spaces)
         .set({

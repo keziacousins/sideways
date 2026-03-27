@@ -20,9 +20,33 @@ try {
       <p class="home-subtitle">Browse spaces or search for what you need</p>
     </div>
 
+    {accessToken && (
+      <div id="create-space-area">
+        <button class="create-space-btn" id="create-space-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New space
+        </button>
+        <form class="create-space-form" id="create-space-form" style="display:none">
+          <input type="text" name="name" placeholder="Space name" class="create-input" required />
+          <input type="text" name="slug" placeholder="slug (auto)" class="create-input create-input-slug" />
+          <select name="visibility" class="create-select">
+            <option value="private">Private</option>
+            <option value="public">Public</option>
+            <option value="org">Org</option>
+            <option value="shared">Shared link</option>
+          </select>
+          <button type="submit" class="create-submit">Create</button>
+          <button type="button" class="create-cancel" id="create-cancel">Cancel</button>
+        </form>
+      </div>
+    )}
+
     <div class="space-grid">
-      {spaces.length === 0 && (
-        <p class="empty-state">No spaces yet. Create one via the API or CLI.</p>
+      {spaces.length === 0 && !accessToken && (
+        <p class="empty-state">No spaces yet.</p>
+      )}
+      {spaces.length === 0 && accessToken && (
+        <p class="empty-state">No spaces yet. Create one above.</p>
       )}
       {spaces.map((space, i) => (
         <a
@@ -214,4 +238,152 @@ try {
   .setup-link a:hover {
     color: var(--sw-accent);
   }
+
+  #create-space-area {
+    margin-bottom: 1.5rem;
+  }
+
+  .create-space-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: none;
+    border: 1px dashed var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    color: var(--sw-text-secondary);
+    font-size: var(--sw-text-sm);
+    cursor: pointer;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+  .create-space-btn:hover {
+    border-color: var(--sw-accent);
+    color: var(--sw-accent);
+  }
+
+  .create-space-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 1rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-md);
+  }
+
+  .create-input, .create-select {
+    font-size: var(--sw-text-sm);
+    padding: 0.45rem 0.65rem;
+    background: var(--sw-ink-surface);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-primary);
+    outline: none;
+  }
+  .create-input:focus, .create-select:focus {
+    border-color: var(--sw-accent);
+  }
+  .create-input { flex: 1; min-width: 10rem; }
+  .create-input-slug { flex: 0.6; min-width: 8rem; }
+  .create-select { min-width: 7rem; }
+
+  .create-submit {
+    padding: 0.45rem 1rem;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deep);
+    border: none;
+    border-radius: var(--sw-radius-sm);
+    font-size: var(--sw-text-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .create-submit:hover { opacity: 0.9; }
+
+  .create-cancel {
+    padding: 0.45rem 0.75rem;
+    background: none;
+    border: none;
+    color: var(--sw-text-tertiary);
+    font-size: var(--sw-text-sm);
+    cursor: pointer;
+  }
+  .create-cancel:hover { color: var(--sw-text-primary); }
+
+  @media (max-width: 600px) {
+    .home { padding: 0.5rem 0; }
+    .home-hero { padding: 1.25rem 0 1.5rem; }
+    .home-title { font-size: var(--sw-text-2xl); }
+    .home-subtitle { font-size: var(--sw-text-base); }
+    .space-card {
+      flex-wrap: wrap;
+      padding: 1rem;
+      gap: 0.75rem;
+    }
+    .space-card-icon { display: none; }
+    .space-card-meta {
+      order: -1;
+      width: 100%;
+    }
+    .visibility-badge {
+      font-size: 0.65rem;
+    }
+    .create-space-form {
+      flex-direction: column;
+    }
+    .create-input, .create-input-slug, .create-select {
+      width: 100%;
+      min-width: 0;
+    }
+  }
 </style>
+
+<script>
+  const btn = document.getElementById("create-space-btn");
+  const form = document.getElementById("create-space-form") as HTMLFormElement | null;
+  const cancel = document.getElementById("create-cancel");
+
+  if (btn && form) {
+    const nameInput = form.querySelector('input[name="name"]') as HTMLInputElement;
+    const slugInput = form.querySelector('input[name="slug"]') as HTMLInputElement;
+
+    btn.addEventListener("click", () => {
+      btn.style.display = "none";
+      form.style.display = "flex";
+      nameInput.focus();
+    });
+
+    cancel?.addEventListener("click", () => {
+      form.style.display = "none";
+      btn.style.display = "inline-flex";
+      form.reset();
+    });
+
+    // Auto-generate slug from name
+    nameInput.addEventListener("input", () => {
+      if (!slugInput.dataset.manual) {
+        slugInput.value = nameInput.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      }
+    });
+    slugInput.addEventListener("input", () => {
+      slugInput.dataset.manual = slugInput.value ? "true" : "";
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(form));
+      const res = await fetch("/spaces/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        const space = await res.json();
+        window.location.href = `/s/${space.slug}`;
+      } else {
+        const err = await res.json().catch(() => ({ error: "Failed to create space" }));
+        alert(err.error || "Failed to create space");
+      }
+    });
+  }
+</script>

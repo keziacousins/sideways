@@ -193,11 +193,21 @@ const signupHref = `/auth/signup?returnTo=${encodeURIComponent(currentPath)}`;
   }
 
   @media (max-width: 600px) {
+    .header-inner {
+      padding: 0 0.75rem;
+    }
+    .logo-text {
+      display: none;
+    }
     .search-trigger {
       display: none;
     }
-    .user-name {
+    .user-name, .header-link {
       display: none;
+    }
+    .user-avatar {
+      width: 30px;
+      height: 30px;
     }
   }
 </style>

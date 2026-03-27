@@ -60,7 +60,7 @@
   --sw-comments-width: 320px;
   --sw-header-height: 56px;
   --sw-content-max: 68ch;
-  --sw-page-pad: 2.5rem;
+  --sw-page-pad: 1.75rem 2.5rem;
 
   /* ── Radii ─────────────────────────────────────────────────── */
   --sw-radius-sm: 4px;

@@ -10,6 +10,8 @@ import { createKeyRoutes } from "./routes/keys.js";
 import { createCommentRoutes } from "./routes/comments.js";
 import { createMcpRoutes } from "./routes/mcp.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { requestLogMiddleware } from "./middleware/requestLog.js";
+import { logger } from "./logger.js";
 import { env } from "./env.js";
 
 const db = createDb(env.databaseUrl);
@@ -18,6 +20,7 @@ const storage = createStorage({ filerUrl: env.seaweedFilerUrl });
 const app = new Hono();
 
 app.use("*", cors());
+app.use("*", requestLogMiddleware);
 
 // Auth middleware on all routes — sets user if token present, null otherwise
 app.use("*", authMiddleware(db));
@@ -84,7 +87,7 @@ app.route("/api/comments", createCommentRoutes(db));
 app.route("/api/mcp", createMcpRoutes(db));
 
 serve({ fetch: app.fetch, port: env.port }, () => {
-  console.log(`Sideways API running on http://localhost:${env.port}`);
+  logger.info({ port: env.port }, "Sideways API running");
 });
 
 export default app;

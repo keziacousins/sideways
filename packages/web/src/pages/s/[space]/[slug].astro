@@ -69,21 +69,26 @@ const navItems = documents.map((d) => ({
 
   {doc ? (
     <div class="doc-page">
-      <nav class="breadcrumbs">
-        <a href="/">Spaces</a>
-        <span class="breadcrumb-sep">/</span>
-        <a href={`/s/${spaceSlug}`}>{space?.name}</a>
-        <span class="breadcrumb-sep">/</span>
-        <span class="breadcrumb-current">{doc.title}</span>
-      </nav>
-
-      {doc.tags?.length > 0 && (
-        <div class="doc-tags">
-          {doc.tags.map((tag) => (
-            <span class="tag">{tag}</span>
+      <div class="doc-meta-top">
+        <nav class="breadcrumbs">
+          <a href="/">Spaces</a>
+          <span class="breadcrumb-sep">/</span>
+          <a href={`/s/${spaceSlug}`}>{space?.name}</a>
+          <span class="breadcrumb-sep">/</span>
+          <span class="breadcrumb-current">{doc.title}</span>
+        </nav>
+        <div class="doc-tags" id="doc-tags" data-space={spaceSlug} data-slug={slug} data-can-write={space?.canWrite ? "true" : "false"}>
+          {(doc.tags || []).map((tag) => (
+            <span class="tag" data-tag={tag}>
+              {tag}
+              {space?.canWrite && <button class="tag-remove" aria-label={`Remove tag ${tag}`}>&times;</button>}
+            </span>
           ))}
+          {space?.canWrite && (
+            <button class="tag-add" id="tag-add-btn" title="Add tag">+</button>
+          )}
         </div>
-      )}
+      </div>
 
       <div class="doc-toolbar">
         <div class="doc-toolbar-left">
@@ -180,13 +185,20 @@ const navItems = documents.map((d) => ({
     max-width: var(--sw-content-max);
   }
 
+  .doc-meta-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.5rem;
+  }
+
   .breadcrumbs {
     display: flex;
     align-items: center;
     gap: 0.4rem;
     font-size: var(--sw-text-sm);
     color: var(--sw-text-tertiary);
-    margin-bottom: 1.5rem;
   }
 
   .breadcrumbs a {
@@ -210,10 +222,12 @@ const navItems = documents.map((d) => ({
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
-    margin-bottom: 1rem;
   }
 
   .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25em;
     font-size: var(--sw-text-xs);
     padding: 0.15em 0.5em;
     background: var(--sw-ink-surface);
@@ -221,12 +235,59 @@ const navItems = documents.map((d) => ({
     color: var(--sw-text-secondary);
   }
 
+  .tag-remove {
+    background: none;
+    border: none;
+    color: var(--sw-text-ghost);
+    cursor: pointer;
+    font-size: 1em;
+    line-height: 1;
+    padding: 0;
+    margin-left: -0.1em;
+  }
+  .tag-remove:hover {
+    color: var(--sw-text-primary);
+  }
+
+  .tag-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--sw-text-xs);
+    width: 1.5em;
+    height: 1.5em;
+    padding: 0;
+    background: none;
+    border: 1px dashed var(--sw-border-strong);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-ghost);
+    cursor: pointer;
+  }
+  .tag-add:hover {
+    color: var(--sw-text-secondary);
+    border-color: var(--sw-text-ghost);
+  }
+
+  .tag-input {
+    font-size: var(--sw-text-xs);
+    padding: 0.15em 0.4em;
+    background: var(--sw-ink-surface);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-primary);
+    outline: none;
+    width: 6em;
+  }
+  .tag-input:focus {
+    border-color: var(--sw-accent);
+  }
+
   .doc-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--sw-border);
     position: sticky;
     top: var(--sw-header-height);
@@ -339,8 +400,22 @@ const navItems = documents.map((d) => ({
     margin: 0.2rem 0.4rem;
   }
 
-  /* ── Mobile: hide Edit/Copy, keep Comments + kebab ── */
+  /* ── Mobile ── */
   @media (max-width: 600px) {
+    .doc-meta-top {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.35rem;
+    }
+    .breadcrumbs {
+      font-size: var(--sw-text-xs);
+    }
+    .tag-remove {
+      display: none;
+    }
+    .tag-add {
+      display: none;
+    }
     #edit-toggle,
     #copy-markdown,
     .doc-version {
@@ -470,6 +545,79 @@ const navItems = documents.map((d) => ({
 </style>
 
 {doc && (
+<script>
+  // Tag editor
+  const tagsEl = document.getElementById("doc-tags");
+  if (tagsEl && tagsEl.dataset.canWrite === "true") {
+    const spaceSlug = tagsEl.dataset.space;
+    const docSlug = tagsEl.dataset.slug;
+    const addBtn = document.getElementById("tag-add-btn");
+
+    function getCurrentTags() {
+      return Array.from(tagsEl.querySelectorAll(".tag[data-tag]")).map(el => el.dataset.tag);
+    }
+
+    async function saveTags(tags) {
+      await fetch(`/s/${spaceSlug}/${docSlug}/rename`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags }),
+      });
+    }
+
+    function createTagEl(tag) {
+      const span = document.createElement("span");
+      span.className = "tag";
+      span.dataset.tag = tag;
+      span.textContent = tag;
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "tag-remove";
+      removeBtn.setAttribute("aria-label", `Remove tag ${tag}`);
+      removeBtn.innerHTML = "&times;";
+      removeBtn.onclick = async () => {
+        span.remove();
+        await saveTags(getCurrentTags());
+      };
+      span.appendChild(removeBtn);
+      return span;
+    }
+
+    // Remove existing tags
+    tagsEl.addEventListener("click", async (e) => {
+      const removeBtn = e.target.closest(".tag-remove");
+      if (!removeBtn) return;
+      e.preventDefault();
+      removeBtn.closest(".tag").remove();
+      await saveTags(getCurrentTags());
+    });
+
+    // Add tag
+    addBtn?.addEventListener("click", () => {
+      if (tagsEl.querySelector(".tag-input")) return;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "tag-input";
+      input.placeholder = "tag…";
+      tagsEl.insertBefore(input, addBtn);
+      input.focus();
+
+      async function commit() {
+        const val = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
+        input.remove();
+        if (!val || getCurrentTags().includes(val)) return;
+        tagsEl.insertBefore(createTagEl(val), addBtn);
+        await saveTags(getCurrentTags());
+      }
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(); }
+        if (e.key === "Escape") input.remove();
+      });
+      input.addEventListener("blur", commit);
+    });
+  }
+</script>
+
 <script>
   // Vanilla JS: text selection → comment button + rich context capture
   const btn = document.createElement("button");
