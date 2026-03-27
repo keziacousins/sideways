@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { basename, resolve, join, relative } from "node:path";
 import { findConfig, createConfig, requireConfig } from "./config.js";
 import { createClient } from "./api.js";
@@ -336,8 +336,14 @@ program
         let status: string;
         if (!tracked && !remote) status = "new-local";
         else if (!tracked && remote) {
-          // Not tracked — compare hashes to decide
-          status = localHash === remote.contentHash ? "unchanged" : "remote-modified";
+          // Not tracked — compare hashes; if different, use mtime to decide direction
+          if (localHash === remote.contentHash) {
+            status = "unchanged";
+          } else {
+            const localMtime = statSync(filePath).mtimeMs;
+            const remoteMtime = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+            status = localMtime > remoteMtime ? "local-modified" : "remote-modified";
+          }
         }
         else if (tracked && !remote) status = "new-local";
         else if (tracked) {
@@ -466,7 +472,13 @@ program
       let status: string;
       if (!tracked && !remote) status = "new-local";
       else if (!tracked && remote) {
-        status = localHash === remote.contentHash ? "unchanged" : "remote-modified";
+        if (localHash === remote.contentHash) {
+          status = "unchanged";
+        } else {
+          const localMtime = statSync(filePath).mtimeMs;
+          const remoteMtime = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+          status = localMtime > remoteMtime ? "local-modified" : "remote-modified";
+        }
       }
       else if (tracked && !remote) status = "new-local";
       else if (tracked) {
@@ -516,9 +528,11 @@ program
     }
 
     const files = discoverFiles(syncRoot, config.ignore);
-    const file = files.find(f => f.slug === slug);
+    // Accept slug, filename, or relative path
+    const normalized = slugFromFilename(basename(slug));
+    const file = files.find(f => f.slug === slug || f.slug === normalized || f.relativePath === slug || f.filename === slug);
     if (!file) {
-      console.error(`No local file found for slug "${slug}"`);
+      console.error(`No local file found for "${slug}"`);
       process.exit(1);
     }
 

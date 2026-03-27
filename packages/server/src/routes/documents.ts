@@ -133,6 +133,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
           title: doc.title,
           version: latest?.version ?? 0,
           contentHash: latest?.contentHash ?? "",
+          updatedAt: doc.updatedAt.toISOString(),
         };
       }),
     );
