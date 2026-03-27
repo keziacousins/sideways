@@ -1,0 +1,318 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const PUBLIC_URL = import.meta.env.PUBLIC_URL || Astro.url.origin;
+const API_URL = import.meta.env.PUBLIC_API_URL || PUBLIC_URL;
+---
+
+<BaseLayout title="Setup">
+  <div class="setup">
+    <h1 class="setup-title">Setup</h1>
+    <p class="setup-intro">Tools for working with Sideways from your terminal and AI assistants.</p>
+
+    <!-- CLI -->
+    <section class="setup-section">
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
+        </svg>
+        CLI
+      </h2>
+      <p>Sync documentation from your filesystem. Push, pull, and manage docs from the command line.</p>
+
+      <h3>Install</h3>
+      <p class="setup-prereq">Requires <strong>Node.js 18+</strong></p>
+      <div class="code-block" data-copy="cli-install">
+        <code id="cli-install">curl -fsSL {PUBLIC_URL}/install.sh | sh -s -- {PUBLIC_URL}</code>
+      </div>
+
+      <h3>Quick start</h3>
+      <div class="code-block">
+        <code><span class="c"># Initialize a project</span>
+sideways init my-docs --api {API_URL}
+
+<span class="c"># Pull all docs</span>
+sideways pull
+
+<span class="c"># Edit locally, then push</span>
+sideways push
+
+<span class="c"># Check what's changed</span>
+sideways status</code>
+      </div>
+
+      <h3>Commands</h3>
+      <div class="cmd-list">
+        <div class="cmd"><code>sideways init &lt;space&gt;</code><span>Create .sideways.yml in current directory</span></div>
+        <div class="cmd"><code>sideways pull [file]</code><span>Pull documents from remote</span></div>
+        <div class="cmd"><code>sideways push [file]</code><span>Push local changes to remote</span></div>
+        <div class="cmd"><code>sideways status</code><span>Show sync status</span></div>
+        <div class="cmd"><code>sideways diff &lt;file&gt;</code><span>Show diff between local and remote</span></div>
+        <div class="cmd"><code>sideways export &lt;slug&gt; --format pdf</code><span>Export document as PDF</span></div>
+      </div>
+    </section>
+
+    <!-- MCP -->
+    <section class="setup-section">
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3" /><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+        </svg>
+        MCP (AI Integration)
+      </h2>
+      <p>Connect AI assistants to read, write, and comment on documentation via the <a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a>.</p>
+
+      <p class="setup-prereq">Requires an <strong>API key</strong> — create one from <a href="/settings/keys">Settings → API Keys</a>.</p>
+
+      <h3>Claude Desktop</h3>
+      <p>Uses the Streamable HTTP transport. Add to your Claude Desktop config (<code>claude_desktop_config.json</code>):</p>
+      <div class="code-block" data-copy="mcp-desktop">
+        <code id="mcp-desktop">{JSON.stringify({
+  mcpServers: {
+    sideways: {
+      url: `${API_URL}/api/mcp?key=YOUR_API_KEY`
+    }
+  }
+}, null, 2)}</code>
+      </div>
+
+      <h3>Claude Code</h3>
+      <p>Uses stdio transport with the downloaded MCP server. Add to <code>.mcp.json</code> in your project:</p>
+      <div class="code-block" data-copy="mcp-code">
+        <code id="mcp-code">{JSON.stringify({
+  mcpServers: {
+    sideways: {
+      command: "node",
+      args: ["~/.local/bin/sideways-mcp.cjs"],
+      env: {
+        SIDEWAYS_API_URL: API_URL,
+        SIDEWAYS_API_KEY: "YOUR_API_KEY"
+      }
+    }
+  }
+}, null, 2)}</code>
+      </div>
+
+      <h3>Available tools</h3>
+      <div class="cmd-list">
+        <div class="cmd"><code>list_spaces</code><span>List all accessible spaces</span></div>
+        <div class="cmd"><code>list_docs</code><span>List documents in a space</span></div>
+        <div class="cmd"><code>read_doc</code><span>Read markdown content with comments</span></div>
+        <div class="cmd"><code>write_doc</code><span>Create or update a document</span></div>
+        <div class="cmd"><code>search_docs</code><span>Search documents by title</span></div>
+        <div class="cmd"><code>add_comment</code><span>Add a comment, optionally anchored to text</span></div>
+        <div class="cmd"><code>list_comments</code><span>List comments on a document</span></div>
+        <div class="cmd"><code>resolve_comment</code><span>Resolve or reopen a comment</span></div>
+        <div class="cmd"><code>delete_doc</code><span>Delete a document</span></div>
+        <div class="cmd"><code>doc_versions</code><span>List version history</span></div>
+      </div>
+    </section>
+
+    <!-- API -->
+    <section class="setup-section">
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1" />
+        </svg>
+        API
+      </h2>
+      <p>All features are available via the REST API. Authenticate with a Bearer token (JWT or API key).</p>
+      <div class="code-block">
+        <code>Base URL: {API_URL}/api</code>
+      </div>
+      <div class="cmd-list">
+        <div class="cmd"><code>GET /api/spaces</code><span>List spaces</span></div>
+        <div class="cmd"><code>GET /api/documents?space=:slug</code><span>List documents</span></div>
+        <div class="cmd"><code>GET /api/documents/:space/:slug</code><span>Get document content</span></div>
+        <div class="cmd"><code>PUT /api/documents/:space/:slug</code><span>Create or update document</span></div>
+        <div class="cmd"><code>GET /api/documents/:space/:slug/pdf</code><span>Export as PDF</span></div>
+        <div class="cmd"><code>GET /api/comments/:space/:slug</code><span>List comments</span></div>
+        <div class="cmd"><code>POST /api/comments/:space/:slug</code><span>Add comment</span></div>
+      </div>
+    </section>
+  </div>
+</BaseLayout>
+
+<script>
+  // Copy buttons for code blocks
+  document.querySelectorAll(".code-block[data-copy]").forEach((block) => {
+    const btn = document.createElement("button");
+    btn.className = "code-copy";
+    btn.title = "Copy";
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    btn.addEventListener("click", () => {
+      const id = block.getAttribute("data-copy");
+      const text = document.getElementById(id || "")?.textContent || "";
+      navigator.clipboard.writeText(text).then(() => {
+        btn.innerHTML = "✓";
+        setTimeout(() => {
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+        }, 1500);
+      });
+    });
+    block.appendChild(btn);
+  });
+</script>
+
+<style>
+  .setup {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 1rem 0 4rem;
+  }
+
+  .setup-title {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-3xl);
+    font-weight: 400;
+    color: var(--sw-text-primary);
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  .setup-intro {
+    font-size: var(--sw-text-base);
+    color: var(--sw-text-tertiary);
+    margin-bottom: 2.5rem;
+  }
+
+  .setup-section {
+    margin-bottom: 3rem;
+    padding-bottom: 3rem;
+    border-bottom: 1px solid var(--sw-border);
+  }
+
+  .setup-section:last-child {
+    border-bottom: none;
+  }
+
+  .setup-section h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-xl);
+    font-weight: 500;
+    color: var(--sw-text-primary);
+    margin-bottom: 0.5rem;
+  }
+
+  .setup-section h2 svg {
+    color: var(--sw-accent);
+  }
+
+  .setup-section h3 {
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--sw-text-secondary);
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .setup-section p {
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-secondary);
+    line-height: 1.6;
+    margin-bottom: 0.75rem;
+  }
+
+  .setup-section a {
+    color: var(--sw-accent);
+    text-decoration: underline;
+    text-decoration-color: var(--sw-border-accent);
+    text-underline-offset: 3px;
+  }
+
+  .setup-prereq {
+    font-size: var(--sw-text-xs) !important;
+    color: var(--sw-text-ghost) !important;
+  }
+
+  /* ── Code blocks ──────────────── */
+  .code-block {
+    position: relative;
+    padding: 0.75rem 1rem;
+    background: var(--sw-ink-deepest);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    margin-bottom: 1rem;
+    overflow-x: auto;
+  }
+
+  .code-block code {
+    font-family: var(--sw-font-mono);
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-primary);
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  .code-block .c {
+    color: var(--sw-text-ghost);
+  }
+
+  .code-copy {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--sw-ink-lighter);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-tertiary);
+    cursor: pointer;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .code-copy:hover {
+    color: var(--sw-text-primary);
+    background: var(--sw-ink-surface);
+  }
+
+  /* ── Command list ─────────────── */
+  .cmd-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--sw-border);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-md);
+    overflow: hidden;
+    margin-bottom: 1rem;
+  }
+
+  .cmd {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--sw-ink);
+  }
+
+  .cmd code {
+    font-family: var(--sw-font-mono);
+    font-size: var(--sw-text-xs);
+    color: var(--sw-accent-strong);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .cmd span {
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-tertiary);
+  }
+
+  @media (max-width: 600px) {
+    .cmd {
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+  }
+</style>

@@ -84,8 +84,8 @@ if ! $QUICK; then
   echo "==> Installing dependencies..."
   ssh $VM "cd $APP_DIR && pnpm install --frozen-lockfile"
 
-  echo "==> Building CLI bundle..."
-  ssh $VM "cd $APP_DIR && pnpm --filter @sideways/cli build && cp packages/cli/dist/sideways.cjs packages/web/public/downloads/sideways.cjs"
+  echo "==> Building CLI + MCP bundles..."
+  ssh $VM "cd $APP_DIR && pnpm --filter @sideways/cli build && pnpm --filter @sideways/mcp build && mkdir -p packages/web/public/downloads && cp packages/cli/dist/sideways.cjs packages/mcp/dist/sideways-mcp.cjs packages/web/public/downloads/"
 
   echo "==> Building web frontend..."
   ssh $VM "set -a && source $APP_DIR/.env && set +a && cd $APP_DIR && pnpm --filter @sideways/web build"

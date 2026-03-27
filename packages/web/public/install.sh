@@ -32,10 +32,11 @@ fi
 
 mkdir -p "$INSTALL_DIR"
 
-# Download CLI bundle
+# Download CLI + MCP bundles
 curl -fsSL "$BASE_URL/downloads/sideways.cjs" -o "$INSTALL_DIR/sideways.cjs"
+curl -fsSL "$BASE_URL/downloads/sideways-mcp.cjs" -o "$INSTALL_DIR/sideways-mcp.cjs"
 
-# Create wrapper
+# Create CLI wrapper
 cat > "$INSTALL_DIR/sideways" <<WRAPPER
 #!/bin/sh
 exec node "\$(dirname "\$0")/sideways.cjs" "\$@"
@@ -43,7 +44,9 @@ WRAPPER
 chmod +x "$INSTALL_DIR/sideways"
 
 echo ""
-echo "Installed to $INSTALL_DIR/sideways"
+echo "Installed to $INSTALL_DIR/"
+echo "  sideways      — CLI"
+echo "  sideways-mcp  — MCP server (for AI assistants)"
 
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
