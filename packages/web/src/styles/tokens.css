@@ -40,7 +40,7 @@
   /* ── Typography ────────────────────────────────────────────── */
   --sw-font-display: "Newsreader Variable", "Georgia", serif;
   --sw-font-body: "Inter Variable", system-ui, -apple-system, sans-serif;
-  --sw-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --sw-font-mono: "Fira Code Variable", ui-monospace, monospace;
 
   --sw-text-xs: 0.75rem;
   --sw-text-sm: 0.8125rem;

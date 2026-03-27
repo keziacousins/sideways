@@ -263,7 +263,7 @@ body {
 
 /* ── Code ────────────────────────────────────────────────────── */
 .print-content code {
-  font-family: "JetBrains Mono", monospace;
+  font-family: "Fira Code", monospace;
   font-size: 0.85em;
   background: #f5f5f5;
   border: 0.5pt solid #e0e0e0;

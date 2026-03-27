@@ -19,11 +19,11 @@ RUN mkdir -p /usr/share/fonts/inter && \
     unzip -j /tmp/inter.zip "InterVariable.ttf" "InterVariable-Italic.ttf" -d /usr/share/fonts/inter/ && \
     rm /tmp/inter.zip
 
-# Download JetBrains Mono Variable TTF
-RUN mkdir -p /usr/share/fonts/jetbrains-mono && \
-    wget -q "https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip" -O /tmp/jbmono.zip && \
-    unzip -j /tmp/jbmono.zip "fonts/variable/*.ttf" -d /usr/share/fonts/jetbrains-mono/ && \
-    rm /tmp/jbmono.zip
+# Download Fira Code Variable TTF
+RUN mkdir -p /usr/share/fonts/fira-code && \
+    wget -q "https://github.com/tonsky/FiraCode/releases/download/6.2/Fira_Code_v6.2.zip" -O /tmp/firacode.zip && \
+    unzip -j /tmp/firacode.zip "variable_ttf/FiraCode-VF.ttf" -d /usr/share/fonts/fira-code/ && \
+    rm /tmp/firacode.zip
 
 # Download Newsreader Variable TTF from Google Fonts GitHub
 RUN mkdir -p /usr/share/fonts/newsreader && \
