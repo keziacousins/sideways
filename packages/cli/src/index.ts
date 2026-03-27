@@ -24,14 +24,10 @@ import {
 
 const program = new Command();
 
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const rootPkg = require("../../../package.json");
-
 program
   .name("sideways")
   .description("Sideways CLI — push, pull, and manage documentation")
-  .version(rootPkg.version);
+  .version(process.env.SIDEWAYS_VERSION || "dev");
 
 // ── init ──────────────────────────────────────────────────────────────
 
