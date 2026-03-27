@@ -280,7 +280,7 @@ body {
   padding: 0.7em 0.9em;
   overflow: hidden;
   font-size: 8.5pt;
-  line-height: 1.45;
+  line-height: 1.2;
   /* Allow long code blocks to break across pages */
   page-break-inside: auto;
 }

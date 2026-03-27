@@ -154,7 +154,7 @@
   border-radius: var(--sw-radius-md);
   padding: 1.25em 1.5em;
   overflow-x: auto;
-  line-height: 1.6;
+  line-height: 1.2;
   position: relative;
 }
 

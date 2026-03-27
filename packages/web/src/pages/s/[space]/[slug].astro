@@ -831,7 +831,7 @@ const navItems = documents.map((d) => ({
   // Download PDF
   document.getElementById("action-pdf")?.addEventListener("click", () => {
     const a = document.createElement("a");
-    a.href = `${API_URL}/api/documents/${spaceSlug}/${slug}/pdf`;
+    a.href = `/s/${spaceSlug}/${slug}/pdf`;
     a.download = `${slug}.pdf`;
     a.click();
   });
