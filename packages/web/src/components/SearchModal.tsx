@@ -145,7 +145,18 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
                 <span className="search-result-title">{r.title}</span>
               </div>
               {r.snippet && (
-                <div className="search-result-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
+                <div className="search-result-snippet" dangerouslySetInnerHTML={{
+                  __html: r.snippet
+                    .replace(/```[\s\S]*?```/g, " ") // strip code blocks
+                    .replace(/`([^`]+)`/g, "$1")       // strip inline code
+                    .replace(/\*\*([^*]+)\*\*/g, "$1") // strip bold
+                    .replace(/\*([^*]+)\*/g, "$1")     // strip italic
+                    .replace(/#{1,6}\s+/g, "")         // strip headings
+                    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // strip links
+                    .replace(/\n/g, " · ")             // newlines to separator
+                    .replace(/\s+/g, " ")              // collapse whitespace
+                    .trim()
+                }} />
               )}
               {r.tags?.length > 0 && (
                 <div className="search-result-tags">

@@ -2,22 +2,21 @@
 .search-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(8, 9, 12, 0.7);
-  backdrop-filter: blur(4px);
+  background: rgba(8, 9, 12, 0.5);
   z-index: 300;
   display: flex;
   justify-content: center;
-  padding-top: 15vh;
+  padding-top: calc(var(--sw-header-height) + 0.5rem);
 }
 
 .search-modal {
   width: 100%;
-  max-width: 600px;
-  max-height: 70vh;
+  max-width: 640px;
+  max-height: calc(80vh - var(--sw-header-height));
   background: var(--sw-ink);
   border: 1px solid var(--sw-border-strong);
   border-radius: var(--sw-radius-lg);
-  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -115,6 +114,11 @@
   color: var(--sw-text-tertiary);
   line-height: 1.5;
   margin-top: 0.2rem;
+  /* Limit to 3 lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .search-result-snippet mark {
