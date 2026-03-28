@@ -526,6 +526,169 @@ program
     }
   });
 
+// ── sync ──────────────────────────────────────────────────────────────
+
+program
+  .command("sync")
+  .description("Bidirectional sync: pull remote changes + push local changes")
+  .option("--space <space>", "Override space from config")
+  .option("--dry-run", "Show what would change without doing it")
+  .option("--clean", "Exclude comments when pulling")
+  .action(async (opts: { space?: string; dryRun?: boolean; clean?: boolean }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = createClient(config.api);
+    const syncRoot = getSyncRoot(config);
+
+    await ensureSpace(client, space, config.spaceName || undefined);
+
+    const allFiles = discoverFiles(syncRoot, config.ignore);
+    const remoteFiles = await client.getSyncInfo(space);
+    const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
+    const syncState = readSyncState(syncRoot, space);
+
+    // Classify all files
+    const toPull: { slug: string; relativePath: string }[] = [];
+    const toPush: { file: (typeof allFiles)[0]; raw: string }[] = [];
+    const conflicts: string[] = [];
+    const localSlugs = new Set<string>();
+
+    for (const file of allFiles) {
+      localSlugs.add(file.slug);
+      const filePath = join(syncRoot, file.relativePath);
+      const raw = readFileSync(filePath, "utf-8");
+      const localHash = hashLocalFile(raw);
+      const tracked = syncState.files[file.relativePath];
+      const remote = remoteMap.get(file.slug);
+
+      let status: string;
+      if (!tracked && !remote) status = "new-local";
+      else if (!tracked && remote) {
+        if (localHash === remote.contentHash) {
+          status = "unchanged";
+        } else {
+          const localMtime = statSync(filePath).mtimeMs;
+          const remoteMtime = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+          status = localMtime > remoteMtime ? "local-modified" : "remote-modified";
+        }
+      }
+      else if (tracked && !remote) status = "new-local";
+      else if (tracked) {
+        const localChanged = localHash !== tracked.localHash;
+        const remoteChanged = remote && remote.contentHash !== tracked.remoteHash;
+        if (localChanged && remoteChanged) status = "conflict";
+        else if (localChanged) status = "local-modified";
+        else if (remoteChanged) status = "remote-modified";
+        else status = "unchanged";
+      } else status = "unchanged";
+
+      if (status === "unchanged") continue;
+      if (status === "conflict") { conflicts.push(file.relativePath); continue; }
+      if (status === "remote-modified") { toPull.push({ slug: file.slug, relativePath: file.relativePath }); continue; }
+      if (status === "new-local" || status === "local-modified") { toPush.push({ file, raw }); }
+    }
+
+    // Check for remote-only files (new on remote)
+    for (const remote of remoteFiles) {
+      if (!localSlugs.has(remote.slug)) {
+        toPull.push({ slug: remote.slug, relativePath: `${remote.slug}.md` });
+      }
+    }
+
+    if (toPull.length === 0 && toPush.length === 0 && conflicts.length === 0) {
+      console.log("Everything up to date.");
+      return;
+    }
+
+    // Pull remote changes
+    if (toPull.length > 0) {
+      console.log(`\nPulling ${toPull.length} file(s):`);
+      for (const { slug, relativePath } of toPull) {
+        if (opts.dryRun) {
+          console.log(`  would pull: ${relativePath}`);
+          continue;
+        }
+        const doc = await client.getDocument(space, slug);
+        const output = await prepareFileForDisk(client, space, doc, { clean: opts.clean });
+        const filePath = join(syncRoot, relativePath);
+        mkdirSync(join(filePath, ".."), { recursive: true });
+        writeFileSync(filePath, output);
+
+        const remoteInfo = remoteMap.get(slug);
+        syncState.files[relativePath] = {
+          slug,
+          remoteVersion: remoteInfo?.version ?? 1,
+          localHash: hashLocalFile(output),
+          remoteHash: remoteInfo?.contentHash ?? hashLocalFile(output),
+        };
+        console.log(`  pulled: ${relativePath}`);
+      }
+    }
+
+    // Push local changes
+    if (toPush.length > 0) {
+      // Create sections
+      const sectionSlugs = new Set(toPush.map(p => p.file.section).filter(Boolean) as string[]);
+      for (const section of sectionSlugs) {
+        await client.createSection(space, section).catch(() => {});
+      }
+
+      console.log(`\nPushing ${toPush.length} file(s):`);
+      const sorted = [...toPush].sort((a, b) => a.file.depth - b.file.depth);
+      for (const { file, raw } of sorted) {
+        if (opts.dryRun) {
+          console.log(`  would push: ${file.relativePath}`);
+          continue;
+        }
+        const { clean } = extractComments(raw);
+        const { frontmatter, content } = parseFrontmatter(clean);
+        const tags = frontmatter.tags || [];
+        const body: Record<string, any> = { content, tags };
+        if (frontmatter.title) body.title = frontmatter.title;
+        if (file.section) body.sectionSlug = file.section;
+        if (file.parentSlug) body.parentSlug = file.parentSlug;
+        body.updatedAt = statSync(join(syncRoot, file.relativePath)).mtime.toISOString();
+
+        await client.putDocument(space, file.slug, body);
+
+        const localHash = hashLocalFile(raw);
+        syncState.files[file.relativePath] = {
+          slug: file.slug,
+          remoteVersion: (syncState.files[file.relativePath]?.remoteVersion ?? 0) + 1,
+          localHash,
+          remoteHash: localHash,
+        };
+        console.log(`  pushed: ${file.relativePath}`);
+      }
+    }
+
+    // Show conflicts
+    if (conflicts.length > 0) {
+      console.log(`\n${conflicts.length} conflict(s):`);
+      for (const f of conflicts) {
+        console.log(`  \x1b[31mconflict\x1b[0m  ${f}`);
+      }
+      console.log("\nResolve with:");
+      console.log("  sideways push --force <file>   (keep local)");
+      console.log("  sideways pull --force <file>   (keep remote)");
+    }
+
+    if (!opts.dryRun) {
+      // Refresh remote state for pushed files
+      const updatedRemote = await client.getSyncInfo(space);
+      const remoteHashMap = new Map(updatedRemote.map((r: any) => [r.slug, r]));
+      for (const entry of Object.values(syncState.files)) {
+        const remote = remoteHashMap.get(entry.slug);
+        if (remote) {
+          entry.remoteHash = remote.contentHash;
+          entry.remoteVersion = remote.version;
+        }
+      }
+      syncState.lastSync = new Date().toISOString();
+      writeSyncState(syncRoot, syncState);
+    }
+  });
+
 // ── diff ──────────────────────────────────────────────────────────────
 
 program
