@@ -10,7 +10,7 @@ const { space: spaceSlug } = Astro.params;
 const { accessToken } = Astro.locals;
 
 let space: { name: string; slug: string; description: string | null; visibility: string; theme?: { tokens: any } } | null = null;
-let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number }[] = [];
+let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number; unread?: boolean; updatedAt?: string }[] = [];
 let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 
 try {
@@ -68,9 +68,10 @@ const themeCss = themeToCSS(space?.theme?.tokens);
           documents.map((doc, i) => (
             <a
               href={`/s/${spaceSlug}/${doc.slug}`}
-              class="doc-card animate-in"
+              class:list={["doc-card", "animate-in", { unread: doc.unread }]}
               style={`animation-delay: ${(i + 1) * 60}ms`}
             >
+              {doc.unread && <span class="unread-dot" />}
               <div class="doc-card-icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -80,6 +81,9 @@ const themeCss = themeToCSS(space?.theme?.tokens);
                 </svg>
               </div>
               <span class="doc-card-title">{doc.title}</span>
+              {doc.updatedAt && (
+                <span class="doc-card-date">{new Date(doc.updatedAt).toLocaleDateString()}</span>
+              )}
               {doc.tags?.length > 0 && (
                 <div class="doc-tags">
                   {doc.tags.map((tag) => (
@@ -170,6 +174,20 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     font-size: var(--sw-text-base);
     color: var(--sw-text-primary);
     flex: 1;
+  }
+
+  .doc-card-date {
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-ghost);
+    flex-shrink: 0;
+  }
+
+  .unread-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--sw-accent);
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
   .doc-tags {

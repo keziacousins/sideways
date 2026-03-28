@@ -24,7 +24,7 @@ let doc: {
   versionCount: number;
   versionDate: string;
 } | null = null;
-let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number }[] = [];
+let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number; unread?: boolean }[] = [];
 let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 let rawContent = "";
 

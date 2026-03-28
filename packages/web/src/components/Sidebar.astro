@@ -31,7 +31,7 @@ function containsActive(item: NavItem, slug?: string): boolean {
 
   <ul class="nav-tree">
     {items.map((item) => (
-      <li class:list={["nav-item", { active: item.slug === activeSlug }]}>
+      <li class:list={["nav-item", { active: item.slug === activeSlug, unread: item.unread }]}>
         {item.type === "section" ? (
           /* Section: collapsible, not clickable */
           <details open>
@@ -44,7 +44,7 @@ function containsActive(item: NavItem, slug?: string): boolean {
             {item.children && (
               <ul class="nav-children">
                 {item.children.map((child) => (
-                  <li class:list={["nav-item", { active: child.slug === activeSlug }]}>
+                  <li class:list={["nav-item", { active: child.slug === activeSlug, unread: child.unread }]}>
                     {child.type === "section" ? (
                       <details open>
                         <summary class="nav-section nav-subsection">
@@ -56,7 +56,7 @@ function containsActive(item: NavItem, slug?: string): boolean {
                         {child.children && (
                           <ul class="nav-children">
                             {child.children.map((gc) => (
-                              <li class:list={["nav-item", { active: gc.slug === activeSlug }]}>
+                              <li class:list={["nav-item", { active: gc.slug === activeSlug, unread: gc.unread }]}>
                                 <a href={`/s/${spaceSlug}/${gc.slug}`} class="nav-link nav-link-deep">{gc.title}</a>
                               </li>
                             ))}
@@ -74,7 +74,7 @@ function containsActive(item: NavItem, slug?: string): boolean {
                         </summary>
                         <ul class="nav-children">
                           {child.children.map((gc) => (
-                            <li class:list={["nav-item", { active: gc.slug === activeSlug }]}>
+                            <li class:list={["nav-item", { active: gc.slug === activeSlug, unread: gc.unread }]}>
                               {gc.children?.length ? (
                                 <details open={containsActive(gc, activeSlug)}>
                                   <summary class="nav-doc-parent nav-doc-parent-deep">
@@ -85,7 +85,7 @@ function containsActive(item: NavItem, slug?: string): boolean {
                                   </summary>
                                   <ul class="nav-children">
                                     {gc.children.map((ggc) => (
-                                      <li class:list={["nav-item", { active: ggc.slug === activeSlug }]}>
+                                      <li class:list={["nav-item", { active: ggc.slug === activeSlug, unread: ggc.unread }]}>
                                         <a href={`/s/${spaceSlug}/${ggc.slug}`} class="nav-link nav-link-deepest">{ggc.title}</a>
                                       </li>
                                     ))}
@@ -117,7 +117,7 @@ function containsActive(item: NavItem, slug?: string): boolean {
             </summary>
             <ul class="nav-children">
               {item.children.map((child) => (
-                <li class:list={["nav-item", { active: child.slug === activeSlug }]}>
+                <li class:list={["nav-item", { active: child.slug === activeSlug, unread: child.unread }]}>
                   <a href={`/s/${spaceSlug}/${child.slug}`} class="nav-link">{child.title}</a>
                 </li>
               ))}
@@ -161,6 +161,19 @@ function containsActive(item: NavItem, slug?: string): boolean {
 
   .nav-item {
     margin: 0;
+    position: relative;
+  }
+
+  .nav-item.unread > .nav-link::after,
+  .nav-item.unread > details > .nav-doc-parent .nav-link-inline::after {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--sw-accent);
+    border-radius: 50%;
+    margin-left: 0.4rem;
+    vertical-align: middle;
   }
 
   .nav-section {

@@ -22,12 +22,14 @@ interface Doc {
   parentId?: string | null;
   tags?: string[];
   position?: number;
+  unread?: boolean;
 }
 
 export interface NavItem {
   slug: string;
   title: string;
   type: "section" | "doc";
+  unread?: boolean;
   children?: NavItem[];
 }
 
@@ -36,7 +38,7 @@ function buildDocChildren(parentId: string, docsByParent: Map<string | null, Doc
   const children = (docsByParent.get(parentId) || []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   return children.map(d => {
     const nested = d.id ? buildDocChildren(d.id, docsByParent) : [];
-    const item: NavItem = { slug: d.slug, title: d.title, type: "doc" };
+    const item: NavItem = { slug: d.slug, title: d.title, type: "doc", unread: d.unread };
     if (nested.length > 0) item.children = nested;
     return item;
   });
@@ -46,7 +48,7 @@ function buildDocChildren(parentId: string, docsByParent: Map<string | null, Doc
 function buildDocItems(docs: Doc[], docsByParent: Map<string | null, Doc[]>): NavItem[] {
   return docs.sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map(d => {
     const nested = d.id ? buildDocChildren(d.id, docsByParent) : [];
-    const item: NavItem = { slug: d.slug, title: d.title, type: "doc" };
+    const item: NavItem = { slug: d.slug, title: d.title, type: "doc", unread: d.unread };
     if (nested.length > 0) item.children = nested;
     return item;
   });
