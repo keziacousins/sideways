@@ -154,12 +154,15 @@ export default function Comments({
 
     // Add gutter markers for each anchored, unresolved comment
     const anchored = comments.filter((c) => c.anchorText && !c.parentId && !c.resolved);
+    const contentRect = docContent.getBoundingClientRect();
+
     for (const comment of anchored) {
       const target = findTextInDOM(docContent, comment.anchorText!) as HTMLElement | null;
-      if (target && !target.querySelector(".comment-gutter-mark")) {
+      if (target) {
+        // Position bar and click target relative to the content container
         target.style.position = "relative";
 
-        // Invisible click target covering the whole block
+        // Invisible click target on the block itself
         const clickTarget = document.createElement("div");
         clickTarget.className = "comment-gutter-target";
         clickTarget.title = "View comment";
@@ -171,14 +174,16 @@ export default function Comments({
             el?.scrollIntoView({ behavior: "smooth", block: "center" });
           }, 100);
         });
+        target.appendChild(clickTarget);
 
-        // Visible gutter bar
+        // Gutter bar positioned on the content container
+        const targetRect = target.getBoundingClientRect();
         const bar = document.createElement("div");
         bar.className = "comment-gutter-mark";
         bar.dataset.commentId = comment.id;
-
-        target.appendChild(clickTarget);
-        target.appendChild(bar);
+        bar.style.top = `${targetRect.top - contentRect.top}px`;
+        bar.style.height = `${targetRect.height}px`;
+        docContent.appendChild(bar);
       }
     }
   }, [comments]);

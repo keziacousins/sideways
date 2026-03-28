@@ -408,12 +408,15 @@
 
 /* ── Inline comment markers in document ───────────────────────── */
 /* ── Gutter comment markers ──────────────────────────────────── */
-/* The bar sits at a fixed position from the content edge */
+/* Container must be relative for absolute positioning */
+.sw-doc-content {
+  position: relative;
+}
+
+/* Bar at fixed position from content container's left edge */
 .comment-gutter-mark {
   position: absolute;
   left: -1.25rem;
-  top: 0;
-  bottom: 0;
   width: 3px;
   background: var(--sw-accent-dim);
   border-radius: 2px;
