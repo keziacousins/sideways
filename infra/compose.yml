@@ -3,7 +3,7 @@ services:
     image: postgres:16
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sideways}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sideways}
@@ -34,8 +34,8 @@ services:
     command: serve -c /etc/kratos/kratos.yml --dev --watch-courier
     restart: unless-stopped
     ports:
-      - "4433:4433"
-      - "4434:4434"
+      - "127.0.0.1:4433:4433"
+      - "127.0.0.1:4434:4434"
     environment:
       DSN: postgres://${POSTGRES_USER:-sideways}:${POSTGRES_PASSWORD:-sideways}@postgres:5432/kratos?sslmode=disable
       SERVE_PUBLIC_BASE_URL: ${KRATOS_PUBLIC_URL:-http://localhost:4433}/
@@ -76,8 +76,8 @@ services:
     command: serve all -c /etc/hydra/hydra.yml --dev
     restart: unless-stopped
     ports:
-      - "4444:4444"
-      - "4445:4445"
+      - "127.0.0.1:4444:4444"
+      - "127.0.0.1:4445:4445"
     environment:
       DSN: postgres://${POSTGRES_USER:-sideways}:${POSTGRES_PASSWORD:-sideways}@postgres:5432/hydra?sslmode=disable
       SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET:-localhost-hydra-system-secret}
@@ -108,14 +108,14 @@ services:
     restart: unless-stopped
     command: master -ip=seaweedfs-master
     ports:
-      - "9333:9333"
+      - "127.0.0.1:9333:9333"
 
   seaweedfs-volume:
     image: chrislusf/seaweedfs
     restart: unless-stopped
     command: volume -mserver=seaweedfs-master:9333 -port=8080 -ip=seaweedfs-volume
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       - seaweedfs-master
     volumes:
@@ -126,7 +126,7 @@ services:
     restart: unless-stopped
     command: filer -master=seaweedfs-master:9333
     ports:
-      - "8888:8888"
+      - "127.0.0.1:8888:8888"
     depends_on:
       - seaweedfs-master
       - seaweedfs-volume
@@ -137,15 +137,15 @@ services:
     build: ./weasyprint
     restart: unless-stopped
     ports:
-      - "5001:5001"
+      - "127.0.0.1:5001:5001"
 
   # --- Mail (dev only) ---
 
   mailhog:
     image: mailhog/mailhog
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
 volumes:
   pgdata:
