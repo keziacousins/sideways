@@ -67,6 +67,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
+  // If tokens are gone but user info remains, clean up the stale session
+  if (!accessToken && !refreshToken) {
+    const userName = await session?.get("user_name");
+    if (userName) {
+      await session?.set("user_name", null);
+      await session?.set("user_email", null);
+    }
+  }
+
   // Store on locals for pages to use
   context.locals.accessToken = accessToken || null;
 
