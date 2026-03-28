@@ -20,12 +20,18 @@ esac
 
 NEW="$MAJOR.$MINOR.$PATCH"
 
-# Update package.json (portable sed)
+# Update root and all workspace package.json files
 node -e "
 const fs = require('fs');
-const pkg = JSON.parse(fs.readFileSync('$PKG', 'utf-8'));
-pkg.version = '$NEW';
-fs.writeFileSync('$PKG', JSON.stringify(pkg, null, 2) + '\n');
+const path = require('path');
+const files = ['package.json', 'packages/cli/package.json', 'packages/server/package.json', 'packages/web/package.json', 'packages/mcp/package.json'];
+for (const f of files) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(f, 'utf-8'));
+    pkg.version = '$NEW';
+    fs.writeFileSync(f, JSON.stringify(pkg, null, 2) + '\n');
+  } catch {}
+}
 "
 
 echo "$CURRENT → $NEW"
