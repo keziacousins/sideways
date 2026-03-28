@@ -185,8 +185,6 @@ body {
 .print-content h1 {
   font-size: 22pt;
   font-weight: 400;
-  padding-bottom: 0.35em;
-  border-bottom: 0.5pt solid #ddd;
   margin-top: 0;
   letter-spacing: -0.01em;
 }
@@ -194,9 +192,14 @@ body {
 /* h2: major sections — no forced page break (let content flow naturally) */
 .print-content h2 {
   font-size: 16pt;
-  padding-bottom: 0.2em;
-  border-bottom: 0.5pt solid #eee;
-  margin-top: 2.5em;
+  margin-top: 1.8em;
+}
+
+/* Tighten gap when headings follow each other */
+.print-content h1 + h2,
+.print-content h2 + h3,
+.print-content h3 + h4 {
+  margin-top: 0.4em;
 }
 
 /* h3: subsections */

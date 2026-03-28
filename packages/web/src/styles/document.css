@@ -36,16 +36,12 @@
 .sw-doc-content h1 {
   font-size: var(--sw-text-3xl);
   margin-top: 0;
-  padding-bottom: 0.6rem;
-  border-bottom: 1px solid var(--sw-doc-rule);
   font-weight: 400;
   letter-spacing: -0.02em;
 }
 
 .sw-doc-content h2 {
   font-size: var(--sw-text-2xl);
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid var(--sw-doc-rule);
 }
 
 .sw-doc-content h3 {
