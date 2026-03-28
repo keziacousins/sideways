@@ -31,8 +31,10 @@ if (accessToken) {
     <div class="key-create">
       <div class="key-create-form">
         <input type="text" id="key-name" placeholder="Key name (e.g. My Laptop)" value="CLI" />
+        <input type="text" id="key-actor" placeholder="Agent name (optional, e.g. Claude)" />
         <button type="button" id="create-key-btn" class="btn-create">Create key</button>
       </div>
+      <p class="key-actor-hint">Set an agent name for bot/LLM keys — actions show as that name and you'll be notified of their activity.</p>
       <div id="new-key-display" class="new-key-display" style="display: none;">
         <p class="new-key-warning">Copy this key now — it won't be shown again.</p>
         <div class="new-key-value">
@@ -64,7 +66,7 @@ if (accessToken) {
             {keys.map((key) => (
               <tr data-key-id={key.id}>
                 <td><code>{key.prefix}...</code></td>
-                <td>{key.name}</td>
+                <td>{key.name}{key.actorName && <span class="key-actor-badge"> ({key.actorName})</span>}</td>
                 <td>{new Date(key.createdAt).toLocaleDateString()}</td>
                 <td>{key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : "Never"}</td>
                 <td>
@@ -83,7 +85,9 @@ if (accessToken) {
   // Create key — calls Astro server route (handles token refresh)
   document.getElementById("create-key-btn")?.addEventListener("click", async () => {
     const nameInput = document.getElementById("key-name") as HTMLInputElement;
+    const actorInput = document.getElementById("key-actor") as HTMLInputElement;
     const name = nameInput?.value.trim() || "Untitled";
+    const actorName = actorInput?.value.trim() || undefined;
     const btn = document.getElementById("create-key-btn") as HTMLButtonElement;
     btn.disabled = true;
     btn.textContent = "Creating...";
@@ -92,7 +96,7 @@ if (accessToken) {
       const res = await fetch("/settings/keys/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, actorName }),
       });
 
       if (res.ok) {
@@ -219,6 +223,17 @@ if (accessToken) {
   }
 
   .btn-create:hover { background: var(--sw-accent-strong); }
+
+  .key-actor-hint {
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-ghost);
+    margin-top: 0.4rem;
+  }
+
+  .key-actor-badge {
+    color: var(--sw-accent);
+    font-size: var(--sw-text-xs);
+  }
   .btn-create:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .new-key-display {
