@@ -22,7 +22,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         Buffer.from(accessToken.split(".")[1], "base64").toString(),
       );
       const expiresAt = payload.exp * 1000;
-      needsRefresh = Date.now() > expiresAt - 30_000;
+      needsRefresh = Date.now() > expiresAt - 5 * 60_000; // refresh 5 min before expiry
     } catch {
       // Can't decode JWT — treat as expired
       needsRefresh = true;
@@ -49,10 +49,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
               await session?.set("refresh_token", tokens.refresh_token);
             }
           } else {
-            // Refresh token rejected — session is dead
-            accessToken = null;
-            await session?.set("access_token", null);
-            await session?.set("refresh_token", null);
+            // Refresh failed — keep the stale access token rather than
+            // logging the user out. It might still work for some requests
+            // and the next page load will retry the refresh.
+            console.error(`[middleware] Token refresh failed: ${res.status}`);
           }
         } catch {
           // Network error reaching API — keep stale token rather than
