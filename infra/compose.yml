@@ -5,14 +5,14 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-sideways}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sideways}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-sideways}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sideways}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,7 +23,7 @@ services:
     build: ./kratos
     command: migrate sql -e --yes
     environment:
-      DSN: postgres://${POSTGRES_USER:-sideways}:${POSTGRES_PASSWORD:-sideways}@postgres:5432/kratos?sslmode=disable
+      DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/kratos?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,12 +37,12 @@ services:
       - "127.0.0.1:4433:4433"
       - "127.0.0.1:4434:4434"
     environment:
-      DSN: postgres://${POSTGRES_USER:-sideways}:${POSTGRES_PASSWORD:-sideways}@postgres:5432/kratos?sslmode=disable
+      DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/kratos?sslmode=disable
       SERVE_PUBLIC_BASE_URL: ${KRATOS_PUBLIC_URL:-http://localhost:4433}/
       SERVE_ADMIN_BASE_URL: ${KRATOS_ADMIN_URL:-http://localhost:4434}/
       SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: ${PUBLIC_URL:-http://localhost:4000}
-      SECRETS_COOKIE: ${KRATOS_COOKIE_SECRET:-localhost-kratos-cookie-secret}
-      SECRETS_CIPHER: ${KRATOS_CIPHER_SECRET:-localhost-cipher-key-32chars!}
+      SECRETS_COOKIE: ${KRATOS_COOKIE_SECRET:?Set KRATOS_COOKIE_SECRET in .env}
+      SECRETS_CIPHER: ${KRATOS_CIPHER_SECRET:?Set KRATOS_CIPHER_SECRET in .env}
       SELFSERVICE_DEFAULT_BROWSER_RETURN_URL: ${PUBLIC_URL:-http://localhost:4000}/
       SELFSERVICE_FLOWS_LOGIN_UI_URL: ${PUBLIC_URL:-http://localhost:4000}/auth/login
       SELFSERVICE_FLOWS_REGISTRATION_UI_URL: ${PUBLIC_URL:-http://localhost:4000}/auth/signup
@@ -65,7 +65,7 @@ services:
     build: ./hydra
     command: migrate sql -e --yes
     environment:
-      DSN: postgres://${POSTGRES_USER:-sideways}:${POSTGRES_PASSWORD:-sideways}@postgres:5432/hydra?sslmode=disable
+      DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/hydra?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,8 +79,8 @@ services:
       - "127.0.0.1:4444:4444"
       - "127.0.0.1:4445:4445"
     environment:
-      DSN: postgres://${POSTGRES_USER:-sideways}:${POSTGRES_PASSWORD:-sideways}@postgres:5432/hydra?sslmode=disable
-      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET:-localhost-hydra-system-secret}
+      DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/hydra?sslmode=disable
+      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET:?Set HYDRA_SYSTEM_SECRET in .env}
       URLS_SELF_ISSUER: ${HYDRA_ISSUER_URL:-http://localhost:4100}
       URLS_LOGIN: ${PUBLIC_API_URL:-http://localhost:4100}/api/auth/login
       URLS_CONSENT: ${PUBLIC_API_URL:-http://localhost:4100}/api/auth/consent

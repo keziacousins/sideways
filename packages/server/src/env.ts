@@ -8,7 +8,7 @@ export const env = {
   // Internal service URLs (server-to-server)
   databaseUrl:
     process.env.DATABASE_URL ||
-    "postgres://sideways:sideways@localhost:5432/sideways",
+    (() => { throw new Error("DATABASE_URL must be set"); })(),
   seaweedFilerUrl:
     process.env.SEAWEEDFS_FILER_URL || "http://localhost:8888",
   hydraPublicUrl:
