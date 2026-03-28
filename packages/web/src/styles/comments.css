@@ -407,16 +407,23 @@
 }
 
 /* ── Inline comment markers in document ───────────────────────── */
-.comment-marker {
-  border-left: 3px solid var(--sw-accent-dim);
-  padding-left: 0.75rem;
+/* ── Gutter comment markers ──────────────────────────────────── */
+.comment-gutter-mark {
+  position: absolute;
+  left: -1.5rem;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--sw-accent-dim);
+  border-radius: 2px;
   cursor: pointer;
   transition: all var(--sw-duration-fast) var(--sw-ease);
 }
 
-.comment-marker:hover {
-  background: var(--sw-accent-glow);
-  border-left-color: var(--sw-accent);
+.comment-gutter-mark:hover {
+  background: var(--sw-accent);
+  width: 4px;
+  left: calc(-1.5rem - 0.5px);
 }
 
 /* ── Scroll-to highlight ──────────────────────────────────────── */

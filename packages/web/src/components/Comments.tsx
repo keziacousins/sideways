@@ -149,28 +149,28 @@ export default function Comments({
     const docContent = document.querySelector(".sw-doc-content");
     if (!docContent) return;
 
-    // Remove previous markers (just remove class + data, don't destroy elements)
-    docContent.querySelectorAll(".comment-marker").forEach((el) => {
-      el.classList.remove("comment-marker");
-      (el as HTMLElement).removeAttribute("data-comment-id");
-      (el as HTMLElement).title = "";
-    });
+    // Remove previous gutter markers
+    docContent.querySelectorAll(".comment-gutter-mark").forEach(el => el.remove());
 
-    // Add markers for each anchored, unresolved comment
+    // Add gutter markers for each anchored, unresolved comment
     const anchored = comments.filter((c) => c.anchorText && !c.parentId && !c.resolved);
     for (const comment of anchored) {
       const target = findTextInDOM(docContent, comment.anchorText!) as HTMLElement | null;
-      if (target && !target.classList.contains("comment-marker")) {
-        target.classList.add("comment-marker");
-        target.dataset.commentId = comment.id;
-        target.title = "View comment";
-        target.addEventListener("click", () => {
+      if (target && !target.querySelector(".comment-gutter-mark")) {
+        target.style.position = "relative";
+        const mark = document.createElement("div");
+        mark.className = "comment-gutter-mark";
+        mark.dataset.commentId = comment.id;
+        mark.title = "View comment";
+        mark.addEventListener("click", (e) => {
+          e.stopPropagation();
           setIsOpen(true);
           setTimeout(() => {
             const el = document.querySelector(`[data-comment-thread="${comment.id}"]`);
             el?.scrollIntoView({ behavior: "smooth", block: "center" });
           }, 100);
         });
+        target.appendChild(mark);
       }
     }
   }, [comments]);
