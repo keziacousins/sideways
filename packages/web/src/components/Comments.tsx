@@ -145,6 +145,25 @@ export default function Comments({
       );
   }, []);
 
+  // Open panel and scroll to comment if URL has #comment-{id}
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith("#comment-") && comments.length > 0) {
+      const commentId = hash.slice(9);
+      setIsOpen(true);
+      setTimeout(() => {
+        const el = document.querySelector(`[data-comment-thread="${commentId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("comment-flash");
+          setTimeout(() => el.classList.remove("comment-flash"), 2000);
+        }
+      }, 200);
+      // Clear hash so refreshing doesn't re-trigger
+      history.replaceState(null, "", window.location.pathname);
+    }
+  }, [comments]);
+
   // Mark anchor text in the document with subtle highlights
   useEffect(() => {
     const docContent = document.querySelector(".sw-doc-content");

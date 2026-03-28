@@ -467,6 +467,16 @@
   100% { opacity: 0; }
 }
 
+/* ── Comment flash (from notification click) ─────────────────── */
+.comment-flash {
+  animation: commentFlash 2s var(--sw-ease);
+}
+
+@keyframes commentFlash {
+  0%, 20% { background: var(--sw-accent-glow); }
+  100% { background: transparent; }
+}
+
 /* ── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 700px) {
   .selection-comment-btn {

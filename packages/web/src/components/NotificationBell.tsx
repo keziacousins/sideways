@@ -5,6 +5,7 @@ interface Notification {
   type: string;
   spaceSlug: string;
   docSlug: string;
+  commentId?: string;
   title: string;
   body?: string;
   actorName?: string;
@@ -153,7 +154,7 @@ export default function NotificationBell({ apiUrl, accessToken, refreshToken }: 
             )}
             {notifications.map((n) => (
               <div key={n.id} className={`notif-item ${n.read ? "read" : "unread"}`}>
-                <a href={`/s/${n.spaceSlug}/${n.docSlug}`} className="notif-link">
+                <a href={`/s/${n.spaceSlug}/${n.docSlug}${n.commentId ? `#comment-${n.commentId}` : ""}`} className="notif-link">
                   <span className="notif-icon" dangerouslySetInnerHTML={{ __html: TYPE_ICONS[n.type] || "•" }} />
                   <div className="notif-content">
                     <div className="notif-title">{n.title}</div>
