@@ -408,15 +408,15 @@
 
 /* ── Inline comment markers in document ───────────────────────── */
 .comment-marker {
-  border-bottom: 2px solid var(--sw-accent-dim);
+  border-left: 3px solid var(--sw-accent-dim);
+  padding-left: 0.75rem;
   cursor: pointer;
   transition: all var(--sw-duration-fast) var(--sw-ease);
-  border-radius: 1px;
 }
 
 .comment-marker:hover {
   background: var(--sw-accent-glow);
-  border-bottom-color: var(--sw-accent);
+  border-left-color: var(--sw-accent);
 }
 
 /* ── Scroll-to highlight ──────────────────────────────────────── */

@@ -161,30 +161,18 @@ export default function Comments({
     // Add markers for each anchored, unresolved comment
     const anchored = comments.filter((c) => c.anchorText && !c.parentId && !c.resolved);
     for (const comment of anchored) {
-      const text = comment.anchorText!;
-      const walker = document.createTreeWalker(docContent, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) {
-        const textNode = walker.currentNode as Text;
-        const idx = textNode.textContent?.indexOf(text.slice(0, 60)) ?? -1;
-        if (idx >= 0) {
-          const range = document.createRange();
-          range.setStart(textNode, idx);
-          range.setEnd(textNode, Math.min(idx + text.length, textNode.length));
-          const mark = document.createElement("span");
-          mark.className = "comment-marker";
-          mark.dataset.commentId = comment.id;
-          mark.title = "View comment";
-          mark.addEventListener("click", () => {
-            setIsOpen(true);
-            // Scroll the comment into view in the panel
-            setTimeout(() => {
-              const el = document.querySelector(`[data-comment-thread="${comment.id}"]`);
-              el?.scrollIntoView({ behavior: "smooth", block: "center" });
-            }, 100);
-          });
-          range.surroundContents(mark);
-          break; // Only mark first occurrence
-        }
+      const target = findTextInDOM(docContent, comment.anchorText!) as HTMLElement | null;
+      if (target && !target.classList.contains("comment-marker")) {
+        target.classList.add("comment-marker");
+        target.dataset.commentId = comment.id;
+        target.title = "View comment";
+        target.addEventListener("click", () => {
+          setIsOpen(true);
+          setTimeout(() => {
+            const el = document.querySelector(`[data-comment-thread="${comment.id}"]`);
+            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 100);
+        });
       }
     }
   }, [comments]);
@@ -430,44 +418,52 @@ export default function Comments({
   );
 }
 
+/**
+ * Find a text string in the DOM that may span multiple elements.
+ * Returns the containing element (smallest block parent) or null.
+ */
+function findTextInDOM(root: Element, searchText: string): Element | null {
+  // Search in the concatenated textContent of block-level elements
+  const blocks = root.querySelectorAll("p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, dd, dt");
+  const needle = searchText.slice(0, 80).toLowerCase();
+
+  for (const block of blocks) {
+    const text = (block.textContent || "").toLowerCase();
+    if (text.includes(needle)) {
+      return block as Element;
+    }
+  }
+
+  // Fallback: search the whole content
+  const fullText = (root.textContent || "").toLowerCase();
+  if (fullText.includes(needle)) {
+    // Walk text nodes to find approximate location
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      const nodeText = (node.textContent || "").toLowerCase();
+      if (nodeText.includes(needle.slice(0, 30))) {
+        return node.parentElement;
+      }
+    }
+  }
+
+  return null;
+}
+
 /** Find anchor text in the document and scroll to it with a flash highlight */
 function scrollToAnchor(anchorText: string, section: string | null) {
   const docContent = document.querySelector(".sw-doc-content");
   if (!docContent) return;
 
-  // Use TreeWalker to find text nodes containing the anchor text
-  const walker = document.createTreeWalker(docContent, NodeFilter.SHOW_TEXT);
-  let best: { node: Text; index: number } | null = null;
+  const target = findTextInDOM(docContent, anchorText);
+  if (!target) return;
 
-  while (walker.nextNode()) {
-    const textNode = walker.currentNode as Text;
-    const idx = textNode.textContent?.indexOf(anchorText.slice(0, 60)) ?? -1;
-    if (idx >= 0) {
-      // If we have a section, prefer matches within that section
-      if (section) {
-        const headings = Array.from(docContent.querySelectorAll("h1,h2,h3,h4,h5,h6"));
-        const nodeTop = textNode.parentElement?.getBoundingClientRect().top ?? 0;
-        const above = headings.filter(h => h.getBoundingClientRect().top < nodeTop);
-        const lastHeading = above[above.length - 1]?.textContent?.trim() || "";
-        if (section.includes(lastHeading)) {
-          best = { node: textNode, index: idx };
-          break; // Exact section match, use this one
-        }
-      }
-      if (!best) {
-        best = { node: textNode, index: idx };
-      }
-    }
-  }
+  // Scroll to the element
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
 
-  if (!best) return;
-
-  // Create a temporary highlight using the Range API
-  const range = document.createRange();
-  range.setStart(best.node, best.index);
-  range.setEnd(best.node, Math.min(best.index + anchorText.length, best.node.length));
-
-  const rect = range.getBoundingClientRect();
+  // Flash highlight overlay
+  const rect = target.getBoundingClientRect();
   const highlight = document.createElement("div");
   highlight.className = "comment-scroll-highlight";
   highlight.style.position = "absolute";
@@ -477,11 +473,6 @@ function scrollToAnchor(anchorText: string, section: string | null) {
   highlight.style.height = `${rect.height + 4}px`;
   document.body.appendChild(highlight);
 
-  // Scroll into view
-  const el = best.node.parentElement;
-  el?.scrollIntoView({ behavior: "smooth", block: "center" });
-
-  // Remove highlight after animation
   setTimeout(() => highlight.remove(), 2000);
 }
 
