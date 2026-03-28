@@ -10,6 +10,9 @@ export default defineConfig({
   security: { checkOrigin: false },
   session: {
     driver: "fs",
+    options: {
+      base: "/opt/sideways/.sessions",
+    },
     cookie: {
       name: "sw-session",
       sameSite: "lax",
