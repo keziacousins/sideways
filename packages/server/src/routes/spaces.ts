@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
 import { type Database, spaces, sections, spaceMembers, themes, users } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
-import { canWriteSpace } from "../middleware/visibility.js";
+import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -140,24 +140,34 @@ export function createSpaceRoutes(db: Database) {
     return c.json(space, 201);
   });
 
-  /** Delete a space and all its documents */
+  /** Delete a space and all its documents — owner only */
   router.delete("/:slug", async (c) => {
     const space = await db.query.spaces.findFirst({
       where: eq(spaces.slug, c.req.param("slug")),
     });
     if (!space) return c.json({ error: "Not found" }, 404);
 
+    const user = c.get("user") as AuthUser | null;
+    if (!user || space.ownerId !== user.id) {
+      return c.json({ error: "Only the space owner can delete a space" }, 403);
+    }
+
     // Cascade: documents, versions, comments are handled by FK ON DELETE CASCADE
     await db.delete(spaces).where(eq(spaces.id, space.id));
     return c.json({ deleted: true });
   });
 
-  /** List sections in a space */
+  /** List sections in a space — requires read access */
   router.get("/:slug/sections", async (c) => {
     const space = await db.query.spaces.findFirst({
       where: eq(spaces.slug, c.req.param("slug")),
     });
     if (!space) return c.json({ error: "Space not found" }, 404);
+
+    const user = c.get("user") as AuthUser | null;
+    if (!await canAccessSpace(db, space.id, space.visibility, space.ownerId, user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
 
     const all = await db.query.sections.findMany({
       where: eq(sections.spaceId, space.id),
@@ -165,12 +175,17 @@ export function createSpaceRoutes(db: Database) {
     return c.json(all);
   });
 
-  /** Create or update a section */
+  /** Create or update a section — requires write access */
   router.put("/:spaceSlug/sections/:sectionSlug", async (c) => {
     const space = await db.query.spaces.findFirst({
       where: eq(spaces.slug, c.req.param("spaceSlug")),
     });
     if (!space) return c.json({ error: "Space not found" }, 404);
+
+    const user = c.get("user") as AuthUser | null;
+    if (!await canWriteSpace(db, space.id, space.ownerId, user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
 
     const sectionSlug = c.req.param("sectionSlug");
     const body = await c.req.json<{ title?: string; position?: number }>();

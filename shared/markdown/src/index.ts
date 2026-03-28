@@ -8,6 +8,7 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 
 export interface RenderOptions {
   /** "web" includes interactive features; "pdf" produces print-ready HTML */
@@ -18,6 +19,28 @@ export interface RenderOptions {
  * Create the shared remark/rehype processor.
  * Used by both the web viewer and the PDF pipeline.
  */
+// Sanitize schema: allow KaTeX, highlight.js classes, heading IDs, task list checkboxes
+const sanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    "*": [...(defaultSchema.attributes?.["*"] || []), "className", "id", "style"],
+    input: ["type", "checked", "disabled"],
+    span: [...(defaultSchema.attributes?.["span"] || []), "className", "style"],
+    div: [...(defaultSchema.attributes?.["div"] || []), "className", "style"],
+    code: [...(defaultSchema.attributes?.["code"] || []), "className"],
+    pre: [...(defaultSchema.attributes?.["pre"] || []), "className"],
+    math: ["xmlns", "display"],
+  },
+  tagNames: [
+    ...(defaultSchema.tagNames || []),
+    "math", "mi", "mo", "mn", "ms", "mtext", "mspace", "mover", "munder",
+    "munderover", "msub", "msup", "msubsup", "mfrac", "mroot", "msqrt",
+    "mtable", "mtr", "mtd", "mrow", "annotation", "semantics",
+    "span", "div", "input", "section", "details", "summary",
+  ],
+};
+
 export function createProcessor(options: RenderOptions = { target: "web" }) {
   const processor = unified()
     .use(remarkParse)
@@ -28,7 +51,8 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
     .use(rehypeAutolinkHeadings, { behavior: "wrap" })
     .use(rehypeHighlight)
     .use(rehypeKatex)
-    .use(rehypeStringify, { allowDangerousHtml: true });
+    .use(rehypeSanitize, sanitizeSchema)
+    .use(rehypeStringify);
 
   return processor;
 }

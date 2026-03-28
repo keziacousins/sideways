@@ -9,7 +9,7 @@ import {
 } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
-import { canAccessSpace } from "../middleware/visibility.js";
+import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 
 export function createCommentRoutes(db: Database) {
   const router = new Hono();
@@ -146,11 +146,20 @@ export function createCommentRoutes(db: Database) {
 
   /**
    * POST /api/comments/:space/:slug/:commentId/resolve
-   * Toggle resolved status. Any authenticated user can resolve.
+   * Toggle resolved status. Requires write access to the space.
    */
   router.post("/:space/:slug/:commentId/resolve", requireAuth(), async (c) => {
-    const commentId = c.req.param("commentId");
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("space")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
 
+    const user = c.get("user") as AuthUser | null;
+    if (!await canWriteSpace(db, space.id, space.ownerId, user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const commentId = c.req.param("commentId");
     const comment = await db.query.comments.findFirst({
       where: eq(comments.id, commentId),
     });

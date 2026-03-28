@@ -2,9 +2,13 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { type Database, themes } from "@sideways/db";
 import type { Storage } from "@sideways/storage";
+import { requireAuth } from "../middleware/auth.js";
 
 export function createThemeRoutes(db: Database, storage: Storage) {
   const router = new Hono();
+
+  // All theme routes require authentication
+  router.use("*", requireAuth());
 
   /** List all themes */
   router.get("/", async (c) => {

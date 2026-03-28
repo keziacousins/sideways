@@ -26,6 +26,28 @@ app.use("*", requestLogMiddleware);
 // Auth middleware on all routes — sets user if token present, null otherwise
 app.use("*", authMiddleware(db));
 
+// Require auth by default on all API routes (fail-closed).
+// Routes that support anonymous access (public spaces/docs) handle it
+// internally via canAccessSpace — they still need user to be set.
+import { requireAuth } from "./middleware/auth.js";
+
+const PUBLIC_API_PATHS = [
+  "/api/auth/",        // login, register, token exchange
+  "/api/mcp",          // MCP handles its own auth via API key
+];
+
+app.use("/api/*", async (c, next) => {
+  const path = c.req.path;
+  // Allow public paths through
+  if (PUBLIC_API_PATHS.some(p => path.startsWith(p))) return next();
+  // Allow GET requests for read endpoints (visibility middleware handles access)
+  if (c.req.method === "GET") return next();
+  // All other API requests require authentication
+  const user = c.get("user");
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  return next();
+});
+
 import { createRequire } from "node:module";
 const _require = createRequire(import.meta.url);
 const rootPkg = _require("../../../package.json");

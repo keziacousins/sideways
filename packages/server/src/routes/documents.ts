@@ -547,6 +547,12 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         where: eq(spaces.slug, body.targetSpace),
       });
       if (!ts) return c.json({ error: "Target space not found" }, 404);
+
+      const user = c.get("user") as AuthUser | null;
+      if (!await canWriteSpace(db, ts.id, ts.ownerId, user)) {
+        return c.json({ error: "No write access to target space" }, 403);
+      }
+
       targetSpaceId = ts.id;
       targetOwnerId = ts.ownerId;
     }
