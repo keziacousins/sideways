@@ -50,13 +50,20 @@ export default function WikiLinkAutocomplete({ apiUrl, spaceSlug, accessToken }:
     const before = textarea.value.slice(0, triggerPosRef.current);
     const after = textarea.value.slice(textarea.selectionStart);
     const insert = `[[${doc.slug}|${doc.title}]]`;
-    textarea.value = before + insert + after;
+    const newValue = before + insert + after;
     const newPos = before.length + insert.length;
+
+    // Use native setter to trigger React's onChange
+    const nativeSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    if (nativeSetter) {
+      nativeSetter.call(textarea, newValue);
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    } else {
+      textarea.value = newValue;
+    }
+
     textarea.selectionStart = textarea.selectionEnd = newPos;
     textarea.focus();
-
-    // Trigger input event so React state updates
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
 
     setActive(false);
     setSuggestions([]);
