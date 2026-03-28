@@ -4,12 +4,14 @@ import {
   type Database,
   comments,
   documents,
+  documentWatches,
   spaces,
   users,
 } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
+import { createNotification, notifyWatchers, autoWatch, parseMentions } from "../lib/notify.js";
 
 export function createCommentRoutes(db: Database) {
   const router = new Hono();
@@ -117,6 +119,72 @@ export function createCommentRoutes(db: Database) {
         parentId: body.parentId ?? null,
       })
       .returning();
+
+    // Fire notifications (async, don't block response)
+    const spaceSlug = c.req.param("space");
+    const docSlug = c.req.param("slug");
+    const notified = new Set<string>(); // prevent double-notify
+
+    (async () => {
+      // 1. Reply notification
+      if (body.parentId) {
+        const parent = await db.query.comments.findFirst({
+          where: eq(comments.id, body.parentId),
+        });
+        if (parent && parent.authorId !== user.id) {
+          notified.add(parent.authorId);
+          await createNotification({
+            db, type: "reply", userId: parent.authorId,
+            documentId: doc.id, commentId: comment.id,
+            spaceSlug, docSlug,
+            title: `${user.name} replied to your comment`,
+            body: body.body.slice(0, 200),
+            actorName: user.name,
+          });
+        }
+      }
+
+      // 2. @mention notifications
+      const mentions = parseMentions(body.body);
+      if (mentions.length > 0) {
+        for (const mention of mentions) {
+          const mentioned = await db.query.users.findFirst({
+            where: (u, { or, eq: e }) => or(e(u.email, mention), e(u.name, mention)),
+          });
+          if (mentioned && mentioned.id !== user.id && !notified.has(mentioned.id)) {
+            notified.add(mentioned.id);
+            await createNotification({
+              db, type: "mention", userId: mentioned.id,
+              documentId: doc.id, commentId: comment.id,
+              spaceSlug, docSlug,
+              title: `${user.name} mentioned you in a comment`,
+              body: body.body.slice(0, 200),
+              actorName: user.name,
+            });
+          }
+        }
+      }
+
+      // 3. Notify watchers (excluding commenter and already-notified)
+      const watchers = await db.query.documentWatches.findMany({
+        where: eq(documentWatches.documentId, doc.id),
+      });
+      for (const w of watchers) {
+        if (w.userId !== user.id && !notified.has(w.userId)) {
+          await createNotification({
+            db, type: "new_comment", userId: w.userId,
+            documentId: doc.id, commentId: comment.id,
+            spaceSlug, docSlug,
+            title: `${user.name} commented on ${doc.title}`,
+            body: body.body.slice(0, 200),
+            actorName: user.name,
+          });
+        }
+      }
+
+      // 4. Auto-watch: commenter watches the doc
+      await autoWatch(db, user.id, doc.id);
+    })().catch(() => {});
 
     return c.json(comment, 201);
   });

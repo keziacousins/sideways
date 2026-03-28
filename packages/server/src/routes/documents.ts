@@ -20,6 +20,7 @@ import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { buildPrintHTML, type ThemeTokens } from "../pdf/template.js";
 import { env } from "../env.js";
 import { validateTitle, validateSlug, validateTags, validateContent } from "../middleware/validate.js";
+import { notifyWatchers } from "../lib/notify.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -359,6 +360,15 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
             contentHash: hash!,
             createdBy: userId,
           });
+
+          // Notify watchers of update (async)
+          notifyWatchers(db, existing.id, userId, {
+            type: "doc_updated",
+            spaceSlug,
+            docSlug: slug,
+            title: `${updated.title} was updated`,
+            actorName: (c.get("user") as AuthUser | null)?.name,
+          }).catch(() => {});
         }
       }
 
