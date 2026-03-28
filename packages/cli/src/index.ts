@@ -534,7 +534,8 @@ program
   .option("--space <space>", "Override space from config")
   .option("--dry-run", "Show what would change without doing it")
   .option("--clean", "Exclude comments when pulling")
-  .action(async (opts: { space?: string; dryRun?: boolean; clean?: boolean }) => {
+  .option("--reconcile", "Compare actual content for mismatched hashes (slower, useful after fresh init)")
+  .action(async (opts: { space?: string; dryRun?: boolean; clean?: boolean; reconcile?: boolean }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = createClient(config.api);
@@ -582,7 +583,38 @@ program
         else status = "unchanged";
       } else status = "unchanged";
 
-      if (status === "unchanged") continue;
+      // Reconcile: if hashes differ but actual content matches, treat as unchanged
+      if (opts.reconcile && remote && (status === "conflict" || status === "remote-modified" || status === "local-modified")) {
+        const remoteDoc = await client.getDocument(space, file.slug);
+        const { clean: localClean } = extractComments(raw);
+        const { content: localContent } = parseFrontmatter(localClean);
+        if (localContent.trim() === remoteDoc.content.trim()) {
+          console.log(`  \x1b[2mreconciled\x1b[0m  ${file.relativePath}`);
+          syncState.files[file.relativePath] = {
+            slug: file.slug,
+            remoteVersion: remote.version,
+            localHash,
+            remoteHash: remote.contentHash,
+          };
+          // Update remote timestamp to match local
+          const localMtime = statSync(filePath).mtime.toISOString();
+          await client.putDocument(space, file.slug, { updatedAt: localMtime });
+          continue;
+        }
+      }
+
+      if (status === "unchanged") {
+        // Ensure sync state is recorded even for unchanged files
+        if (!tracked && remote) {
+          syncState.files[file.relativePath] = {
+            slug: file.slug,
+            remoteVersion: remote.version,
+            localHash,
+            remoteHash: remote.contentHash,
+          };
+        }
+        continue;
+      }
       if (status === "conflict") { conflicts.push(file.relativePath); continue; }
       if (status === "remote-modified") { toPull.push({ slug: file.slug, relativePath: file.relativePath }); continue; }
       if (status === "new-local" || status === "local-modified") { toPush.push({ file, raw }); }
