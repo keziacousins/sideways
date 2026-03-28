@@ -61,6 +61,7 @@
 /* ── Results ──────────────────────────────────────────────── */
 .search-results {
   overflow-y: auto;
+  overscroll-behavior: contain;
   flex: 1;
 }
 

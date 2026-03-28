@@ -84,6 +84,7 @@
 
 .notif-list {
   overflow-y: auto;
+  overscroll-behavior: contain;
   flex: 1;
 }
 

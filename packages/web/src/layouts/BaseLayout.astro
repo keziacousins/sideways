@@ -69,6 +69,7 @@ const spaceSlug = pathParts[1] === "s" ? pathParts[2] : null;
     height: calc(100vh - var(--sw-header-height));
     flex-shrink: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     border-right: 1px solid var(--sw-border);
     background: var(--sw-ink-deepest);
     padding: 1.25rem 0;

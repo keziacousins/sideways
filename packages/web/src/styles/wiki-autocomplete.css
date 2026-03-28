@@ -6,6 +6,7 @@
   max-width: 400px;
   max-height: 240px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--sw-ink);
   border: 1px solid var(--sw-border-strong);
   border-radius: var(--sw-radius-md);

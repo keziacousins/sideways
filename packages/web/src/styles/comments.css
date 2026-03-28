@@ -93,6 +93,7 @@
   border-radius: var(--sw-radius-lg);
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
   z-index: 90;
   animation: panelIn var(--sw-duration) var(--sw-ease) both;
   display: flex;
