@@ -20,7 +20,21 @@ const storage = createStorage({ filerUrl: env.seaweedFilerUrl });
 
 const app = new Hono();
 
-app.use("*", cors());
+app.use("*", cors({
+  origin: (origin) => {
+    // Allow requests from our own frontend, Tailscale, and localhost dev
+    const allowed = [
+      env.publicUrl,
+      env.publicApiUrl,
+      "http://localhost:4000",
+      "http://localhost:4100",
+    ];
+    // Also allow any *.ts.net (Tailscale) origin
+    if (origin?.endsWith(".ts.net")) return origin;
+    return allowed.includes(origin) ? origin : allowed[0];
+  },
+  credentials: true,
+}));
 app.use("*", requestLogMiddleware);
 
 // Auth middleware on all routes — sets user if token present, null otherwise

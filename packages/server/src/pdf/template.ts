@@ -57,40 +57,55 @@ function extractHeadings(
   return headings;
 }
 
+/** Validate a CSS color value — hex, rgb(), hsl(), or named colors */
+function isValidColor(v: string): boolean {
+  return /^(#[0-9a-f]{3,8}|rgb\(\s*\d+[\s,]+\d+[\s,]+\d+\s*\)|rgba\(\s*\d+[\s,]+\d+[\s,]+\d+[\s,]+[\d.]+\s*\)|hsl\(\s*\d+[\s,]+\d+%[\s,]+\d+%\s*\)|[a-z]{3,20})$/i.test(v.trim());
+}
+
+/** Validate a font family name — alphanumeric, spaces, hyphens only */
+function isValidFont(v: string): boolean {
+  return /^[a-zA-Z0-9\s\-]+$/.test(v.trim()) && v.length <= 60;
+}
+
+/** Validate paper size */
+function isValidPaperSize(v: string): boolean {
+  return /^(A[0-5]|B[0-5]|letter|legal|ledger|\d+mm\s+\d+mm|\d+in\s+\d+in)$/i.test(v.trim());
+}
+
 /** Generate CSS overrides from theme tokens */
 function buildThemeCSS(theme: ThemeTokens): string {
   const rules: string[] = [];
 
-  // Font overrides
-  if (theme.fonts?.body) {
+  // Font overrides (validated against injection)
+  if (theme.fonts?.body && isValidFont(theme.fonts.body)) {
     rules.push(`body { font-family: "${theme.fonts.body}", sans-serif; }`);
   }
-  if (theme.fonts?.display) {
+  if (theme.fonts?.display && isValidFont(theme.fonts.display)) {
     const df = `"${theme.fonts.display}"`;
     rules.push(`h1, h2, h3, h4, h5, h6 { font-family: ${df}, Georgia, serif; }`);
     rules.push(`.print-title-page h1, .cover-centered h1, .cover-left h1, .cover-minimal h1 { font-family: ${df}, Georgia, serif; }`);
     rules.push(`.print-toc h2 { font-family: ${df}, Georgia, serif; }`);
   }
-  if (theme.fonts?.mono) {
+  if (theme.fonts?.mono && isValidFont(theme.fonts.mono)) {
     rules.push(`code, pre, kbd { font-family: "${theme.fonts.mono}", monospace; }`);
   }
 
-  // Color overrides
-  if (theme.colors?.text) {
+  // Color overrides (validated)
+  if (theme.colors?.text && isValidColor(theme.colors.text)) {
     rules.push(`body { color: ${theme.colors.text}; }`);
   }
-  if (theme.colors?.accent) {
+  if (theme.colors?.accent && isValidColor(theme.colors.accent)) {
     rules.push(`a { color: ${theme.colors.accent}; }`);
     rules.push(`blockquote { border-left-color: ${theme.colors.accent}; }`);
     rules.push(`.print-rule { background: ${theme.colors.accent}; }`);
   }
-  if (theme.colors?.rule) {
+  if (theme.colors?.rule && isValidColor(theme.colors.rule)) {
     rules.push(`h1, h2 { border-bottom-color: ${theme.colors.rule}; }`);
     rules.push(`hr { border-color: ${theme.colors.rule}; }`);
   }
 
-  // Paper size override
-  if (theme.print?.paperSize) {
+  // Paper size override (validated)
+  if (theme.print?.paperSize && isValidPaperSize(theme.print.paperSize)) {
     rules.push(`@page { size: ${theme.print.paperSize}; }`);
   }
 

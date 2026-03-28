@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { type Database, users } from "@sideways/db";
 import { env } from "../env.js";
 import type { AuthUser } from "../middleware/auth.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 
 const HYDRA_ADMIN = env.hydraAdminUrl;
 const KRATOS_PUBLIC = env.kratosPublicUrl;
@@ -30,6 +31,12 @@ const recentLogins = new Map<string, { subject: string; expiresAt: number }>();
 
 export function createAuthRoutes(db: Database) {
   const router = new Hono();
+
+  // Rate limit auth endpoints: 10 requests per minute per IP
+  const authRateLimit = rateLimit({ windowMs: 60_000, max: 10 });
+  router.use("/login", authRateLimit);
+  router.use("/register", authRateLimit);
+  router.use("/token", authRateLimit);
 
   // ── Kratos proxy routes ──────────────────────────────────────────────
 
