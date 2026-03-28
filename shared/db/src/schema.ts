@@ -8,7 +8,13 @@ import {
   uuid,
   index,
   uniqueIndex,
+  customType,
 } from "drizzle-orm/pg-core";
+
+/** Custom tsvector type for Postgres full-text search */
+const tsvector = customType<{ data: string }>({
+  dataType() { return "tsvector"; },
+});
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -66,6 +72,8 @@ export const documents = pgTable("documents", {
   title: text("title").notNull(),
   position: integer("position").notNull().default(0),
   tags: text("tags").array().notNull().default([]),
+  /** Full-text search index — recomputed on content/title/tag changes */
+  searchTsv: tsvector("search_tsv"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [

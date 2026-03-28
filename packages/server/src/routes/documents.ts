@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { renderMarkdown } from "@sideways/markdown";
 import {
@@ -39,6 +39,17 @@ async function ensureSystemUser(db: Database): Promise<string> {
 function extractTitle(content: string): string | null {
   const match = content.match(/^#\s+(.+)$/m);
   return match ? match[1].trim() : null;
+}
+
+/** Recompute the full-text search index for a document */
+async function updateSearchIndex(db: Database, docId: string, title: string, tags: string[], content: string) {
+  await db.execute(sql`
+    UPDATE documents SET search_tsv =
+      setweight(to_tsvector('english', ${title}), 'A') ||
+      setweight(to_tsvector('english', ${tags.join(" ")}), 'B') ||
+      setweight(to_tsvector('english', ${content}), 'C')
+    WHERE id = ${docId}
+  `);
 }
 
 /** Get the current user's ID, or fall back to system user */
@@ -374,6 +385,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         }
       }
 
+      // Update search index (title/tags/content may have changed)
+      updateSearchIndex(db, existing.id, updated.title, updated.tags || [], content).catch(() => {});
+
       return c.json(updated, 200);
     }
 
@@ -400,6 +414,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       contentHash: hash || contentHash(content),
       createdBy: userId,
     });
+
+    // Index for search
+    updateSearchIndex(db, doc.id, doc.title, doc.tags || [], content).catch(() => {});
 
     return c.json(doc, 201);
   });
@@ -558,6 +575,16 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       .set(updates)
       .where(eq(documents.id, doc.id))
       .returning();
+
+    // Reindex if title or tags changed
+    if (body.title !== undefined || body.tags !== undefined) {
+      const latestVersion = await db.query.documentVersions.findFirst({
+        where: eq(documentVersions.documentId, doc.id),
+        orderBy: desc(documentVersions.version),
+        columns: { content: true },
+      });
+      updateSearchIndex(db, doc.id, updated.title, updated.tags || [], latestVersion?.content || "").catch(() => {});
+    }
 
     return c.json(updated);
   });

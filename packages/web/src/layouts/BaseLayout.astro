@@ -4,7 +4,9 @@ import "@fontsource-variable/fira-code";
 import "@fontsource-variable/newsreader";
 import "../styles/global.css";
 import "../styles/notifications.css";
+import "../styles/search.css";
 import Header from "../components/Header.astro";
+import SearchModal from "../components/SearchModal.tsx";
 
 interface Props {
   title: string;
@@ -12,6 +14,8 @@ interface Props {
 }
 
 const { title, sidebar = false } = Astro.props;
+const accessToken = Astro.locals.accessToken || null;
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 ---
 
 <!doctype html>
@@ -23,6 +27,7 @@ const { title, sidebar = false } = Astro.props;
   </head>
   <body>
     <Header />
+    <SearchModal client:idle apiUrl={API_URL} accessToken={accessToken} />
     <div class:list={["sw-shell", { "has-sidebar": sidebar }]}>
       {sidebar && (
         <aside class="sw-sidebar" id="sidebar">

@@ -371,23 +371,19 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "search_docs",
-    'Search for documents by title across all accessible spaces. Returns matching space/slug pairs. Example: search_docs("api")',
-    { query: z.string().describe("Search term to match against document titles and slugs") },
-    async ({ query }) => {
-      const spaces = await apiFetch("/api/spaces");
-      const results: string[] = [];
-      const q = query.toLowerCase();
-
-      for (const s of spaces) {
-        const docs = await apiFetch(`/api/documents?space=${s.slug}`);
-        for (const d of docs) {
-          if (d.title.toLowerCase().includes(q) || d.slug.includes(q)) {
-            results.push(`${s.slug}/${d.slug}: ${d.title}`);
-          }
-        }
-      }
-
-      return { content: [{ type: "text" as const, text: results.length ? results.join("\n") : "No documents found." }] };
+    'Full-text search across all accessible documents by title and content. Returns ranked results with snippets. Example: search_docs("api design")',
+    {
+      query: z.string().describe("Search query — searches titles, tags, and document content"),
+      space: z.string().optional().describe("Limit search to a specific space slug"),
+    },
+    async ({ query, space }) => {
+      const params = new URLSearchParams({ q: query, limit: "20" });
+      if (space) params.set("space", space);
+      const data = await apiFetch(`/api/search?${params}`);
+      const text = data.results
+        .map((r: any) => `${r.spaceSlug}/${r.docSlug}: ${r.title}\n  ${r.snippet?.replace(/<[^>]+>/g, "") || ""}`)
+        .join("\n\n");
+      return { content: [{ type: "text" as const, text: text || "No documents found." }] };
     },
   );
 }

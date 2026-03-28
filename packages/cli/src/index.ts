@@ -935,6 +935,47 @@ program
     console.log(`Removed member ${memberId}`);
   });
 
+// ── search ────────────────────────────────────────────────────────────
+
+program
+  .command("search <query>")
+  .description("Search documents by title and content")
+  .option("--space <space>", "Limit to a specific space")
+  .option("--limit <n>", "Max results", "10")
+  .action(async (query: string, opts: { space?: string; limit?: string }) => {
+    const config = findConfig();
+    const client = getClient(config?.api || "http://localhost:4100");
+
+    const params = new URLSearchParams({ q: query, limit: opts.limit || "10" });
+    if (opts.space) params.set("space", opts.space);
+
+    const creds = getStoredCredentials();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (creds?.api_key) headers["Authorization"] = `Bearer ${creds.api_key}`;
+
+    const res = await fetch(`${config?.api || "http://localhost:4100"}/api/search?${params}`, { headers });
+    if (!res.ok) {
+      console.error("Search failed.");
+      process.exit(1);
+    }
+
+    const data = await res.json();
+    if (data.results.length === 0) {
+      console.log("No results.");
+      return;
+    }
+
+    for (const r of data.results) {
+      const snippet = (r.snippet || "").replace(/<[^>]+>/g, "").trim();
+      console.log(`  \x1b[1m${r.title}\x1b[0m`);
+      console.log(`  ${r.spaceSlug}/${r.docSlug}`);
+      if (snippet) console.log(`  \x1b[2m${snippet}\x1b[0m`);
+      console.log();
+    }
+
+    console.log(`${data.results.length} result(s) of ${data.total}`);
+  });
+
 // ── comments ──────────────────────────────────────────────────────────
 
 program
