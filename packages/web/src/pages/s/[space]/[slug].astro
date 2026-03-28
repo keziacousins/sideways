@@ -958,13 +958,13 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       return null;
     }
 
-    /** Scroll preview pane to a heading by text */
+    /** Scroll preview pane to a heading by text (without affecting page scroll) */
     function scrollPreviewToHeading(headingText) {
       if (!previewPane) return;
       const headings = previewPane.querySelectorAll("h1, h2, h3, h4, h5, h6");
       for (const h of headings) {
         if (h.textContent?.trim() === headingText) {
-          h.scrollIntoView({ block: "start", behavior: "auto" });
+          previewPane.scrollTop = h.offsetTop - previewPane.offsetTop;
           return;
         }
       }
@@ -1055,13 +1055,10 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       }
     });
 
-    // Live preview (debounced) + sync preview scroll after render
+    // Live preview (debounced) — no scroll sync on typing, only on cursor movement
     textarea.addEventListener("input", () => {
       clearTimeout(previewTimer);
-      previewTimer = setTimeout(async () => {
-        await updatePreview();
-        syncPreviewToCursor();
-      }, 300);
+      previewTimer = setTimeout(() => updatePreview(), 300);
     });
 
     async function updatePreview() {
