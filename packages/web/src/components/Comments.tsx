@@ -146,33 +146,46 @@ export default function Comments({
   }, []);
 
   // Open panel and scroll to comment if URL has #comment-{id}
-  const hashHandled = useRef(false);
-  useEffect(() => {
-    if (hashHandled.current) return;
+  const pendingScrollId = useRef<string | null>(null);
+
+  function handleCommentHash() {
     const hash = window.location.hash;
     if (!hash.startsWith("#comment-")) return;
-    if (comments.length === 0) return; // wait for comments to load
-
-    hashHandled.current = true;
     const commentId = hash.slice(9);
-    setIsOpen(true);
     history.replaceState(null, "", window.location.pathname);
+    pendingScrollId.current = commentId;
+    setIsOpen(true);
+  }
 
-    // Wait for panel to render then scroll
+  // Check hash on mount + listen for hash changes (same-page navigation)
+  useEffect(() => {
+    handleCommentHash();
+    window.addEventListener("hashchange", handleCommentHash);
+    return () => window.removeEventListener("hashchange", handleCommentHash);
+  }, []);
+
+  // When panel is open and we have a pending scroll target, poll for it
+  useEffect(() => {
+    if (!isOpen || !pendingScrollId.current) return;
+    const targetId = pendingScrollId.current;
+
     let attempts = 0;
     const tryScroll = () => {
-      const el = document.querySelector(`[data-comment-thread="${commentId}"]`);
+      const el = document.querySelector(`[data-comment-thread="${targetId}"]`);
       if (el) {
+        pendingScrollId.current = null;
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         el.classList.add("comment-flash");
         setTimeout(() => el.classList.remove("comment-flash"), 2000);
-      } else if (attempts < 30) {
+      } else if (attempts < 40) {
         attempts++;
         setTimeout(tryScroll, 100);
+      } else {
+        pendingScrollId.current = null;
       }
     };
-    setTimeout(tryScroll, 200);
-  }, [comments.length]);
+    tryScroll();
+  }, [isOpen, comments.length]);
 
   // Mark anchor text in the document with subtle highlights
   useEffect(() => {

@@ -154,7 +154,19 @@ export default function NotificationBell({ apiUrl, accessToken, refreshToken }: 
             )}
             {notifications.map((n) => (
               <div key={n.id} className={`notif-item ${n.read ? "read" : "unread"}`}>
-                <a href={`/s/${n.spaceSlug}/${n.docSlug}${n.commentId ? `#comment-${n.commentId}` : ""}`} className="notif-link">
+                <a
+                  href={`/s/${n.spaceSlug}/${n.docSlug}${n.commentId ? `#comment-${n.commentId}` : ""}`}
+                  className="notif-link"
+                  onClick={(e) => {
+                    // If already on the same doc page, use hash navigation instead of full reload
+                    const target = `/s/${n.spaceSlug}/${n.docSlug}`;
+                    if (window.location.pathname === target && n.commentId) {
+                      e.preventDefault();
+                      setOpen(false);
+                      window.location.hash = `comment-${n.commentId}`;
+                    }
+                  }}
+                >
                   <span className="notif-icon" dangerouslySetInnerHTML={{ __html: TYPE_ICONS[n.type] || "•" }} />
                   <div className="notif-content">
                     <div className="notif-title">{n.title}</div>
