@@ -1,0 +1,43 @@
+/* ── Wiki-link autocomplete dropdown ──────────────────────── */
+.wiki-autocomplete {
+  position: absolute;
+  z-index: 400;
+  min-width: 280px;
+  max-width: 400px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--sw-ink);
+  border: 1px solid var(--sw-border-strong);
+  border-radius: var(--sw-radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.wiki-autocomplete-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background var(--sw-duration-fast) var(--sw-ease);
+}
+
+.wiki-autocomplete-item.active,
+.wiki-autocomplete-item:hover {
+  background: var(--sw-ink-light);
+}
+
+.wiki-autocomplete-title {
+  font-size: var(--sw-text-sm);
+  color: var(--sw-text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-autocomplete-slug {
+  font-size: var(--sw-text-xs);
+  color: var(--sw-text-ghost);
+  font-family: var(--sw-font-mono);
+  flex-shrink: 0;
+}

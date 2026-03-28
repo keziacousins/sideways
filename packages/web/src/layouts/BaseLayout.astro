@@ -5,8 +5,10 @@ import "@fontsource-variable/newsreader";
 import "../styles/global.css";
 import "../styles/notifications.css";
 import "../styles/search.css";
+import "../styles/wiki-autocomplete.css";
 import Header from "../components/Header.astro";
 import SearchModal from "../components/SearchModal.tsx";
+import WikiLinkAutocomplete from "../components/WikiLinkAutocomplete.tsx";
 
 interface Props {
   title: string;
@@ -16,6 +18,9 @@ interface Props {
 const { title, sidebar = false } = Astro.props;
 const accessToken = Astro.locals.accessToken || null;
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+// Extract space slug from URL path (e.g. /s/engineering/doc-slug → engineering)
+const pathParts = Astro.url.pathname.split("/");
+const spaceSlug = pathParts[1] === "s" ? pathParts[2] : null;
 ---
 
 <!doctype html>
@@ -28,6 +33,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
   <body>
     <Header />
     <SearchModal client:idle apiUrl={API_URL} accessToken={accessToken} />
+    {spaceSlug && <WikiLinkAutocomplete client:idle apiUrl={API_URL} spaceSlug={spaceSlug} accessToken={accessToken} />}
     <div class:list={["sw-shell", { "has-sidebar": sidebar }]}>
       {sidebar && (
         <aside class="sw-sidebar" id="sidebar">
