@@ -25,9 +25,9 @@ log:
   format: text
 
 ttl:
-  access_token: 15m
+  access_token: 24h
   refresh_token: 720h
-  id_token: 15m
+  id_token: 24h
   auth_code: 10m
 
 oauth2:
