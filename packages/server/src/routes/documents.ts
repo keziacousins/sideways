@@ -16,6 +16,7 @@ import type { AuthUser } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { buildPrintHTML, type ThemeTokens } from "../pdf/template.js";
 import { env } from "../env.js";
+import { validateTitle, validateSlug, validateTags, validateContent } from "../middleware/validate.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -242,6 +243,22 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       sectionSlug?: string;
       parentSlug?: string;
     }>();
+
+    // Validate inputs
+    const slugErr = validateSlug(slug);
+    if (slugErr) return c.json({ error: slugErr }, 400);
+    if (body.title) {
+      const titleErr = validateTitle(body.title);
+      if (titleErr) return c.json({ error: titleErr }, 400);
+    }
+    if (body.tags) {
+      const tagsErr = validateTags(body.tags);
+      if (tagsErr) return c.json({ error: tagsErr }, 400);
+    }
+    if (body.content) {
+      const contentErr = validateContent(body.content);
+      if (contentErr) return c.json({ error: contentErr }, 400);
+    }
 
     const userId = await getUserId(c, db);
     const hasContent = body.content !== undefined;

@@ -8,4 +8,13 @@ export default defineConfig({
   integrations: [react()],
   server: { port: 4000 },
   security: { checkOrigin: false },
+  session: {
+    driver: "fs",
+    cookie: {
+      name: "sw-session",
+      sameSite: "lax",
+      secure: true,
+    },
+    ttl: 7 * 24 * 60 * 60, // 7 days
+  },
 });

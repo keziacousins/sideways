@@ -94,6 +94,10 @@ export function createCommentRoutes(db: Database) {
       parentId?: string;
     }>();
 
+    if (!body.body || body.body.length > 10_000) {
+      return c.json({ error: "Comment body required (max 10,000 characters)" }, 400);
+    }
+
     if (body.parentId) {
       const parent = await db.query.comments.findFirst({
         where: and(eq(comments.id, body.parentId), eq(comments.documentId, doc.id)),

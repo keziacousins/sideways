@@ -133,6 +133,18 @@ app.route("/api/comments", createCommentRoutes(db));
 app.route("/api/mcp", createMcpRoutes(db));
 app.route("/api/themes", createThemeRoutes(db, storage));
 
+// Cleanup expired API keys every hour
+import { lt } from "drizzle-orm";
+import { apiKeys } from "@sideways/db";
+setInterval(async () => {
+  try {
+    const result = await db.delete(apiKeys).where(lt(apiKeys.expiresAt, new Date()));
+    logger.debug("Cleaned up expired API keys");
+  } catch (err: any) {
+    logger.error({ err: err.message }, "API key cleanup failed");
+  }
+}, 60 * 60 * 1000);
+
 serve({ fetch: app.fetch, port: env.port }, () => {
   logger.info({ port: env.port }, "Sideways API running");
 });
