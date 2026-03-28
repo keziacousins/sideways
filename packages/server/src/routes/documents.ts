@@ -754,6 +754,33 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     }
   });
 
+  /** Mark all documents in a space as read */
+  router.post("/:space/_read-all", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const docs = await db.query.documents.findMany({
+      where: eq(documents.spaceId, space.id),
+      columns: { id: true },
+    });
+
+    const now = new Date();
+    for (const doc of docs) {
+      await db.insert(documentReads)
+        .values({ userId: user.id, documentId: doc.id, readAt: now })
+        .onConflictDoUpdate({
+          target: [documentReads.userId, documentReads.documentId],
+          set: { readAt: now },
+        });
+    }
+
+    return c.json({ marked: docs.length });
+  });
+
   /** Mark document as read by current user */
   router.post("/:space/:slug/read", async (c) => {
     const result = await resolveSpace(c, c.req.param("space"));
