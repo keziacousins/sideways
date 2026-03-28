@@ -303,7 +303,9 @@ program
       const client = getClient(config.api);
       const syncRoot = getSyncRoot(config);
 
-      await ensureSpace(client, space, config.spaceName || undefined);
+      if (!opts.dryRun) {
+        await ensureSpace(client, space, config.spaceName || undefined);
+      }
 
       // Discover all files from the sync root
       const allFiles = discoverFiles(syncRoot, config.ignore);
@@ -331,8 +333,10 @@ program
 
       // Create sections for all first-level directories
       const sectionSlugs = new Set(files.map(f => f.section).filter(Boolean) as string[]);
-      for (const section of sectionSlugs) {
-        await client.createSection(space, section).catch(() => {});
+      if (!opts.dryRun) {
+        for (const section of sectionSlugs) {
+          await client.createSection(space, section).catch(() => {});
+        }
       }
 
       // Get remote state for diff
@@ -547,7 +551,9 @@ program
     const client = getClient(config.api);
     const syncRoot = getSyncRoot(config);
 
-    await ensureSpace(client, space, config.spaceName || undefined);
+    if (!opts.dryRun) {
+      await ensureSpace(client, space, config.spaceName || undefined);
+    }
 
     const allFiles = discoverFiles(syncRoot, config.ignore);
     const remoteFiles = await client.getSyncInfo(space);
@@ -666,9 +672,11 @@ program
     // Push local changes
     if (toPush.length > 0) {
       // Create sections
-      const sectionSlugs = new Set(toPush.map(p => p.file.section).filter(Boolean) as string[]);
-      for (const section of sectionSlugs) {
-        await client.createSection(space, section).catch(() => {});
+      if (!opts.dryRun) {
+        const sectionSlugs = new Set(toPush.map(p => p.file.section).filter(Boolean) as string[]);
+        for (const section of sectionSlugs) {
+          await client.createSection(space, section).catch(() => {});
+        }
       }
 
       console.log(`\nPushing ${toPush.length} file(s):`);
