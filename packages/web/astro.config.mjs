@@ -16,7 +16,7 @@ export default defineConfig({
     cookie: {
       name: "sw-session",
       sameSite: "lax",
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
     },
     ttl: 7 * 24 * 60 * 60, // 7 days
   },
