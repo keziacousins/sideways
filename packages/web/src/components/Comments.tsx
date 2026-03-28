@@ -10,6 +10,7 @@ interface Comment {
   resolved: boolean;
   createdAt: string;
   author: { name: string; email: string } | null;
+  actorName: string | null;
 }
 
 interface Props {
@@ -536,7 +537,11 @@ function CommentItem({
         </div>
       )}
       <div className="comment-meta">
-        <span className="comment-author">{comment.author?.name || "Unknown"}</span>
+        <span className="comment-author">
+          {comment.actorName
+            ? <>{comment.actorName} <span className="comment-via">via {comment.author?.name}</span></>
+            : comment.author?.name || "Unknown"}
+        </span>
         <span className="comment-date">{new Date(comment.createdAt).toLocaleDateString()}</span>
       </div>
       <div className="comment-body">{comment.body}</div>

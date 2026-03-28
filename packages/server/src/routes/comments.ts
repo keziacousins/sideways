@@ -117,6 +117,7 @@ export function createCommentRoutes(db: Database) {
         anchorSection: body.anchorSection ?? null,
         anchorContext: body.anchorContext ?? null,
         parentId: body.parentId ?? null,
+        actorName: user.actorName ?? null,
       })
       .returning();
 

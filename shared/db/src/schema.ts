@@ -105,6 +105,8 @@ export const comments = pgTable("comments", {
   /** Surrounding lines for context, with anchor text marked */
   anchorContext: text("anchor_context"),
   resolved: boolean("resolved").notNull().default(false),
+  /** Agent/bot name if comment was posted via an API key with actorName or --as flag */
+  actorName: text("actor_name"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [

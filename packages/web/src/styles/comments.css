@@ -348,6 +348,11 @@
   font-size: var(--sw-text-xs);
 }
 
+.comment-via {
+  font-weight: 400;
+  color: var(--sw-text-ghost);
+}
+
 .comment-date {
   color: var(--sw-text-ghost);
   font-size: var(--sw-text-xs);
