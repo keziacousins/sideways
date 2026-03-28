@@ -149,13 +149,11 @@ export default function Comments({
     const docContent = document.querySelector(".sw-doc-content");
     if (!docContent) return;
 
-    // Remove previous markers
+    // Remove previous markers (just remove class + data, don't destroy elements)
     docContent.querySelectorAll(".comment-marker").forEach((el) => {
-      const parent = el.parentNode;
-      if (parent) {
-        parent.replaceChild(document.createTextNode(el.textContent || ""), el);
-        parent.normalize();
-      }
+      el.classList.remove("comment-marker");
+      (el as HTMLElement).removeAttribute("data-comment-id");
+      (el as HTMLElement).title = "";
     });
 
     // Add markers for each anchored, unresolved comment
