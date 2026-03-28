@@ -23,6 +23,7 @@ interface NotifyOpts {
 /** Create a notification for a single user */
 export async function createNotification(opts: NotifyOpts) {
   try {
+    logger.info({ userId: opts.userId, type: opts.type, docSlug: opts.docSlug }, "Inserting notification");
     await opts.db.insert(notifications).values({
       userId: opts.userId,
       type: opts.type,
@@ -59,11 +60,14 @@ export async function notifyWatchers(
       where: eq(documentWatches.documentId, documentId),
     });
 
+    logger.info({ documentId, watcherCount: watchers.length, excludeUserId }, "Notifying watchers");
+
     const recipients = watchers
       .map(w => w.userId)
       .filter(id => id !== excludeUserId);
 
     for (const userId of recipients) {
+      logger.info({ userId, type: opts.type, title: opts.title }, "Creating notification");
       await createNotification({
         db,
         userId,
@@ -72,7 +76,7 @@ export async function notifyWatchers(
       });
     }
   } catch (err: any) {
-    logger.error({ err: err.message }, "Failed to notify watchers");
+    logger.error({ err: err.message, stack: err.stack }, "Failed to notify watchers");
   }
 }
 
