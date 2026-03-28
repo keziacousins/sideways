@@ -9,10 +9,13 @@ import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import { remarkWikiLinks } from "./wikilinks.js";
 
 export interface RenderOptions {
   /** "web" includes interactive features; "pdf" produces print-ready HTML */
   target: "web" | "pdf";
+  /** Space slug for resolving wiki-links like [[doc-slug]] */
+  spaceSlug?: string;
 }
 
 /**
@@ -46,6 +49,7 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath)
+    .use(remarkWikiLinks(options.spaceSlug))
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeSlug)
     .use(rehypeAutolinkHeadings, { behavior: "wrap" })

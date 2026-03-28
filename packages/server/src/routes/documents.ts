@@ -171,6 +171,26 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     return c.json(syncInfo);
   });
 
+  /** Autocomplete: fast prefix search on doc titles/slugs within a space */
+  router.get("/:space/_autocomplete", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const q = (c.req.query("q") || "").toLowerCase();
+    const docs = await db.query.documents.findMany({
+      where: eq(documents.spaceId, space.id),
+      columns: { slug: true, title: true },
+      orderBy: [documents.title],
+    });
+
+    const filtered = q
+      ? docs.filter(d => d.title.toLowerCase().includes(q) || d.slug.includes(q))
+      : docs;
+
+    return c.json(filtered.slice(0, 15));
+  });
+
   /** Get a document by space/slug */
   router.get("/:space/:slug", async (c) => {
     const result = await resolveSpace(c, c.req.param("space"));
@@ -197,7 +217,8 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
   router.post("/:space/:slug/render", async (c) => {
     const body = await c.req.json<{ content: string }>();
     const target = c.req.query("target") === "pdf" ? "pdf" : "web";
-    const html = await renderMarkdown(body.content || "", { target });
+    const spaceSlug = c.req.param("space");
+    const html = await renderMarkdown(body.content || "", { target, spaceSlug });
     return c.json({ html });
   });
 
@@ -245,7 +266,8 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     }
 
     const target = c.req.query("target") === "pdf" ? "pdf" : "web";
-    const html = await renderMarkdown(latestVersion.content, { target });
+    const spaceSlug = c.req.param("space");
+    const html = await renderMarkdown(latestVersion.content, { target, spaceSlug });
 
     storage
       .upload(cacheKey, Buffer.from(html), "text/html")
@@ -725,7 +747,8 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     if (!latestVersion) return c.json({ error: "No versions" }, 404);
 
     // Render markdown to HTML with pdf target
-    const html = await renderMarkdown(latestVersion.content, { target: "pdf" });
+    const spaceSlug = c.req.param("space");
+    const html = await renderMarkdown(latestVersion.content, { target: "pdf", spaceSlug });
 
     // Resolve theme if space has one
     let theme: ThemeTokens | undefined;

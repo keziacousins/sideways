@@ -103,6 +103,13 @@
   text-decoration-color: var(--sw-accent);
 }
 
+.sw-doc-content a.wiki-link {
+  text-decoration-style: dotted;
+}
+.sw-doc-content a.wiki-link:hover {
+  text-decoration-style: solid;
+}
+
 /* ── Lists ────────────────────────────────────────────────────── */
 .sw-doc-content ul,
 .sw-doc-content ol {
