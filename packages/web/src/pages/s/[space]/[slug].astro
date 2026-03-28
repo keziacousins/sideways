@@ -1066,7 +1066,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
     async function updatePreview() {
       try {
-        const res = await fetch(`${API_URL}/api/documents/${spaceSlug}/${slug}/render?preview=true`, {
+        const res = await fetch(`/s/${spaceSlug}/${slug}/render`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: textarea.value }),

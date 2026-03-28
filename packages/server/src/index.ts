@@ -58,8 +58,6 @@ app.use("/api/*", async (c, next) => {
   if (PUBLIC_API_PATHS.some(p => path.startsWith(p))) return next();
   // Allow GET requests for read endpoints (visibility middleware handles access)
   if (c.req.method === "GET") return next();
-  // Allow render preview (POST but read-only — renders markdown without saving)
-  if (c.req.method === "POST" && path.endsWith("/render")) return next();
   // All other API requests require authentication
   const user = c.get("user");
   if (!user) return c.json({ error: "Unauthorized" }, 401);
