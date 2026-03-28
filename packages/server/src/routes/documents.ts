@@ -242,6 +242,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       position?: number;
       sectionSlug?: string;
       parentSlug?: string;
+      updatedAt?: string;
     }>();
 
     // Validate inputs
@@ -314,7 +315,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         title: derivedTitle ?? existing.title,
         tags: body.tags ?? existing.tags,
         position: body.position ?? existing.position,
-        updatedAt: new Date(),
+        updatedAt: body.updatedAt ? new Date(body.updatedAt) : new Date(),
       };
       if (sectionId !== undefined) updates.sectionId = sectionId;
       if (parentId !== undefined) updates.parentId = parentId;

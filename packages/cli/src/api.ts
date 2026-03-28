@@ -77,7 +77,7 @@ export function createClient(baseUrl: string) {
     putDocument(
       space: string,
       slug: string,
-      body: { title?: string; content?: string; tags?: string[]; sectionSlug?: string; parentSlug?: string },
+      body: { title?: string; content?: string; tags?: string[]; sectionSlug?: string; parentSlug?: string; updatedAt?: string },
     ) {
       return request(`/api/documents/${space}/${slug}`, {
         method: "PUT",

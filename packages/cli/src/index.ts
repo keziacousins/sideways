@@ -388,6 +388,8 @@ program
         if (frontmatter.title) body.title = frontmatter.title;
         if (file.section) body.sectionSlug = file.section;
         if (file.parentSlug) body.parentSlug = file.parentSlug;
+        // Preserve local file timestamp so mtime-based fallback works
+        body.updatedAt = statSync(filePath).mtime.toISOString();
 
         await client.putDocument(space, file.slug, body);
 
