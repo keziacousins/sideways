@@ -13,6 +13,22 @@ interface Comment {
   actorName: string | null;
 }
 
+/** Render wiki-links and basic inline markdown in comment text */
+function renderCommentBody(body: string, spaceSlug: string): string {
+  return body
+    // Wiki-links: [[slug|text]] or [[slug]]
+    .replace(/\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g, (_, slug, text) =>
+      `<a href="/s/${spaceSlug}/${slug.trim()}" class="wiki-link">${(text || slug).trim()}</a>`)
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    // Italic
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    // Inline code
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    // Newlines
+    .replace(/\n/g, "<br>");
+}
+
 interface Props {
   spaceSlug: string;
   docSlug: string;
@@ -401,7 +417,7 @@ export default function Comments({
 
             {topLevel.map((comment) => (
               <div key={comment.id} className="comment-thread" data-comment-thread={comment.id}>
-                <CommentItem
+                <CommentItem spaceSlug={spaceSlug}
                   comment={comment}
                   onReply={() => {
                     setReplyTo(comment.id);
@@ -413,7 +429,7 @@ export default function Comments({
                   canAct={isAuthenticated}
                 />
                 {(replyMap.get(comment.id) || []).map((reply) => (
-                  <CommentItem
+                  <CommentItem spaceSlug={spaceSlug}
                     key={reply.id}
                     comment={reply}
                     isReply
@@ -436,7 +452,7 @@ export default function Comments({
                 </summary>
                 {resolved.map((comment) => (
                   <div key={comment.id} className="comment-thread resolved" data-comment-thread={comment.id}>
-                    <CommentItem
+                    <CommentItem spaceSlug={spaceSlug}
                       comment={comment}
                       onReply={() => {
                         setReplyTo(comment.id);
@@ -448,7 +464,7 @@ export default function Comments({
                       canAct={isAuthenticated}
                     />
                     {(replyMap.get(comment.id) || []).map((reply) => (
-                      <CommentItem
+                      <CommentItem spaceSlug={spaceSlug}
                         key={reply.id}
                         comment={reply}
                         isReply
@@ -532,12 +548,14 @@ function scrollToAnchor(anchorText: string, section: string | null) {
 
 function CommentItem({
   comment,
+  spaceSlug,
   isReply,
   onReply,
   onResolve,
   canAct,
 }: {
   comment: Comment;
+  spaceSlug: string;
   isReply?: boolean;
   onReply?: () => void;
   onResolve?: () => void;
@@ -586,7 +604,7 @@ function CommentItem({
         </span>
         <span className="comment-date">{new Date(comment.createdAt).toLocaleDateString()}</span>
       </div>
-      <div className="comment-body">{comment.body}</div>
+      <div className="comment-body" dangerouslySetInnerHTML={{ __html: renderCommentBody(comment.body, spaceSlug) }} />
       {canAct && (
         <div className="comment-actions">
           {onReply && <button onClick={onReply} className="comment-action">Reply</button>}

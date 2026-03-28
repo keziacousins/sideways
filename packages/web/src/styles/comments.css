@@ -372,6 +372,21 @@
   line-height: 1.5;
 }
 
+.comment-body a {
+  color: var(--sw-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--sw-border-accent);
+  text-underline-offset: 2px;
+}
+.comment-body a:hover { text-decoration-color: var(--sw-accent); }
+.comment-body code {
+  font-family: var(--sw-font-mono);
+  font-size: 0.9em;
+  background: var(--sw-ink-surface);
+  padding: 0.1em 0.3em;
+  border-radius: var(--sw-radius-sm);
+}
+
 .comment-actions {
   display: flex;
   gap: 0.5rem;
