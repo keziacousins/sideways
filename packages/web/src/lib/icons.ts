@@ -5,7 +5,7 @@
  */
 
 function svg(size: number, strokeWidth: number, content: string): string {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}">${content}</svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" style="vertical-align:-0.125em">${content}</svg>`;
 }
 
 export const icons = {

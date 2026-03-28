@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { apiFetch } from "../lib/api.ts";
+import { icons } from "../lib/icons.ts";
 import rootPkg from "../../../../package.json";
 
 const { accessToken } = Astro.locals;
@@ -24,7 +25,7 @@ try {
     {accessToken && (
       <div id="create-space-area">
         <button class="create-space-btn" id="create-space-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <Fragment set:html={icons.plus(16)} />
           New space
         </button>
         <form class="create-space-form" id="create-space-form" style="display:none">
@@ -56,17 +57,7 @@ try {
           style={`animation-delay: ${i * 60}ms`}
         >
           <div class="space-card-icon">
-            {space.personal ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-            )}
+            <Fragment set:html={space.personal ? icons.person(20) : icons.book(20)} />
           </div>
           <div class="space-card-content">
             <h2 class="space-card-name">{space.name}</h2>
@@ -85,13 +76,9 @@ try {
 
     <div class="home-footer">
       <a href="/setup" class="setup-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
-        </svg>
+        <Fragment set:html={icons.terminal(16)} />
         CLI, MCP & API setup
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="9 18 15 12 9 6" />
-        </svg>
+        <Fragment set:html={icons.chevron(14)} />
       </a>
       <span class="version-label">v{rootPkg.version}</span>
     </div>
