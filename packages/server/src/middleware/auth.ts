@@ -44,6 +44,12 @@ export function authMiddleware(db: Database) {
       // API key path
       if (token.startsWith("sk-")) {
         const user = await resolveApiKey(db, token);
+        // X-Sideways-Actor header overrides display name (e.g. CLI --as flag)
+        const actorOverride = c.req.header("X-Sideways-Actor");
+        if (user && actorOverride) {
+          user.actorName = actorOverride;
+          user.displayName = actorOverride;
+        }
         c.set("user", user);
         return next();
       }

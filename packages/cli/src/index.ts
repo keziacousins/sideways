@@ -24,7 +24,8 @@ const program = new Command();
 program
   .name("sideways")
   .description("Sideways CLI — push, pull, and manage documentation")
-  .version(process.env.SIDEWAYS_VERSION || "dev");
+  .version(process.env.SIDEWAYS_VERSION || "dev")
+  .option("--as <name>", "Act as a named agent (e.g. --as Claude)");
 
 // ── init ──────────────────────────────────────────────────────────────
 
@@ -48,6 +49,11 @@ program
 
 function getSyncRoot(config: ReturnType<typeof requireConfig>): string {
   return resolve(config.rootDir, config.root || ".");
+}
+
+function getClient(apiUrl: string) {
+  const actorName = program.opts().as;
+  return createClient(apiUrl, actorName);
 }
 
 /** Resolve a user-provided identifier (slug, filename, or path) to a discovered file */
@@ -122,7 +128,7 @@ program
     ) => {
       const config = requireConfig();
       const space = opts.space ?? config.space;
-      const client = createClient(config.api);
+      const client = getClient(config.api);
       const syncRoot = getSyncRoot(config);
 
       await requireSpace(client, space, { createHint: true });
@@ -294,7 +300,7 @@ program
     ) => {
       const config = requireConfig();
       const space = opts.space ?? config.space;
-      const client = createClient(config.api);
+      const client = getClient(config.api);
       const syncRoot = getSyncRoot(config);
 
       await ensureSpace(client, space, config.spaceName || undefined);
@@ -451,7 +457,7 @@ program
   .action(async (opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const syncRoot = getSyncRoot(config);
 
     await requireSpace(client, space);
@@ -538,7 +544,7 @@ program
   .action(async (opts: { space?: string; dryRun?: boolean; clean?: boolean; reconcile?: boolean }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const syncRoot = getSyncRoot(config);
 
     await ensureSpace(client, space, config.spaceName || undefined);
@@ -730,7 +736,7 @@ program
   .action(async (slug: string | undefined, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const syncRoot = getSyncRoot(config);
 
     if (!slug) {
@@ -789,7 +795,7 @@ program
   .action(async (input: string, newTitle: string, opts: { space?: string; slug?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const slug = toSlug(input);
 
     const patch: Record<string, any> = { title: newTitle };
@@ -808,7 +814,7 @@ program
   .action(async (input: string, targetSpace: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const slug = toSlug(input);
 
     const result = await client.patchDocument(space, slug, { space: targetSpace });
@@ -826,7 +832,7 @@ program
   .action(async (input: string, opts: { space?: string; targetSpace?: string; slug?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const slug = toSlug(input);
 
     const result = await client.duplicateDocument(space, slug, {
@@ -845,7 +851,7 @@ program
   .action(async (input: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const slug = toSlug(input);
 
     await requireSpace(client, space);
@@ -862,7 +868,7 @@ program
   .action(async (field: string, value: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
 
     const allowed = ["name", "description", "visibility"];
     if (!allowed.includes(field)) {
@@ -883,7 +889,7 @@ program
   .action(async (opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
 
     const members = await client.getSpaceMembers(space);
     if (members.length === 0) {
@@ -902,7 +908,7 @@ program
   .action(async (email: string, role: string = "editor", opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
 
     const result = await client.addSpaceMember(space, email, role);
     console.log(`Added ${result.email} as ${result.role}`);
@@ -915,7 +921,7 @@ program
   .action(async (memberId: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
 
     await client.removeSpaceMember(space, memberId);
     console.log(`Removed member ${memberId}`);
@@ -931,7 +937,7 @@ program
   .action(async (input: string, opts: { space?: string; resolved?: boolean }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const slug = toSlug(input);
 
     const comments = await client.getComments(space, slug, opts.resolved);
@@ -966,7 +972,7 @@ program
   .action(async (input: string, body: string, opts: { space?: string; anchor?: string; section?: string; reply?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const slug = toSlug(input);
 
     const payload: Record<string, any> = { body };
@@ -985,7 +991,7 @@ program
   .action(async (input: string, commentId: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const slug = toSlug(input);
 
     const result = await client.resolveComment(space, slug, commentId);
@@ -1004,7 +1010,7 @@ program
   .action(async (input: string, opts: { space?: string; output?: string; toc?: boolean; titlePage?: boolean }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
-    const client = createClient(config.api);
+    const client = getClient(config.api);
     const slug = toSlug(input);
 
     const res = await client.downloadPdf(space, slug, {

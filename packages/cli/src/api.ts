@@ -4,12 +4,17 @@ import { getStoredCredentials } from "./auth.js";
  * Thin API client for the Sideways server.
  */
 
-export function createClient(baseUrl: string) {
+export function createClient(baseUrl: string, actorName?: string) {
   async function request(path: string, options?: RequestInit) {
     const creds = getStoredCredentials();
     const authHeaders: Record<string, string> = {};
     if (creds?.api_key) {
       authHeaders["Authorization"] = `Bearer ${creds.api_key}`;
+    }
+    // Actor override: --as flag > SIDEWAYS_ACTOR env var
+    const actor = actorName || process.env.SIDEWAYS_ACTOR;
+    if (actor) {
+      authHeaders["X-Sideways-Actor"] = actor;
     }
 
     const res = await fetch(`${baseUrl}${path}`, {
