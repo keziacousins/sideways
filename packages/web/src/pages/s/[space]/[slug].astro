@@ -299,10 +299,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   .tag-input {
     font-size: var(--sw-text-xs);
     padding: 0.15em 0.4em;
-    background: var(--sw-ink-surface);
+    background: var(--sw-ink);
     border: 1px solid var(--sw-border-strong);
     border-radius: var(--sw-radius-sm);
     color: var(--sw-text-primary);
+    color-scheme: dark;
     outline: none;
     width: 6em;
   }
@@ -624,6 +625,58 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     font-family: var(--sw-font-display);
     margin-bottom: 1rem;
   }
+</style>
+
+<style is:global>
+  /* Global tag styles — needed for JS-created tag elements (Astro scoping doesn't apply) */
+  .doc-tags .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25em;
+    font-size: var(--sw-text-xs);
+    padding: 0.15em 0.5em;
+    background: var(--sw-ink-surface);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-secondary);
+  }
+  .doc-tags .tag-remove {
+    background: none;
+    border: none;
+    color: var(--sw-text-ghost);
+    cursor: pointer;
+    font-size: 1em;
+    line-height: 1;
+    padding: 0;
+    margin-left: -0.1em;
+  }
+  .doc-tags .tag-remove:hover { color: var(--sw-text-primary); }
+  .doc-tags .tag-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--sw-text-xs);
+    width: 1.5em;
+    height: 1.5em;
+    padding: 0;
+    background: none;
+    border: 1px dashed var(--sw-border-strong);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-ghost);
+    cursor: pointer;
+  }
+  .doc-tags .tag-add:hover { color: var(--sw-text-secondary); border-color: var(--sw-text-ghost); }
+  .doc-tags .tag-input {
+    font-size: var(--sw-text-xs);
+    padding: 0.15em 0.4em;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-primary);
+    color-scheme: dark;
+    outline: none;
+    width: 6em;
+  }
+  .doc-tags .tag-input:focus { border-color: var(--sw-accent); }
 </style>
 
 {doc && (
