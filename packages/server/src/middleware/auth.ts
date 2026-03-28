@@ -48,7 +48,7 @@ export function authMiddleware(db: Database) {
         const actorOverride = c.req.header("X-Sideways-Actor");
         if (user && actorOverride) {
           user.actorName = actorOverride;
-          user.displayName = actorOverride;
+          user.displayName = `${actorOverride} via ${user.name}`;
         }
         c.set("user", user);
         return next();
@@ -126,12 +126,13 @@ async function resolveApiKey(
       .where(eq(apiKeys.id, apiKey.id))
       .catch(() => {});
 
+    const actor = apiKey.actorName || undefined;
     return {
       id: user.id,
       email: user.email,
       name: user.name,
-      actorName: apiKey.actorName || undefined,
-      displayName: apiKey.actorName || user.name,
+      actorName: actor,
+      displayName: actor ? `${actor} via ${user.name}` : user.name,
     };
   } catch {
     return null;
