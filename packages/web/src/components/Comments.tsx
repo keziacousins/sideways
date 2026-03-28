@@ -307,7 +307,7 @@ export default function Comments({
     replyMap.set(r.parentId!, list);
   }
 
-  const totalCount = topLevel.length + resolved.length;
+  const totalCount = topLevel.length; // only open comments in badge
 
   return (
     <div className="comments-wrapper">
