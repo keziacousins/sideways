@@ -31,13 +31,16 @@ program
 program
   .command("init <space>")
   .description("Create .sideways.yml in the current directory")
-  .option("--api <url>", "API base URL", "http://localhost:4100")
-  .action((space: string, opts: { api: string }) => {
+  .option("--api <url>", "API base URL")
+  .action((space: string, opts: { api?: string }) => {
     const slug = slugFromFilename(space);
     if (slug !== space) {
       console.log(`Slugified: "${space}" → "${slug}"`);
     }
-    const path = createConfig(process.cwd(), slug, opts.api, space);
+    // Use: explicit --api > stored credentials URL > default
+    const creds = getStoredCredentials();
+    const api = opts.api || creds?.api_url || "http://localhost:4100";
+    const path = createConfig(process.cwd(), slug, api, space);
     console.log(`Created ${path}`);
   });
 
