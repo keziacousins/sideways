@@ -166,15 +166,11 @@ function containsActive(item: NavItem, slug?: string): boolean {
 
   .nav-item.unread > .nav-link::after,
   .nav-item.unread > details > .nav-doc-parent .nav-link-inline::after {
-    content: "";
-    position: absolute;
-    right: 0.5rem;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 6px;
-    height: 6px;
-    background: var(--sw-accent);
-    border-radius: 50%;
+    content: "●";
+    font-size: 6px;
+    color: var(--sw-accent);
+    margin-left: 0.35rem;
+    vertical-align: middle;
   }
 
   .nav-section {

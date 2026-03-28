@@ -58,12 +58,13 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
       {documents.length > 0 && (
         <div class="sort-bar">
-          <label>Sort by</label>
-          <select id="sort-docs">
-            <option value="title">Title</option>
-            <option value="updated">Recently updated</option>
-            <option value="unread">Unread first</option>
-          </select>
+          <div class="sort-buttons">
+            <button class="sort-btn active" data-sort="title">Title</button>
+            <button class="sort-btn" data-sort="updated">Updated</button>
+            <button class="sort-btn" data-sort="unread">Unread</button>
+          </div>
+          <button class="sort-dir" id="sort-dir" title="Toggle sort direction">↓</button>
+          {accessToken && <button class="mark-all-read-btn" id="mark-all-read">Mark all read</button>}
         </div>
       )}
 
@@ -81,8 +82,8 @@ const themeCss = themeToCSS(space?.theme?.tokens);
               href={`/s/${spaceSlug}/${doc.slug}`}
               class:list={["doc-card", "animate-in", { unread: doc.unread }]}
               style={`animation-delay: ${(i + 1) * 60}ms`}
+              data-updated={doc.updatedAt || ""}
             >
-              {doc.unread && <span class="unread-dot" />}
               <div class="doc-card-icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -91,9 +92,9 @@ const themeCss = themeToCSS(space?.theme?.tokens);
                   <line x1="16" y1="17" x2="8" y2="17" />
                 </svg>
               </div>
-              <span class="doc-card-title">{doc.title}</span>
+              <span class="doc-card-title">{doc.title}{doc.unread && <span class="unread-indicator">●</span>}</span>
               {doc.updatedAt && (
-                <span class="doc-card-date">{new Date(doc.updatedAt).toLocaleDateString()}</span>
+                <span class="doc-card-date">{new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
               )}
               {doc.tags?.length > 0 && (
                 <div class="doc-tags">
@@ -189,16 +190,15 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
   .doc-card-date {
     font-size: var(--sw-text-xs);
-    color: var(--sw-text-ghost);
+    color: var(--sw-text-secondary);
     flex-shrink: 0;
   }
 
-  .unread-dot {
-    width: 7px;
-    height: 7px;
-    background: var(--sw-accent);
-    border-radius: 50%;
-    flex-shrink: 0;
+  .unread-indicator {
+    color: var(--sw-accent);
+    font-size: 6px;
+    margin-left: 0.35rem;
+    vertical-align: middle;
   }
 
   .doc-tags {
@@ -236,18 +236,54 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 0.75rem;
-    font-size: var(--sw-text-xs);
-    color: var(--sw-text-tertiary);
   }
 
-  .sort-bar select {
+  .sort-buttons {
+    display: flex;
+    gap: 2px;
     background: var(--sw-ink-surface);
-    border: 1px solid var(--sw-border);
     border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-secondary);
-    font-size: var(--sw-text-xs);
-    padding: 0.2rem 0.4rem;
+    padding: 2px;
   }
+
+  .sort-btn {
+    padding: 0.2rem 0.6rem;
+    background: none;
+    border: none;
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-tertiary);
+    font-size: var(--sw-text-xs);
+    cursor: pointer;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .sort-btn:hover { color: var(--sw-text-primary); }
+  .sort-btn.active {
+    background: var(--sw-ink-lighter);
+    color: var(--sw-text-primary);
+  }
+
+  .sort-dir {
+    background: none;
+    border: none;
+    color: var(--sw-text-tertiary);
+    font-size: var(--sw-text-sm);
+    cursor: pointer;
+    padding: 0.15rem 0.3rem;
+    line-height: 1;
+  }
+  .sort-dir:hover { color: var(--sw-text-primary); }
+
+  .mark-all-read-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--sw-text-ghost);
+    font-size: var(--sw-text-xs);
+    cursor: pointer;
+    padding: 0;
+  }
+  .mark-all-read-btn:hover { color: var(--sw-accent); }
 
   @media (max-width: 600px) {
     .doc-card {
@@ -264,31 +300,66 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 </style>
 
 <script>
-  const select = document.getElementById("sort-docs") as HTMLSelectElement | null;
   const grid = document.getElementById("doc-grid");
-  if (select && grid) {
-    select.addEventListener("change", () => {
-      const cards = Array.from(grid.querySelectorAll(".doc-card")) as HTMLElement[];
-      cards.sort((a, b) => {
-        switch (select.value) {
-          case "updated": {
-            const aDate = a.querySelector(".doc-card-date")?.textContent || "";
-            const bDate = b.querySelector(".doc-card-date")?.textContent || "";
-            return new Date(bDate).getTime() - new Date(aDate).getTime();
-          }
-          case "unread": {
-            const aUnread = a.classList.contains("unread") ? 0 : 1;
-            const bUnread = b.classList.contains("unread") ? 0 : 1;
-            return aUnread - bUnread;
-          }
-          default: {
-            const aTitle = a.querySelector(".doc-card-title")?.textContent || "";
-            const bTitle = b.querySelector(".doc-card-title")?.textContent || "";
-            return aTitle.localeCompare(bTitle);
-          }
-        }
-      });
-      for (const card of cards) grid.appendChild(card);
+  const dirBtn = document.getElementById("sort-dir");
+  const sortBtns = document.querySelectorAll(".sort-btn");
+  const markAllBtn = document.getElementById("mark-all-read");
+
+  let currentSort = "title";
+  let ascending = true;
+
+  function doSort() {
+    if (!grid) return;
+    const cards = Array.from(grid.querySelectorAll(".doc-card")) as HTMLElement[];
+    cards.sort((a, b) => {
+      let cmp = 0;
+      switch (currentSort) {
+        case "updated":
+          cmp = new Date(a.dataset.updated || 0).getTime() - new Date(b.dataset.updated || 0).getTime();
+          break;
+        case "unread":
+          cmp = (a.classList.contains("unread") ? 0 : 1) - (b.classList.contains("unread") ? 0 : 1);
+          break;
+        default:
+          cmp = (a.querySelector(".doc-card-title")?.textContent || "").localeCompare(
+            b.querySelector(".doc-card-title")?.textContent || ""
+          );
+      }
+      return ascending ? cmp : -cmp;
     });
+    for (const card of cards) grid.appendChild(card);
   }
+
+  sortBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const sort = (btn as HTMLElement).dataset.sort || "title";
+      if (sort === currentSort) {
+        ascending = !ascending;
+      } else {
+        currentSort = sort;
+        ascending = sort === "title"; // title asc, others desc by default
+      }
+      sortBtns.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      if (dirBtn) dirBtn.textContent = ascending ? "↓" : "↑";
+      doSort();
+    });
+  });
+
+  dirBtn?.addEventListener("click", () => {
+    ascending = !ascending;
+    dirBtn.textContent = ascending ? "↓" : "↑";
+    doSort();
+  });
+
+  markAllBtn?.addEventListener("click", async () => {
+    const spaceSlug = window.location.pathname.split("/")[2];
+    const res = await fetch(`/s/${spaceSlug}/mark-read`, { method: "POST" });
+    if (res.ok) {
+      // Remove all unread indicators
+      document.querySelectorAll(".doc-card.unread").forEach(el => el.classList.remove("unread"));
+      document.querySelectorAll(".unread-indicator").forEach(el => el.remove());
+      markAllBtn.style.display = "none";
+    }
+  });
 </script>
