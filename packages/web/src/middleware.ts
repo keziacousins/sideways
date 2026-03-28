@@ -3,10 +3,42 @@ import { defineMiddleware } from "astro:middleware";
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 
 /**
+ * In-flight refresh deduplication.
+ * Keyed by refresh token — concurrent requests share the same promise.
+ */
+let refreshInFlight: Promise<{ access_token: string; refresh_token?: string } | null> | null = null;
+let refreshForToken: string | null = null;
+
+async function doRefresh(refreshToken: string): Promise<{ access_token: string; refresh_token?: string } | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/auth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: "sideways-web",
+      }),
+    });
+
+    if (res.ok) {
+      return await res.json();
+    }
+    console.error(`[middleware] Token refresh failed: ${res.status}`);
+    return null;
+  } catch {
+    console.error("[middleware] Token refresh failed (network error)");
+    return null;
+  }
+}
+
+/**
  * Astro middleware — runs on every SSR request.
  * Reads the session, refreshes the access token if expired,
  * and stores a fresh token on `Astro.locals.accessToken`.
- * Pages use this for authenticated API calls.
+ *
+ * Refresh is deduplicated: if multiple concurrent requests need to refresh,
+ * only one actual refresh call is made. The rest wait for the same result.
  */
 export const onRequest = defineMiddleware(async (context, next) => {
   const { session } = context;
@@ -24,46 +56,37 @@ export const onRequest = defineMiddleware(async (context, next) => {
       const expiresAt = payload.exp * 1000;
       needsRefresh = Date.now() > expiresAt - 5 * 60_000; // refresh 5 min before expiry
     } catch {
-      // Can't decode JWT — treat as expired
       needsRefresh = true;
     }
 
-    if (needsRefresh) {
-      if (refreshToken) {
-        try {
-          const res = await fetch(`${API_URL}/api/auth/token`, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              grant_type: "refresh_token",
-              refresh_token: refreshToken,
-              client_id: "sideways-web",
-            }),
-          });
-
-          if (res.ok) {
-            const tokens = await res.json();
-            accessToken = tokens.access_token;
-            await session?.set("access_token", tokens.access_token);
-            if (tokens.refresh_token) {
-              await session?.set("refresh_token", tokens.refresh_token);
-            }
-          } else {
-            // Refresh failed — keep the stale access token rather than
-            // logging the user out. It might still work for some requests
-            // and the next page load will retry the refresh.
-            console.error(`[middleware] Token refresh failed: ${res.status}`);
-          }
-        } catch {
-          // Network error reaching API — keep stale token rather than
-          // logging user out due to a transient failure
-          console.error("[middleware] Token refresh failed (network error)");
+    if (needsRefresh && refreshToken) {
+      // Deduplicate: if a refresh is already in-flight for this token, wait for it
+      if (refreshInFlight && refreshForToken === refreshToken) {
+        const result = await refreshInFlight;
+        if (result) {
+          accessToken = result.access_token;
         }
       } else {
-        // No refresh token — can't renew
-        accessToken = null;
-        await session?.set("access_token", null);
+        // Start a new refresh and let concurrent requests share it
+        refreshForToken = refreshToken;
+        refreshInFlight = doRefresh(refreshToken);
+
+        const result = await refreshInFlight;
+        refreshInFlight = null;
+        refreshForToken = null;
+
+        if (result) {
+          accessToken = result.access_token;
+          await session?.set("access_token", result.access_token);
+          if (result.refresh_token) {
+            await session?.set("refresh_token", result.refresh_token);
+          }
+        }
+        // On failure: keep stale token, don't clear session
       }
+    } else if (needsRefresh && !refreshToken) {
+      accessToken = null;
+      await session?.set("access_token", null);
     }
   }
 
@@ -76,7 +99,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // Store on locals for pages to use
   context.locals.accessToken = accessToken || null;
 
   return next();
