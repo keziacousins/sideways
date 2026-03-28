@@ -126,11 +126,14 @@
 }
 
 .notif-icon {
-  font-size: var(--sw-text-sm);
   width: 20px;
   text-align: center;
   flex-shrink: 0;
-  margin-top: 1px;
+  margin-top: 2px;
+  color: var(--sw-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .notif-content {

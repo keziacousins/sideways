@@ -40,11 +40,12 @@ async function authFetch(url: string, apiUrl: string, accessToken: string | null
   return res;
 }
 
+// SVG icon strings for notification types — matches the shared icon style
 const TYPE_ICONS: Record<string, string> = {
-  reply: "↩",
-  mention: "@",
-  new_comment: "💬",
-  doc_updated: "✎",
+  reply: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  mention: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></svg>`,
+  new_comment: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  doc_updated: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
 };
 
 function timeAgo(dateStr: string): string {
@@ -153,7 +154,7 @@ export default function NotificationBell({ apiUrl, accessToken, refreshToken }: 
             {notifications.map((n) => (
               <div key={n.id} className={`notif-item ${n.read ? "read" : "unread"}`}>
                 <a href={`/s/${n.spaceSlug}/${n.docSlug}`} className="notif-link">
-                  <span className="notif-icon">{TYPE_ICONS[n.type] || "•"}</span>
+                  <span className="notif-icon" dangerouslySetInnerHTML={{ __html: TYPE_ICONS[n.type] || "•" }} />
                   <div className="notif-content">
                     <div className="notif-title">{n.title}</div>
                     {n.body && <div className="notif-body">{n.body.slice(0, 100)}{n.body.length > 100 ? "…" : ""}</div>}
