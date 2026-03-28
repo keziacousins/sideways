@@ -954,19 +954,38 @@ program
       return;
     }
 
+    // Group replies under their parents
+    const roots = comments.filter((c: any) => !c.parentId);
+    const byParent = new Map<string, any[]>();
     for (const c of comments) {
-      const author = c.author?.name || "Unknown";
+      if (c.parentId) {
+        if (!byParent.has(c.parentId)) byParent.set(c.parentId, []);
+        byParent.get(c.parentId)!.push(c);
+      }
+    }
+
+    function showComment(c: any, indent: string) {
+      const displayName = c.actorName ? `${c.actorName} via ${c.author?.name || "Unknown"}` : (c.author?.name || "Unknown");
       const email = c.author?.email ? ` <${c.author.email}>` : "";
       const time = c.createdAt ? new Date(c.createdAt).toLocaleString() : "";
       const resolved = c.resolved ? " \x1b[33m[RESOLVED]\x1b[0m" : "";
-      const reply = c.parentId ? "  ↳ " : "";
-      const section = c.anchorSection ? `\n${reply}    section: ${c.anchorSection}` : "";
-      const anchor = c.anchorText ? `\n${reply}    anchor: "${c.anchorText}"` : "";
+      const section = c.anchorSection ? `\n${indent}    section: ${c.anchorSection}` : "";
+      const anchor = c.anchorText ? `\n${indent}    anchor: "${c.anchorText}"` : "";
 
-      console.log(`${reply}\x1b[2m${c.id}\x1b[0m`);
-      console.log(`${reply}  ${author}${email}  ${time}${resolved}${section}${anchor}`);
-      console.log(`${reply}  ${c.body}`);
+      console.log(`${indent}\x1b[2m${c.id}\x1b[0m`);
+      console.log(`${indent}  ${displayName}${email}  ${time}${resolved}${section}${anchor}`);
+      console.log(`${indent}  ${c.body}`);
       console.log();
+
+      // Show replies
+      const replies = byParent.get(c.id) || [];
+      for (const r of replies) {
+        showComment(r, indent + "  ↳ ");
+      }
+    }
+
+    for (const c of roots) {
+      showComment(c, "");
     }
   });
 

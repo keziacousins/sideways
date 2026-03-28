@@ -323,17 +323,30 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
         return { content: [{ type: "text" as const, text: "No comments on this document." }] };
       }
 
-      const text = comments
-        .map((c: any) => {
-          const author = c.author?.name || "Unknown";
-          const anchor = c.anchorText ? `\n  Anchor: "${c.anchorText.slice(0, 80)}"` : "";
-          const section = c.anchorSection ? `\n  Section: ${c.anchorSection}` : "";
-          const parent = c.parentId ? ` (reply)` : "";
-          const resolved = c.resolved ? " [RESOLVED]" : "";
-          return `[${c.id}] ${author}${parent}${resolved}${section}${anchor}\n  ${c.body}`;
-        })
-        .join("\n\n");
+      // Group replies under parents
+      const roots = comments.filter((c: any) => !c.parentId);
+      const byParent = new Map<string, any[]>();
+      for (const c of comments) {
+        if (c.parentId) {
+          if (!byParent.has(c.parentId)) byParent.set(c.parentId, []);
+          byParent.get(c.parentId)!.push(c);
+        }
+      }
 
+      function formatComment(c: any, indent: string): string {
+        const displayName = c.actorName ? `${c.actorName} via ${c.author?.name || "Unknown"}` : (c.author?.name || "Unknown");
+        const anchor = c.anchorText ? `\n${indent}  Anchor: "${c.anchorText.slice(0, 80)}"` : "";
+        const section = c.anchorSection ? `\n${indent}  Section: ${c.anchorSection}` : "";
+        const resolved = c.resolved ? " [RESOLVED]" : "";
+        let out = `${indent}[${c.id}] ${displayName}${resolved}${section}${anchor}\n${indent}  ${c.body}`;
+        const replies = byParent.get(c.id) || [];
+        for (const r of replies) {
+          out += "\n\n" + formatComment(r, indent + "  ");
+        }
+        return out;
+      }
+
+      const text = roots.map((c: any) => formatComment(c, "")).join("\n\n");
       return { content: [{ type: "text" as const, text }] };
     },
   );
