@@ -353,8 +353,9 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
   .toolbar-btn.watching {
     color: var(--sw-accent);
+    background: var(--sw-accent-glow);
   }
-  .toolbar-btn.watching svg {
+  .toolbar-btn.watching svg path:first-child {
     fill: var(--sw-accent);
   }
 
