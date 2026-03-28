@@ -408,22 +408,30 @@
 
 /* ── Inline comment markers in document ───────────────────────── */
 /* ── Gutter comment markers ──────────────────────────────────── */
+/* The bar sits at a fixed position from the content edge */
 .comment-gutter-mark {
   position: absolute;
-  left: -1.5rem;
+  left: -1.25rem;
   top: 0;
   bottom: 0;
   width: 3px;
   background: var(--sw-accent-dim);
   border-radius: 2px;
-  cursor: pointer;
-  transition: all var(--sw-duration-fast) var(--sw-ease);
+  pointer-events: none;
+  transition: background var(--sw-duration-fast) var(--sw-ease);
 }
 
-.comment-gutter-mark:hover {
+/* Invisible click target covers the whole block */
+.comment-gutter-target {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.comment-gutter-target:hover ~ .comment-gutter-mark {
   background: var(--sw-accent);
   width: 4px;
-  left: calc(-1.5rem - 0.5px);
 }
 
 /* ── Scroll-to highlight ──────────────────────────────────────── */

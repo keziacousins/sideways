@@ -150,7 +150,7 @@ export default function Comments({
     if (!docContent) return;
 
     // Remove previous gutter markers
-    docContent.querySelectorAll(".comment-gutter-mark").forEach(el => el.remove());
+    docContent.querySelectorAll(".comment-gutter-mark, .comment-gutter-target").forEach(el => el.remove());
 
     // Add gutter markers for each anchored, unresolved comment
     const anchored = comments.filter((c) => c.anchorText && !c.parentId && !c.resolved);
@@ -158,11 +158,12 @@ export default function Comments({
       const target = findTextInDOM(docContent, comment.anchorText!) as HTMLElement | null;
       if (target && !target.querySelector(".comment-gutter-mark")) {
         target.style.position = "relative";
-        const mark = document.createElement("div");
-        mark.className = "comment-gutter-mark";
-        mark.dataset.commentId = comment.id;
-        mark.title = "View comment";
-        mark.addEventListener("click", (e) => {
+
+        // Invisible click target covering the whole block
+        const clickTarget = document.createElement("div");
+        clickTarget.className = "comment-gutter-target";
+        clickTarget.title = "View comment";
+        clickTarget.addEventListener("click", (e) => {
           e.stopPropagation();
           setIsOpen(true);
           setTimeout(() => {
@@ -170,7 +171,14 @@ export default function Comments({
             el?.scrollIntoView({ behavior: "smooth", block: "center" });
           }, 100);
         });
-        target.appendChild(mark);
+
+        // Visible gutter bar
+        const bar = document.createElement("div");
+        bar.className = "comment-gutter-mark";
+        bar.dataset.commentId = comment.id;
+
+        target.appendChild(clickTarget);
+        target.appendChild(bar);
       }
     }
   }, [comments]);
