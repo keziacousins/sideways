@@ -35,11 +35,15 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
         <NotificationBell client:idle apiUrl={API_URL} accessToken={accessToken} refreshToken={refreshToken} />
       )}
       {isLoggedIn ? (
-        <div class="user-menu">
-          <div class="user-avatar">{userName?.charAt(0).toUpperCase()}</div>
-          <span class="user-name">{userName}</span>
-          <a href="/settings/keys" class="header-link">API Keys</a>
-          <a href={`/auth/logout?returnTo=${encodeURIComponent(currentPath)}`} class="header-link">Sign out</a>
+        <div class="user-menu-wrapper">
+          <button class="user-avatar-btn" id="user-menu-toggle">
+            {userName?.charAt(0).toUpperCase()}
+          </button>
+          <div class="user-dropdown" id="user-dropdown">
+            <div class="user-dropdown-header">{userName}</div>
+            <a href="/settings/keys" class="user-dropdown-item">API Keys</a>
+            <a href={`/auth/logout?returnTo=${encodeURIComponent(currentPath)}`} class="user-dropdown-item user-dropdown-danger">Sign out</a>
+          </div>
         </div>
       ) : (
         <div class="auth-links">
@@ -141,15 +145,19 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
   }
 
   /* ── User / Auth ───────────────────── */
-  .user-menu {
+  .header-right {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.4rem;
   }
 
-  .user-avatar {
-    width: 26px;
-    height: 26px;
+  .user-menu-wrapper {
+    position: relative;
+  }
+
+  .user-avatar-btn {
+    width: 30px;
+    height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -159,11 +167,60 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
     font-size: var(--sw-text-xs);
     font-weight: 600;
     color: var(--sw-text-secondary);
+    cursor: pointer;
+    transition: border-color var(--sw-duration-fast) var(--sw-ease);
   }
 
-  .user-name {
+  .user-avatar-btn:hover {
+    border-color: var(--sw-text-ghost);
+  }
+
+  .user-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 160px;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    z-index: 200;
+  }
+
+  .user-dropdown.open {
+    display: block;
+  }
+
+  .user-dropdown-header {
+    padding: 0.6rem 0.75rem;
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-primary);
+    font-weight: 500;
+    border-bottom: 1px solid var(--sw-border);
+  }
+
+  .user-dropdown-item {
+    display: block;
+    padding: 0.5rem 0.75rem;
     font-size: var(--sw-text-sm);
     color: var(--sw-text-secondary);
+    text-decoration: none;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .user-dropdown-item:hover {
+    background: var(--sw-ink-light);
+    color: var(--sw-text-primary);
+  }
+
+  .user-dropdown-danger {
+    color: var(--sw-error);
+  }
+  .user-dropdown-danger:hover {
+    background: rgba(248, 113, 113, 0.08);
+    color: var(--sw-error);
   }
 
   .header-link {
@@ -210,12 +267,21 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
     .search-trigger {
       display: none;
     }
-    .user-name, .header-link {
-      display: none;
-    }
-    .user-avatar {
-      width: 30px;
-      height: 30px;
-    }
   }
 </style>
+
+<script>
+  const toggle = document.getElementById("user-menu-toggle");
+  const dropdown = document.getElementById("user-dropdown");
+  if (toggle && dropdown) {
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle("open");
+    });
+    document.addEventListener("click", (e) => {
+      if (!dropdown.contains(e.target as Node)) {
+        dropdown.classList.remove("open");
+      }
+    });
+  }
+</script>
