@@ -169,3 +169,39 @@ export const spaceMembers = pgTable("space_members", {
 }, (t) => [
   uniqueIndex("space_member_unique").on(t.spaceId, t.userId),
 ]);
+
+/** Per-user, per-document read tracking */
+export const documentReads = pgTable("document_reads", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  documentId: uuid("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("document_reads_pk").on(t.userId, t.documentId),
+]);
+
+/** Document watch subscriptions */
+export const documentWatches = pgTable("document_watches", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  documentId: uuid("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("document_watches_pk").on(t.userId, t.documentId),
+  index("watches_doc_idx").on(t.documentId),
+]);
+
+/** In-app notifications (read status derived from document_reads) */
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'reply', 'mention', 'doc_updated', 'new_comment'
+  documentId: uuid("document_id").references(() => documents.id, { onDelete: "cascade" }),
+  commentId: uuid("comment_id").references(() => comments.id, { onDelete: "set null" }),
+  spaceSlug: text("space_slug").notNull(),
+  docSlug: text("doc_slug").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  actorName: text("actor_name"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("notifications_user_idx").on(t.userId),
+]);

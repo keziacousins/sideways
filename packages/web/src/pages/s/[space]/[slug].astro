@@ -52,6 +52,11 @@ try {
   // API not available
 }
 
+// Mark document as read (fire and forget, server-side)
+if (doc && accessToken) {
+  apiFetch(`/api/documents/${spaceSlug}/${slug}/read`, accessToken, { method: "POST" }).catch(() => {});
+}
+
 const html = doc?.html ?? "";
 const navItems = buildNavTree(sections, documents);
 

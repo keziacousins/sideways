@@ -6,6 +6,9 @@ import {
   type Database,
   documents,
   documentVersions,
+  documentReads,
+  documentWatches,
+  notifications,
   sections,
   spaces,
   themes,
@@ -83,6 +86,20 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         where: eq(documents.spaceId, space.id),
         orderBy: [documents.position, documents.title],
       });
+
+      // Annotate with unread status if user is authenticated
+      const user = c.get("user") as AuthUser | null;
+      if (user) {
+        const reads = await db.query.documentReads.findMany({
+          where: eq(documentReads.userId, user.id),
+        });
+        const readMap = new Map(reads.map(r => [r.documentId, r.readAt]));
+        return c.json(docs.map(d => ({
+          ...d,
+          unread: !readMap.has(d.id) || readMap.get(d.id)! < d.updatedAt,
+        })));
+      }
+
       return c.json(docs);
     }
 
@@ -725,6 +742,82 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         503,
       );
     }
+  });
+
+  /** Mark document as read by current user */
+  router.post("/:space/:slug/read", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const doc = await db.query.documents.findFirst({
+      where: and(eq(documents.spaceId, space.id), eq(documents.slug, c.req.param("slug"))),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
+
+    const now = new Date();
+    await db.insert(documentReads)
+      .values({ userId: user.id, documentId: doc.id, readAt: now })
+      .onConflictDoUpdate({
+        target: [documentReads.userId, documentReads.documentId],
+        set: { readAt: now },
+      });
+
+    return c.json({ readAt: now.toISOString() });
+  });
+
+  /** Toggle watch on a document */
+  router.post("/:space/:slug/watch", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const doc = await db.query.documents.findFirst({
+      where: and(eq(documents.spaceId, space.id), eq(documents.slug, c.req.param("slug"))),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
+
+    // Toggle: if watching, remove; if not, add
+    const existing = await db.query.documentWatches.findFirst({
+      where: and(eq(documentWatches.userId, user.id), eq(documentWatches.documentId, doc.id)),
+    });
+
+    if (existing) {
+      await db.delete(documentWatches).where(
+        and(eq(documentWatches.userId, user.id), eq(documentWatches.documentId, doc.id)),
+      );
+      return c.json({ watching: false });
+    }
+
+    await db.insert(documentWatches).values({ userId: user.id, documentId: doc.id });
+    return c.json({ watching: true });
+  });
+
+  /** Check if current user watches a document */
+  router.get("/:space/:slug/watch", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ watching: false });
+
+    const doc = await db.query.documents.findFirst({
+      where: and(eq(documents.spaceId, space.id), eq(documents.slug, c.req.param("slug"))),
+    });
+    if (!doc) return c.json({ error: "Not found" }, 404);
+
+    const watch = await db.query.documentWatches.findFirst({
+      where: and(eq(documentWatches.userId, user.id), eq(documentWatches.documentId, doc.id)),
+    });
+
+    return c.json({ watching: !!watch });
   });
 
   return router;
