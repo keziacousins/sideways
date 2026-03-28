@@ -66,6 +66,7 @@ rsync -az --delete \
   --exclude e2e \
   --exclude "*.test.ts" \
   --exclude ".env" \
+  --exclude ".sessions" \
   --include ".env.example" \
   ./ $VM:$APP_DIR/
 

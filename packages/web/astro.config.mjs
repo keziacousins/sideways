@@ -11,7 +11,7 @@ export default defineConfig({
   session: {
     driver: "fs",
     options: {
-      base: "/opt/sideways/.sessions",
+      base: "/var/lib/sideways/sessions",
     },
     cookie: {
       name: "sw-session",
