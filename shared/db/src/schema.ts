@@ -151,6 +151,8 @@ export const apiKeys = pgTable("api_keys", {
   keyHash: text("key_hash").notNull(),
   /** First 8 chars of the key for display (e.g. "sk-a1b2c3d4...") */
   prefix: text("prefix").notNull(),
+  /** Optional agent/bot name — when set, actions show as this name instead of user's name */
+  actorName: text("actor_name"),
   lastUsedAt: timestamp("last_used_at"),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

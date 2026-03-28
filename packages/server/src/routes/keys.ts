@@ -14,7 +14,7 @@ export function createKeyRoutes(db: Database) {
   /** Create a new API key */
   router.post("/", async (c) => {
     const user = c.get("user") as AuthUser;
-    const body = await c.req.json<{ name?: string }>();
+    const body = await c.req.json<{ name?: string; actorName?: string }>();
 
     // Generate raw key
     const rawKey = `sk-${randomBytes(32).toString("base64url")}`;
@@ -26,6 +26,7 @@ export function createKeyRoutes(db: Database) {
       name: body.name || "Untitled key",
       keyHash,
       prefix,
+      actorName: body.actorName || null,
     });
 
     // Return the raw key — this is the only time it's shown
@@ -33,6 +34,7 @@ export function createKeyRoutes(db: Database) {
       key: rawKey,
       prefix,
       name: body.name || "Untitled key",
+      actorName: body.actorName || null,
     }, 201);
   });
 
@@ -46,6 +48,7 @@ export function createKeyRoutes(db: Database) {
         id: true,
         name: true,
         prefix: true,
+        actorName: true,
         lastUsedAt: true,
         expiresAt: true,
         createdAt: true,

@@ -124,22 +124,24 @@ export function createCommentRoutes(db: Database) {
     const spaceSlug = c.req.param("space");
     const docSlug = c.req.param("slug");
     const notified = new Set<string>(); // prevent double-notify
+    const isAgent = !!user.actorName; // API key with actor name = bot/agent
+    const displayName = user.displayName;
 
     (async () => {
-      // 1. Reply notification
+      // 1. Reply notification — agents always notify, even the key owner
       if (body.parentId) {
         const parent = await db.query.comments.findFirst({
           where: eq(comments.id, body.parentId),
         });
-        if (parent && parent.authorId !== user.id) {
+        if (parent && (isAgent || parent.authorId !== user.id)) {
           notified.add(parent.authorId);
           await createNotification({
             db, type: "reply", userId: parent.authorId,
             documentId: doc.id, commentId: comment.id,
             spaceSlug, docSlug,
-            title: `${user.name} replied to your comment`,
+            title: `${displayName} replied to your comment`,
             body: body.body.slice(0, 200),
-            actorName: user.name,
+            actorName: displayName,
           });
         }
       }
@@ -157,27 +159,27 @@ export function createCommentRoutes(db: Database) {
               db, type: "mention", userId: mentioned.id,
               documentId: doc.id, commentId: comment.id,
               spaceSlug, docSlug,
-              title: `${user.name} mentioned you in a comment`,
+              title: `${displayName} mentioned you in a comment`,
               body: body.body.slice(0, 200),
-              actorName: user.name,
+              actorName: displayName,
             });
           }
         }
       }
 
-      // 3. Notify watchers (excluding commenter and already-notified)
+      // 3. Notify watchers (excluding commenter unless agent, and already-notified)
       const watchers = await db.query.documentWatches.findMany({
         where: eq(documentWatches.documentId, doc.id),
       });
       for (const w of watchers) {
-        if (w.userId !== user.id && !notified.has(w.userId)) {
+        if ((isAgent || w.userId !== user.id) && !notified.has(w.userId)) {
           await createNotification({
             db, type: "new_comment", userId: w.userId,
             documentId: doc.id, commentId: comment.id,
             spaceSlug, docSlug,
-            title: `${user.name} commented on ${doc.title}`,
+            title: `${displayName} commented on ${doc.title}`,
             body: body.body.slice(0, 200),
-            actorName: user.name,
+            actorName: displayName,
           });
         }
       }

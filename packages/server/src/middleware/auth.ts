@@ -9,6 +9,10 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  /** If acting via an API key with actorName, this is the agent/bot name */
+  actorName?: string;
+  /** Display name: actorName if set, otherwise user name */
+  displayName: string;
 }
 
 /** Cached JWKS fetcher — validates JWT signatures against Hydra's public keys */
@@ -53,10 +57,12 @@ export function authMiddleware(db: Database) {
         // Custom claims injected at consent
         const ext = (payload as any).ext || {};
         if (ext.user_id) {
+          const name = ext.name || "";
           c.set("user", {
             id: ext.user_id,
             email: ext.email || "",
-            name: ext.name || "",
+            name,
+            displayName: name,
           });
         } else if (payload.sub) {
           // Fall back to looking up by Hydra subject
@@ -66,7 +72,7 @@ export function authMiddleware(db: Database) {
           c.set(
             "user",
             user
-              ? { id: user.id, email: user.email, name: user.name }
+              ? { id: user.id, email: user.email, name: user.name, displayName: user.name }
               : null,
           );
         } else {
@@ -114,7 +120,13 @@ async function resolveApiKey(
       .where(eq(apiKeys.id, apiKey.id))
       .catch(() => {});
 
-    return { id: user.id, email: user.email, name: user.name };
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      actorName: apiKey.actorName || undefined,
+      displayName: apiKey.actorName || user.name,
+    };
   } catch {
     return null;
   }

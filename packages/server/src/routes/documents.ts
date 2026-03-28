@@ -362,12 +362,14 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
           });
 
           // Notify watchers of update (async)
-          notifyWatchers(db, existing.id, userId, {
+          const actor = c.get("user") as AuthUser | null;
+          const excludeId = actor?.actorName ? "" : userId; // agents don't exclude owner
+          notifyWatchers(db, existing.id, excludeId, {
             type: "doc_updated",
             spaceSlug,
             docSlug: slug,
             title: `${updated.title} was updated`,
-            actorName: (c.get("user") as AuthUser | null)?.name,
+            actorName: actor?.displayName,
           }).catch(() => {});
         }
       }
