@@ -56,7 +56,18 @@ const themeCss = themeToCSS(space?.theme?.tokens);
         {space.description && <p class="space-desc">{space.description}</p>}
       </div>
 
-      <div class="doc-grid">
+      {documents.length > 0 && (
+        <div class="sort-bar">
+          <label>Sort by</label>
+          <select id="sort-docs">
+            <option value="title">Title</option>
+            <option value="updated">Recently updated</option>
+            <option value="unread">Unread first</option>
+          </select>
+        </div>
+      )}
+
+      <div class="doc-grid" id="doc-grid">
         {documents.length === 0 ? (
           <p class="empty-state">
             {!accessToken && space.visibility !== "public"
@@ -220,6 +231,24 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     margin-bottom: 1rem;
   }
 
+  .sort-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-tertiary);
+  }
+
+  .sort-bar select {
+    background: var(--sw-ink-surface);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-secondary);
+    font-size: var(--sw-text-xs);
+    padding: 0.2rem 0.4rem;
+  }
+
   @media (max-width: 600px) {
     .doc-card {
       flex-wrap: wrap;
@@ -233,3 +262,33 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     }
   }
 </style>
+
+<script>
+  const select = document.getElementById("sort-docs") as HTMLSelectElement | null;
+  const grid = document.getElementById("doc-grid");
+  if (select && grid) {
+    select.addEventListener("change", () => {
+      const cards = Array.from(grid.querySelectorAll(".doc-card")) as HTMLElement[];
+      cards.sort((a, b) => {
+        switch (select.value) {
+          case "updated": {
+            const aDate = a.querySelector(".doc-card-date")?.textContent || "";
+            const bDate = b.querySelector(".doc-card-date")?.textContent || "";
+            return new Date(bDate).getTime() - new Date(aDate).getTime();
+          }
+          case "unread": {
+            const aUnread = a.classList.contains("unread") ? 0 : 1;
+            const bUnread = b.classList.contains("unread") ? 0 : 1;
+            return aUnread - bUnread;
+          }
+          default: {
+            const aTitle = a.querySelector(".doc-card-title")?.textContent || "";
+            const bTitle = b.querySelector(".doc-card-title")?.textContent || "";
+            return aTitle.localeCompare(bTitle);
+          }
+        }
+      });
+      for (const card of cards) grid.appendChild(card);
+    });
+  }
+</script>

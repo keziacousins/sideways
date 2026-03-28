@@ -10,6 +10,7 @@ import { createKeyRoutes } from "./routes/keys.js";
 import { createCommentRoutes } from "./routes/comments.js";
 import { createMcpRoutes } from "./routes/mcp.js";
 import { createThemeRoutes } from "./routes/themes.js";
+import { createNotificationRoutes } from "./routes/notifications.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { requestLogMiddleware } from "./middleware/requestLog.js";
 import { logger } from "./logger.js";
@@ -132,6 +133,7 @@ app.route("/api/keys", createKeyRoutes(db));
 app.route("/api/comments", createCommentRoutes(db));
 app.route("/api/mcp", createMcpRoutes(db));
 app.route("/api/themes", createThemeRoutes(db, storage));
+app.route("/api/notifications", createNotificationRoutes(db));
 
 // Cleanup expired API keys every hour
 import { lt } from "drizzle-orm";

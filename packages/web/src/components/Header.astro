@@ -1,9 +1,14 @@
 ---
+import NotificationBell from "./NotificationBell.tsx";
+
 const userName = await Astro.session?.get("user_name");
 const isLoggedIn = !!userName;
 const currentPath = Astro.url.pathname;
 const loginHref = `/auth/login?returnTo=${encodeURIComponent(currentPath)}`;
 const signupHref = `/auth/signup?returnTo=${encodeURIComponent(currentPath)}`;
+const accessToken = Astro.locals.accessToken || null;
+const refreshToken = await Astro.session?.get("refresh_token") || null;
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 ---
 
 <header class="header">
@@ -26,6 +31,9 @@ const signupHref = `/auth/signup?returnTo=${encodeURIComponent(currentPath)}`;
     </div>
 
     <div class="header-right">
+      {isLoggedIn && (
+        <NotificationBell client:idle apiUrl={API_URL} accessToken={accessToken} refreshToken={refreshToken} />
+      )}
       {isLoggedIn ? (
         <div class="user-menu">
           <div class="user-avatar">{userName?.charAt(0).toUpperCase()}</div>
