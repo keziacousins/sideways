@@ -44,7 +44,7 @@ const TYPE_ICONS: Record<string, string> = {
   reply: "↩",
   mention: "@",
   new_comment: "💬",
-  doc_updated: "📝",
+  doc_updated: "✎",
 };
 
 function timeAgo(dateStr: string): string {
