@@ -298,14 +298,25 @@ export default function Comments({
               )}
               <textarea
                 autoFocus
+                ref={(el) => {
+                  if (el) {
+                    el.style.height = "auto";
+                    el.style.height = Math.max(el.scrollHeight, 32) + "px";
+                  }
+                }}
                 value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
+                onChange={(e) => {
+                  setNewComment(e.target.value);
+                  const el = e.target;
+                  el.style.height = "auto";
+                  el.style.height = Math.max(el.scrollHeight, 32) + "px";
+                }}
                 placeholder={
                   replyTo ? "Write a reply…"
                     : anchorText ? "Add your comment…"
                     : "Write a comment…"
                 }
-                rows={3}
+                rows={1}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && e.metaKey) submitComment();
                 }}

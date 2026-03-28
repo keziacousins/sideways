@@ -171,8 +171,9 @@
   color: var(--sw-text-primary);
   font-family: var(--sw-font-body);
   font-size: var(--sw-text-sm);
-  resize: vertical;
-  min-height: 60px;
+  resize: none;
+  overflow: hidden;
+  min-height: 0;
   transition: border-color var(--sw-duration-fast) var(--sw-ease);
 }
 
