@@ -133,6 +133,7 @@ export function buildPrintHTML(options: TemplateOptions): string {
       subtitle: theme?.coverSubtitle,
       accent: theme?.colors?.accent,
       displayFont: theme?.fonts?.display,
+      displayWeight: theme?.fonts?.displayWeight,
     });
   }
 

@@ -12,6 +12,7 @@ interface CoverOptions {
   subtitle?: string;
   accent?: string;
   displayFont?: string;
+  displayWeight?: string;
 }
 
 function escapeHtml(s: string): string {
@@ -61,19 +62,16 @@ function centered(opts: CoverOptions): string {
   </div>`;
 }
 
-/** Left-aligned: logo top-left, title + subtitle left-aligned, date bottom-left */
+/** Left-aligned: logo top-left, title + subtitle left-aligned, date at bottom */
 function leftAligned(opts: CoverOptions): string {
-  const accent = opts.accent || "#c8a84e";
   return `<div class="cover-left" style="
     page: title-page;
     page-break-after: always;
     padding: 3cm 2.5cm;
-    position: relative;
-    height: 100vh;
     box-sizing: border-box;
   ">
-    ${opts.logo ? `<div style="margin-bottom: 3cm;">${logoImg(opts.logo)}</div>` : '<div style="margin-bottom: 3cm;"></div>'}
-    <div style="padding-top: 2cm;">
+    ${opts.logo ? `<div style="margin-bottom: 2cm;">${logoImg(opts.logo)}</div>` : ""}
+    <div style="padding-top: 4cm;">
       <h1 style="
         font-family: '${opts.displayFont || "Newsreader"}', Georgia, serif;
         font-size: 36pt;
@@ -87,16 +85,14 @@ function leftAligned(opts: CoverOptions): string {
       ${opts.subtitle ? `<p style="
         font-size: 14pt;
         color: #555;
-        margin: 0;
+        margin: 0 0 0.5em;
         max-width: 70%;
       ">${escapeHtml(opts.subtitle)}</p>` : `<p style="
         font-size: 14pt;
         color: #555;
-        margin: 0;
+        margin: 0 0 0.5em;
       ">${escapeHtml(opts.spaceName)}</p>`}
-    </div>
-    <div style="position: absolute; bottom: 3cm; left: 2.5cm;">
-      <span style="font-size: 9pt; color: #999;">${opts.version ? `v${opts.version} · ` : ""}${escapeHtml(opts.date)}</span>
+      <p style="font-size: 9pt; color: #999; margin: 2em 0 0;">${opts.version ? `v${opts.version} · ` : ""}${escapeHtml(opts.date)}</p>
     </div>
   </div>`;
 }
