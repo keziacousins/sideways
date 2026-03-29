@@ -43,10 +43,10 @@
 
 /* ── Base ─────────────────────────────────────────────────────── */
 body {
-  font-family: "Inter", sans-serif;
+  font-family: var(--th-font-body, "Inter", sans-serif);
   font-size: 11pt;
   line-height: 1.65;
-  color: #1a1a1a;
+  color: var(--th-color-text, #1a1a1a);
   margin: 0;
   padding: 0;
 }
@@ -95,7 +95,7 @@ body {
 .print-title-page .print-rule {
   width: 4cm;
   height: 0.5pt;
-  background: #c8a84e;
+  background: var(--th-color-accent, #c8a84e);
   margin-bottom: 2em;
 }
 
@@ -171,12 +171,12 @@ body {
 .print-content h4,
 .print-content h5,
 .print-content h6 {
-  font-family: "Newsreader", Georgia, serif;
-  color: #1a1a1a;
+  font-family: var(--th-font-display, "Newsreader", Georgia, serif);
+  font-weight: var(--th-font-display-weight, 500);
+  color: var(--th-color-text, #1a1a1a);
   line-height: 1.2;
   margin-top: 2em;
   margin-bottom: 0.5em;
-  font-weight: 500;
   page-break-after: avoid;
   page-break-inside: avoid;
 }
@@ -184,7 +184,6 @@ body {
 /* h1: document title — no page break, it's the start of content */
 .print-content h1 {
   font-size: 22pt;
-  font-weight: 400;
   margin-top: 0;
   letter-spacing: -0.01em;
 }
@@ -286,7 +285,7 @@ body {
 
 /* ── Code ────────────────────────────────────────────────────── */
 .print-content code {
-  font-family: "Fira Code", monospace;
+  font-family: var(--th-font-mono, "Fira Code", monospace);
   font-size: 0.85em;
   background: #f5f5f5;
   border: 0.5pt solid #e0e0e0;
@@ -322,7 +321,7 @@ body {
 .print-content blockquote {
   margin: 0 0 0.9em;
   padding: 0.5em 1em;
-  border-left: 2pt solid #c8a84e;
+  border-left: 2pt solid var(--th-color-accent, #c8a84e);
   background: #fdf8ec;
   color: #444;
   font-family: "Newsreader", Georgia, serif;

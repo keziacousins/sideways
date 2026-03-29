@@ -40,6 +40,9 @@ export function themeToCSS(tokens: any): string {
 
   if (tokens.fonts?.display && isValidFont(tokens.fonts.display)) {
     rules.push(`--sw-font-display: "${tokens.fonts.display}", Georgia, serif;`);
+    if (tokens.fonts.displayWeight) {
+      rules.push(`--sw-font-display-weight: ${tokens.fonts.displayWeight};`);
+    }
     const ff = fontFaceRules(tokens.fonts.display);
     if (ff) fontFaces.push(ff);
   }

@@ -756,7 +756,21 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       const themeRow = await db.query.themes.findFirst({
         where: eq(themes.id, space.themeId),
       });
-      if (themeRow) theme = themeRow.tokens as ThemeTokens;
+      if (themeRow) {
+        theme = themeRow.tokens as ThemeTokens;
+        // Embed logo as base64 data URL for WeasyPrint (it can't fetch external URLs)
+        if (theme.logo && themeRow.logoAssets?.length) {
+          try {
+            const logoRes = await storage.download(themeRow.logoAssets[0]);
+            const logoBuffer = await logoRes.arrayBuffer();
+            const ext = themeRow.logoAssets[0].split(".").pop() || "png";
+            const mimeTypes: Record<string, string> = { svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg" };
+            const mime = mimeTypes[ext] || "image/png";
+            const b64 = Buffer.from(logoBuffer).toString("base64");
+            theme = { ...theme, logo: `data:${mime};base64,${b64}` };
+          } catch {}
+        }
+      }
     }
 
     // Build the full print HTML document

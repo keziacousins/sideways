@@ -17,6 +17,7 @@ export interface ThemeTokens {
   coverSubtitle?: string;
   fonts?: {
     display?: string;
+    displayWeight?: string;
     body?: string;
     mono?: string;
   };
@@ -73,45 +74,31 @@ function isValidPaperSize(v: string): boolean {
   return /^(A[0-5]|B[0-5]|letter|legal|ledger|\d+mm\s+\d+mm|\d+in\s+\d+in)$/i.test(v.trim());
 }
 
-/** Generate CSS overrides from theme tokens */
+/** Generate CSS custom properties from theme tokens — print CSS uses these with fallbacks */
 function buildThemeCSS(theme: ThemeTokens): string {
-  const rules: string[] = [];
+  const vars: string[] = [];
 
-  // Font overrides (validated against injection)
-  if (theme.fonts?.body && isValidFont(theme.fonts.body)) {
-    rules.push(`body { font-family: "${theme.fonts.body}", sans-serif; }`);
-  }
-  if (theme.fonts?.display && isValidFont(theme.fonts.display)) {
-    const df = `"${theme.fonts.display}"`;
-    rules.push(`h1, h2, h3, h4, h5, h6 { font-family: ${df}, Georgia, serif; }`);
-    rules.push(`.print-title-page h1, .cover-centered h1, .cover-left h1, .cover-minimal h1 { font-family: ${df}, Georgia, serif; }`);
-    rules.push(`.print-toc h2 { font-family: ${df}, Georgia, serif; }`);
-  }
-  if (theme.fonts?.mono && isValidFont(theme.fonts.mono)) {
-    rules.push(`code, pre, kbd { font-family: "${theme.fonts.mono}", monospace; }`);
-  }
+  if (theme.fonts?.display && isValidFont(theme.fonts.display))
+    vars.push(`--th-font-display: "${theme.fonts.display}", Georgia, serif`);
+  if (theme.fonts?.displayWeight)
+    vars.push(`--th-font-display-weight: ${theme.fonts.displayWeight}`);
+  if (theme.fonts?.body && isValidFont(theme.fonts.body))
+    vars.push(`--th-font-body: "${theme.fonts.body}", sans-serif`);
+  if (theme.fonts?.mono && isValidFont(theme.fonts.mono))
+    vars.push(`--th-font-mono: "${theme.fonts.mono}", monospace`);
+  if (theme.colors?.text && isValidColor(theme.colors.text))
+    vars.push(`--th-color-text: ${theme.colors.text}`);
+  if (theme.colors?.accent && isValidColor(theme.colors.accent))
+    vars.push(`--th-color-accent: ${theme.colors.accent}`);
+  if (theme.colors?.mutedText && isValidColor(theme.colors.mutedText))
+    vars.push(`--th-color-muted: ${theme.colors.mutedText}`);
+  if (theme.colors?.rule && isValidColor(theme.colors.rule))
+    vars.push(`--th-color-rule: ${theme.colors.rule}`);
+  if (theme.print?.paperSize && isValidPaperSize(theme.print.paperSize))
+    vars.push(`--th-paper-size: ${theme.print.paperSize}`);
 
-  // Color overrides (validated)
-  if (theme.colors?.text && isValidColor(theme.colors.text)) {
-    rules.push(`body { color: ${theme.colors.text}; }`);
-  }
-  if (theme.colors?.accent && isValidColor(theme.colors.accent)) {
-    rules.push(`a { color: ${theme.colors.accent}; }`);
-    rules.push(`blockquote { border-left-color: ${theme.colors.accent}; }`);
-    rules.push(`.print-rule { background: ${theme.colors.accent}; }`);
-  }
-  if (theme.colors?.rule && isValidColor(theme.colors.rule)) {
-    rules.push(`h1, h2 { border-bottom-color: ${theme.colors.rule}; }`);
-    rules.push(`hr { border-color: ${theme.colors.rule}; }`);
-  }
-
-  // Paper size override (validated)
-  if (theme.print?.paperSize && isValidPaperSize(theme.print.paperSize)) {
-    rules.push(`@page { size: ${theme.print.paperSize}; }`);
-  }
-
-  if (rules.length === 0) return "";
-  return `\n/* Theme overrides */\n${rules.join("\n")}`;
+  if (vars.length === 0) return "";
+  return `\n/* Theme tokens */\n:root { ${vars.join("; ")}; }`;
 }
 
 export function buildPrintHTML(options: TemplateOptions): string {
