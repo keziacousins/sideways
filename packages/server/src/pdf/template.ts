@@ -145,6 +145,7 @@ export function buildPrintHTML(options: TemplateOptions): string {
       logo: theme?.logo,
       subtitle: theme?.coverSubtitle,
       accent: theme?.colors?.accent,
+      displayFont: theme?.fonts?.display,
     });
   }
 

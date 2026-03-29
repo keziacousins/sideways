@@ -11,6 +11,7 @@ interface CoverOptions {
   logo?: string;
   subtitle?: string;
   accent?: string;
+  displayFont?: string;
 }
 
 function escapeHtml(s: string): string {
@@ -36,7 +37,7 @@ function centered(opts: CoverOptions): string {
     <div style="padding-top: 5cm;">
       ${opts.logo ? `<div style="margin-bottom: 2.5cm;">${logoImg(opts.logo, "80px")}</div>` : ""}
       <h1 style="
-        font-family: var(--cover-display, 'Newsreader', Georgia, serif);
+        font-family: '${opts.displayFont || "Newsreader"}', Georgia, serif;
         font-size: 32pt;
         font-weight: 400;
         color: #1a1a1a;
@@ -74,7 +75,7 @@ function leftAligned(opts: CoverOptions): string {
     ${opts.logo ? `<div style="margin-bottom: 3cm;">${logoImg(opts.logo)}</div>` : '<div style="margin-bottom: 3cm;"></div>'}
     <div style="padding-top: 2cm;">
       <h1 style="
-        font-family: var(--cover-display, 'Newsreader', Georgia, serif);
+        font-family: '${opts.displayFont || "Newsreader"}', Georgia, serif;
         font-size: 36pt;
         font-weight: 400;
         color: #1a1a1a;
@@ -113,7 +114,7 @@ function minimal(opts: CoverOptions): string {
     box-sizing: border-box;
   ">
     <h1 style="
-      font-family: var(--cover-display, 'Newsreader', Georgia, serif);
+      font-family: '${opts.displayFont || "Newsreader"}', Georgia, serif;
       font-size: 28pt;
       font-weight: 400;
       color: #1a1a1a;

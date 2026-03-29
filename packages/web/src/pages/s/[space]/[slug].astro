@@ -69,7 +69,6 @@ const childPages = currentDoc
 const themeCss = themeToCSS(space?.theme?.tokens);
 ---
 
-{themeCss && <style set:html={themeCss} />}
 <BaseLayout title={doc?.title ?? "Not Found"} sidebar={!!space}>
   <Fragment slot="sidebar">
     {space && (
@@ -81,6 +80,8 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       />
     )}
   </Fragment>
+
+  {themeCss && <Fragment set:html={`<style>${themeCss}</style>`} />}
 
   {doc ? (
     <div class="doc-page">
