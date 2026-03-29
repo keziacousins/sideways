@@ -38,6 +38,7 @@ interface TemplateOptions {
   spaceName: string;
   html: string;
   date: string;
+  version?: number;
   showTitlePage?: boolean;
   showToc?: boolean;
   theme?: ThemeTokens;
@@ -134,12 +135,13 @@ export function buildPrintHTML(options: TemplateOptions): string {
   // Cover page: use theme layout if available, otherwise default
   let titlePage = "";
   if (showTitlePage) {
-    const layoutName = theme?.coverLayout || "centered";
+    const layoutName = theme?.coverLayout || "left-aligned";
     const layoutFn = coverLayouts[layoutName] || coverLayouts.centered;
     titlePage = layoutFn({
       title,
       spaceName,
       date,
+      version: options.version,
       logo: theme?.logo,
       subtitle: theme?.coverSubtitle,
       accent: theme?.colors?.accent,

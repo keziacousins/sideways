@@ -771,6 +771,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         year: "numeric",
         month: "long",
       }),
+      version: latestVersion.version,
       showTitlePage,
       showToc,
       theme,

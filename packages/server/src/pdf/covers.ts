@@ -7,6 +7,7 @@ interface CoverOptions {
   title: string;
   spaceName: string;
   date: string;
+  version?: number;
   logo?: string;
   subtitle?: string;
   accent?: string;
@@ -55,7 +56,7 @@ function centered(opts: CoverOptions): string {
       ">${escapeHtml(opts.spaceName)}</p>`}
     </div>
     <div style="position: absolute; bottom: 3cm; left: 0; right: 0; text-align: center;">
-      <span style="font-size: 9pt; color: #999;">${escapeHtml(opts.date)}</span>
+      <span style="font-size: 9pt; color: #999;">${opts.version ? `v${opts.version} · ` : ""}${escapeHtml(opts.date)}</span>
     </div>
   </div>`;
 }
@@ -96,7 +97,7 @@ function leftAligned(opts: CoverOptions): string {
       ">${escapeHtml(opts.spaceName)}</p>`}
     </div>
     <div style="position: absolute; bottom: 3cm; left: 2.5cm;">
-      <span style="font-size: 9pt; color: #999;">${escapeHtml(opts.date)}</span>
+      <span style="font-size: 9pt; color: #999;">${opts.version ? `v${opts.version} · ` : ""}${escapeHtml(opts.date)}</span>
     </div>
   </div>`;
 }
@@ -123,7 +124,7 @@ function minimal(opts: CoverOptions): string {
       line-height: 1.15;
     ">${escapeHtml(opts.title)}</h1>
     <div style="width: 40px; height: 1.5px; background: ${accent}; margin: 0 0 1em;"></div>
-    <p style="font-size: 10pt; color: #999; margin: 0;">${escapeHtml(opts.spaceName)} · ${escapeHtml(opts.date)}</p>
+    <p style="font-size: 10pt; color: #999; margin: 0;">${escapeHtml(opts.spaceName)} · ${opts.version ? `v${opts.version} · ` : ""}${escapeHtml(opts.date)}</p>
   </div>`;
 }
 
