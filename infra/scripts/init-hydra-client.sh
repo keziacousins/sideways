@@ -14,18 +14,15 @@ register_client() {
   STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${HYDRA_ADMIN_URL}/admin/clients/${CLIENT_ID}")
 
   if [ "$STATUS" = "200" ]; then
-    echo "Client '${CLIENT_ID}' exists, updating..."
-    curl -sf -X PUT \
-      -H "Content-Type: application/json" \
-      -d "${CLIENT_JSON}" \
-      "${HYDRA_ADMIN_URL}/admin/clients/${CLIENT_ID}" > /dev/null
-  else
-    echo "Creating client '${CLIENT_ID}'..."
-    curl -sf -X POST \
-      -H "Content-Type: application/json" \
-      -d "${CLIENT_JSON}" \
-      "${HYDRA_ADMIN_URL}/admin/clients" > /dev/null
+    echo "Client '${CLIENT_ID}' exists, deleting and recreating..."
+    curl -sf -X DELETE "${HYDRA_ADMIN_URL}/admin/clients/${CLIENT_ID}" > /dev/null
   fi
+
+  echo "Creating client '${CLIENT_ID}'..."
+  curl -sf -X POST \
+    -H "Content-Type: application/json" \
+    -d "${CLIENT_JSON}" \
+    "${HYDRA_ADMIN_URL}/admin/clients" > /dev/null
   echo "  Done."
 }
 
