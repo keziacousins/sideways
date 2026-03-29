@@ -6,6 +6,7 @@ serve:
       enabled: true
       allowed_origins:
         - http://localhost:4000
+        - https://your-server.example.com
       allowed_methods:
         - GET
         - POST
