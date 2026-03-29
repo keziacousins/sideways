@@ -44,7 +44,6 @@ function centered(opts: CoverOptions): string {
         letter-spacing: -0.02em;
         line-height: 1.1;
       ">${escapeHtml(opts.title)}</h1>
-      <div style="width: 60px; height: 2px; background: ${accent}; margin: 0.8em auto;"></div>
       ${opts.subtitle ? `<p style="
         font-size: 13pt;
         color: #666;
@@ -84,7 +83,6 @@ function leftAligned(opts: CoverOptions): string {
         line-height: 1.1;
         max-width: 85%;
       ">${escapeHtml(opts.title)}</h1>
-      <div style="width: 80px; height: 3px; background: ${accent}; margin: 0 0 1em;"></div>
       ${opts.subtitle ? `<p style="
         font-size: 14pt;
         color: #555;
@@ -123,7 +121,6 @@ function minimal(opts: CoverOptions): string {
       letter-spacing: -0.02em;
       line-height: 1.15;
     ">${escapeHtml(opts.title)}</h1>
-    <div style="width: 40px; height: 1.5px; background: ${accent}; margin: 0 0 1em;"></div>
     <p style="font-size: 10pt; color: #999; margin: 0;">${escapeHtml(opts.spaceName)} · ${opts.version ? `v${opts.version} · ` : ""}${escapeHtml(opts.date)}</p>
   </div>`;
 }
