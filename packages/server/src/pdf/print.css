@@ -110,7 +110,7 @@ body {
 .print-toc h2 {
   font-family: var(--th-font-display, "Newsreader", Georgia, serif);
   font-size: 20pt;
-  font-weight: 400;
+  font-weight: var(--th-font-display-weight, 400);
   margin: 0 0 1.2em;
   color: var(--th-color-text, #1a1a1a);
   letter-spacing: -0.01em;
