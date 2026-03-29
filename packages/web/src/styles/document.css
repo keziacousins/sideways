@@ -36,7 +36,6 @@
 .sw-doc-content h1 {
   font-size: var(--sw-text-3xl);
   margin-top: 0;
-  font-weight: 400;
   letter-spacing: -0.02em;
 }
 
