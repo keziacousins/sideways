@@ -342,6 +342,7 @@ export function createAuthRoutes(db: Database) {
     authUrl.searchParams.set("scope", "openid offline_access");
     authUrl.searchParams.set("redirect_uri", `${env.publicUrl}/auth/callback`);
     authUrl.searchParams.set("state", state);
+    authUrl.searchParams.set("prompt", "login"); // force fresh login, don't reuse stale sessions
     if (nonce) authUrl.searchParams.set("login_hint", nonce);
 
     return c.redirect(authUrl.toString());

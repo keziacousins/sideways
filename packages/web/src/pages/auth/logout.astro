@@ -1,5 +1,20 @@
 ---
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const returnTo = Astro.url.searchParams.get("returnTo") || "/";
+
+// Get the ID token to initiate Hydra RP logout
+const idToken = await Astro.session?.get("id_token");
+
+// Destroy local session first
 await Astro.session?.destroy();
+
+// If we have an ID token, do a proper Hydra logout to clear Hydra's session cookies
+if (idToken) {
+  const logoutUrl = new URL(`${API_URL}/oauth2/sessions/logout`);
+  logoutUrl.searchParams.set("id_token_hint", idToken);
+  logoutUrl.searchParams.set("post_logout_redirect_uri", returnTo.startsWith("/") ? returnTo : "/");
+  return Astro.redirect(logoutUrl.toString());
+}
+
 return Astro.redirect(returnTo.startsWith("/") ? returnTo : "/");
 ---

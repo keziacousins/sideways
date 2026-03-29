@@ -76,6 +76,7 @@ console.log("[callback] user:", userEmail);
 
 await Astro.session?.set("access_token", tokens.access_token);
 await Astro.session?.set("refresh_token", tokens.refresh_token);
+await Astro.session?.set("id_token", tokens.id_token || null);
 await Astro.session?.set("user_email", userEmail);
 await Astro.session?.set("user_name", userName);
 
