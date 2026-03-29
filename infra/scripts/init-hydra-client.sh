@@ -43,6 +43,7 @@ register_client "sideways-web" '{
   "response_types": ["code"],
   "scope": "openid offline_access",
   "redirect_uris": ["'"${PUBLIC_URL}"'/auth/callback"],
+  "post_logout_redirect_uris": ["'"${PUBLIC_URL}"'/", "'"${PUBLIC_URL}"'/auth/login"],
   "token_endpoint_auth_method": "none",
   "skip_consent": true
 }'
