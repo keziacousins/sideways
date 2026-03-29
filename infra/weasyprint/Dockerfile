@@ -33,7 +33,10 @@ RUN mkdir -p /usr/share/fonts/newsreader && \
     wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/newsreader/Newsreader-Italic%5Bopsz%2Cwght%5D.ttf" \
       -O /usr/share/fonts/newsreader/Newsreader-Italic-Variable.ttf
 
-# Register fonts with fontconfig
+# Copy custom/licensed fonts from repo (e.g. Proxima Nova for themes)
+COPY fonts/ /usr/share/fonts/custom/
+
+# Register all fonts with fontconfig
 RUN fc-cache -f -v
 
 # Clean up build deps
