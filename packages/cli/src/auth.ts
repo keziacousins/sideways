@@ -46,14 +46,9 @@ function prompt(question: string): Promise<string> {
  * The user creates the key in the web UI, then pastes it here.
  */
 export async function login(apiUrl: string): Promise<void> {
+  const baseUrl = apiUrl.replace(/\/api$/, "").replace(/:\d+$/, "");
   console.log("\nTo authenticate, create an API key in the Sideways web UI:");
-  console.log(`  ${apiUrl.replace(/\/api$/, "").replace(/:\d+$/, ":4000")}/settings/keys`);
-  console.log("\nOr sign in to the web app, go to any page, and use the");
-  console.log("API to create one:\n");
-  console.log(`  curl -X POST ${apiUrl}/api/keys \\`);
-  console.log(`    -H "Authorization: Bearer <your-access-token>" \\`);
-  console.log(`    -H "Content-Type: application/json" \\`);
-  console.log(`    -d '{"name": "CLI"}'\n`);
+  console.log(`  ${baseUrl}/settings/keys\n`);
 
   const key = await prompt("Paste your API key (sk-...): ");
 

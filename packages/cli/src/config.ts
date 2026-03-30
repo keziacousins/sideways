@@ -32,7 +32,7 @@ export interface ProjectConfig {
 }
 
 const CONFIG_FILENAME = ".sideways.yml";
-const DEFAULT_API = "http://localhost:4100";
+const DEFAULT_API = "http://localhost:4100"; // Only used as fallback in config parser; init/login require explicit URL
 
 /**
  * Walk up from cwd to find .sideways.yml

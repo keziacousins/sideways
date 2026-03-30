@@ -41,9 +41,13 @@ program
     if (slug !== space) {
       console.log(`Slugified: "${space}" → "${slug}"`);
     }
-    // Use: explicit --api > stored credentials URL > default
+    // Use: explicit --api > stored credentials URL
     const creds = getStoredCredentials();
-    const api = opts.api || creds?.api_url || "http://localhost:4100";
+    const api = opts.api || creds?.api_url;
+    if (!api) {
+      console.error("No API URL. Run 'sideways login' first, or pass --api <url>.");
+      process.exit(1);
+    }
     const path = createConfig(process.cwd(), slug, api, space);
     console.log(`Created ${path}`);
   });
@@ -1093,7 +1097,7 @@ program
   .option("--limit <n>", "Max results", "10")
   .action(async (query: string, opts: { space?: string; limit?: string }) => {
     const config = findConfig();
-    const client = getClient(config?.api || "http://localhost:4100");
+    const client = getClient(config?.api || getStoredCredentials()?.api_url || "http://localhost:4100");
 
     const params = new URLSearchParams({ q: query, limit: opts.limit || "10" });
     if (opts.space) params.set("space", opts.space);
@@ -1102,7 +1106,7 @@ program
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (creds?.api_key) headers["Authorization"] = `Bearer ${creds.api_key}`;
 
-    const res = await fetch(`${config?.api || "http://localhost:4100"}/api/search?${params}`, { headers });
+    const res = await fetch(`${config?.api || getStoredCredentials()?.api_url || "http://localhost:4100"}/api/search?${params}`, { headers });
     if (!res.ok) {
       console.error("Search failed.");
       process.exit(1);
@@ -1249,7 +1253,11 @@ program
   .option("--api <url>", "API base URL")
   .action(async (opts: { api?: string }) => {
     const config = findConfig();
-    const api = opts.api || config?.api || "http://localhost:4100";
+    const api = opts.api || config?.api || getStoredCredentials()?.api_url;
+    if (!api) {
+      console.error("No API URL found. Pass --api <url> or run from a directory with .sideways.yml.");
+      process.exit(1);
+    }
     await login(api);
   });
 
@@ -1279,7 +1287,7 @@ program
   .description("List API keys")
   .action(async () => {
     const config = findConfig();
-    const client = createClient(config?.api || "http://localhost:4100");
+    const client = createClient(config?.api || getStoredCredentials()?.api_url || "http://localhost:4100");
     const keys = await client.listKeys();
     if (keys.length === 0) {
       console.log("No API keys.");
