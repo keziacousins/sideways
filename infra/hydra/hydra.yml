@@ -1,6 +1,8 @@
 version: v2.3.0
 
 serve:
+  cookies:
+    same_site_mode: Lax
   public:
     cors:
       enabled: true
