@@ -10,7 +10,7 @@ import { icons } from "../../lib/icons.ts";
 const { space: spaceSlug } = Astro.params;
 const { accessToken } = Astro.locals;
 
-let space: { name: string; slug: string; description: string | null; visibility: string; theme?: { tokens: any } } | null = null;
+let space: { name: string; slug: string; description: string | null; visibility: string; canWrite?: boolean; theme?: { tokens: any } } | null = null;
 let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number; unread?: boolean; updatedAt?: string }[] = [];
 let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 
@@ -52,13 +52,13 @@ const themeCss = themeToCSS(space?.theme?.tokens);
         <div class="space-header-top">
           <h1>{space.name}</h1>
           <div class="space-header-actions">
-            {accessToken && (
+            {space?.canWrite && (
               <button class="new-doc-btn" id="new-doc-btn">
                 <Fragment set:html={icons.plus(14)} />
                 New document
               </button>
             )}
-            {accessToken && (
+            {space?.canWrite && (
               <a href={`/s/${spaceSlug}/settings`} class="space-settings-link">Settings</a>
             )}
           </div>
@@ -111,7 +111,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
                   </div>
                 )}
               </a>
-              {accessToken && (
+              {space?.canWrite && (
                 <button class="doc-rename-btn" title="Rename" data-slug={doc.slug} data-title={doc.title}>
                   <Fragment set:html={icons.pencil(13)} />
                 </button>
