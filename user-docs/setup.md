@@ -119,6 +119,28 @@ sideways push --force <file>    # keep local version
 sideways pull --force <file>    # keep remote version
 ```
 
+## Section Mappings
+
+If your documentation lives in deep subdirectories (e.g. alongside code), you can map them to sections explicitly instead of relying on the default first-level-directory convention:
+
+```yaml
+sections:
+  - path: src/packages/api/docs
+    name: API Reference
+    slug: api-docs
+  - path: src/packages/web/docs
+    name: Web App
+```
+
+With section mappings:
+- Only the listed directories are synced (auto-discovery is disabled)
+- Each directory's contents map to the named section
+- `slug` is auto-derived from `name` or the directory name if omitted
+- `index.md` in a mapped directory becomes the section page
+- Subdirectories within a mapped path nest normally (deeper = child docs)
+
+When pulling, files are written back into their mapped paths, preserving your project's directory structure.
+
 ## Ignoring Files
 
 By default, common directories are ignored: `node_modules`, `venv`, `.git`, `dist`, `build`, etc.

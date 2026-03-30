@@ -153,6 +153,21 @@ ignore:
   - tmp
 ```
 
+### Section Mappings
+
+Map deep subdirectories to sections when your docs live alongside code:
+
+```yaml
+sections:
+  - path: src/packages/api/docs
+    name: API Reference
+    slug: api-docs
+  - path: src/packages/web/docs
+    name: Web App
+```
+
+When `sections` is set, only those directories are synced. Each maps to a section in your space. Files pulled from remote are written back into the mapped paths.
+
 ### ~/.sideways/token.json
 
 Created by `sideways login`. Contains your API key and server URL.
