@@ -171,6 +171,24 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     return c.json(syncInfo);
   });
 
+  /** Comment counts per document in a space */
+  router.get("/:space/_comment-counts", async (c) => {
+    const result = await resolveSpace(c, c.req.param("space"));
+    if ("error" in result) return result.error;
+    const { space } = result;
+
+    const rows = await db.execute(sql`
+      SELECT d.slug, COUNT(c.id)::int as count
+      FROM documents d
+      LEFT JOIN comments c ON c.document_id = d.id AND c.resolved = false
+      WHERE d.space_id = ${space.id}
+      GROUP BY d.slug
+      HAVING COUNT(c.id) > 0
+    `);
+
+    return c.json(rows);
+  });
+
   /** Autocomplete: fast prefix search on doc titles/slugs within a space */
   router.get("/:space/_autocomplete", async (c) => {
     const result = await resolveSpace(c, c.req.param("space"));

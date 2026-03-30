@@ -17,6 +17,9 @@ import {
   parseFrontmatter,
   serializeFrontmatter,
   discoverFiles,
+  readTracked,
+  writeTracked,
+  isTracked,
 } from "./sync.js";
 
 const program = new Command();
@@ -111,6 +114,103 @@ function prepareFileForPush(filePath: string): { slug: string; content: string; 
   const tags = frontmatter.tags || [];
   return { slug, content, tags, title: frontmatter.title };
 }
+
+// ── add / remove ──────────────────────────────────────────────────────
+
+program
+  .command("add <paths...>")
+  .description("Track files or directories for sync (use '.' for everything)")
+  .action((paths: string[]) => {
+    const config = requireConfig();
+    const syncRoot = getSyncRoot(config);
+    const tracked = readTracked(syncRoot);
+    const allFiles = discoverFiles(syncRoot, config.ignore);
+
+    let added = 0;
+    for (const p of paths) {
+      if (p === ".") {
+        // Track everything — clear the tracked list
+        writeTracked(syncRoot, []);
+        console.log("Tracking all files (cleared explicit tracking list).");
+        return;
+      }
+
+      // Resolve to relative path from sync root
+      const abs = resolve(p);
+      const rel = relative(syncRoot, abs);
+
+      // Check if it's a directory
+      try {
+        if (statSync(abs).isDirectory()) {
+          const dirRel = rel.endsWith("/") ? rel : rel + "/";
+          if (!tracked.includes(rel) && !tracked.includes(dirRel)) {
+            tracked.push(rel);
+            const matching = allFiles.filter(f => f.relativePath.startsWith(dirRel) || f.relativePath.startsWith(rel + "/"));
+            console.log(`  added: ${rel}/ (${matching.length} files)`);
+            added++;
+          }
+          continue;
+        }
+      } catch {}
+
+      // Single file
+      const file = allFiles.find(f => f.relativePath === rel || f.filename === basename(p) || f.slug === slugFromFilename(basename(p)));
+      if (file) {
+        if (!tracked.includes(file.relativePath)) {
+          tracked.push(file.relativePath);
+          console.log(`  added: ${file.relativePath}`);
+          added++;
+        }
+      } else {
+        // Not yet discovered (might be a new file path)
+        if (!tracked.includes(rel)) {
+          tracked.push(rel);
+          console.log(`  added: ${rel}`);
+          added++;
+        }
+      }
+    }
+
+    if (added > 0) {
+      writeTracked(syncRoot, tracked);
+      console.log(`\n${added} path(s) added. ${tracked.length} total tracked.`);
+    } else {
+      console.log("Nothing new to add.");
+    }
+  });
+
+program
+  .command("remove <paths...>")
+  .description("Stop tracking files or directories for sync")
+  .action((paths: string[]) => {
+    const config = requireConfig();
+    const syncRoot = getSyncRoot(config);
+    let tracked = readTracked(syncRoot);
+
+    if (tracked.length === 0) {
+      console.log("Currently tracking everything. Use 'sideways add <path>' to switch to selective tracking first.");
+      return;
+    }
+
+    let removed = 0;
+    for (const p of paths) {
+      const abs = resolve(p);
+      const rel = relative(syncRoot, abs);
+      const before = tracked.length;
+      tracked = tracked.filter(t => t !== rel && t !== rel + "/" && t !== basename(p));
+      if (tracked.length < before) {
+        console.log(`  removed: ${rel}`);
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      writeTracked(syncRoot, tracked);
+      console.log(`\n${removed} path(s) removed. ${tracked.length} total tracked.`);
+    } else {
+      console.log("Nothing to remove.");
+    }
+  });
 
 // ── pull ──────────────────────────────────────────────────────────────
 
@@ -307,8 +407,9 @@ program
         await ensureSpace(client, space, config.spaceName || undefined);
       }
 
-      // Discover all files from the sync root
-      const allFiles = discoverFiles(syncRoot, config.ignore);
+      // Discover all files from the sync root, filtered by tracked list
+      const tracked = readTracked(syncRoot);
+      const allFiles = discoverFiles(syncRoot, config.ignore).filter(f => isTracked(tracked, f.relativePath));
 
       // If path targets a single file, filter to just that
       let files = allFiles;
@@ -466,10 +567,18 @@ program
 
     await requireSpace(client, space);
 
-    const files = discoverFiles(syncRoot, config.ignore);
+    const tracked = readTracked(syncRoot);
+    const files = discoverFiles(syncRoot, config.ignore).filter(f => isTracked(tracked, f.relativePath));
     const remoteFiles = await client.getSyncInfo(space);
     const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
     const syncState = readSyncState(syncRoot, space);
+
+    // Fetch comment counts for remote docs
+    let commentCounts = new Map<string, number>();
+    try {
+      const counts = await client.getCommentCounts(space);
+      commentCounts = new Map(counts.map((r: any) => [r.slug, r.count]));
+    } catch {}
 
     const sorted = [...files].sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 
@@ -484,7 +593,9 @@ program
       };
       const color = colors[label] || "";
       const reset = color ? "\x1b[0m" : "";
-      console.log(`  ${color}${label.padEnd(16)}${reset} ${file.relativePath}`);
+      const cc = commentCounts.get(file.slug);
+      const commentInfo = cc ? ` \x1b[35m[${cc} comment${cc !== 1 ? "s" : ""}]\x1b[0m` : "";
+      console.log(`  ${color}${label.padEnd(16)}${reset} ${file.relativePath}${commentInfo}`);
     }
 
     let hasChanges = false;
@@ -531,6 +642,32 @@ program
       }
     }
 
+    // Show unchanged files that have open comments
+    for (const file of sorted) {
+      const cc = commentCounts.get(file.slug);
+      if (cc) {
+        // Check if this file was already shown (had changes)
+        const filePath = join(syncRoot, file.relativePath);
+        const raw = readFileSync(filePath, "utf-8");
+        const localHash = hashLocalFile(raw);
+        const trackedEntry = syncState.files[file.relativePath];
+        const remote = remoteMap.get(file.slug);
+        const isUnchanged = trackedEntry && remote && localHash === trackedEntry.localHash && remote.contentHash === trackedEntry.remoteHash;
+        if (isUnchanged) {
+          console.log(`  ${"".padEnd(16)} ${file.relativePath} \x1b[35m[${cc} comment${cc !== 1 ? "s" : ""}]\x1b[0m`);
+        }
+      }
+    }
+
+    // Show untracked files when selective tracking is active
+    if (tracked.length > 0) {
+      const allDiscovered = discoverFiles(syncRoot, config.ignore);
+      const untracked = allDiscovered.filter(f => !isTracked(tracked, f.relativePath));
+      if (untracked.length > 0) {
+        console.log(`\n  ${untracked.length} untracked file(s) — use 'sideways add <path>' to track`);
+      }
+    }
+
     if (!hasChanges) {
       console.log("Everything up to date.");
     }
@@ -555,7 +692,8 @@ program
       await ensureSpace(client, space, config.spaceName || undefined);
     }
 
-    const allFiles = discoverFiles(syncRoot, config.ignore);
+    const tracked = readTracked(syncRoot);
+    const allFiles = discoverFiles(syncRoot, config.ignore).filter(f => isTracked(tracked, f.relativePath));
     const remoteFiles = await client.getSyncInfo(space);
     const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
     const syncState = readSyncState(syncRoot, space);

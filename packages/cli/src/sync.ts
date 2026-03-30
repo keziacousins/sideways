@@ -31,6 +31,45 @@ export interface SyncState {
 
 const SYNC_DIR = ".sideways";
 const SYNC_FILE = "sync.json";
+const TRACKED_FILE = "tracked.json";
+
+/** Read the tracked files list. Empty array = track everything (default). */
+export function readTracked(dir: string): string[] {
+  const trackPath = join(dir, SYNC_DIR, TRACKED_FILE);
+  if (existsSync(trackPath)) {
+    try {
+      const data = JSON.parse(readFileSync(trackPath, "utf-8"));
+      return Array.isArray(data) ? data : [];
+    } catch {}
+  }
+  return [];
+}
+
+/** Write the tracked files list. */
+export function writeTracked(dir: string, tracked: string[]): void {
+  const syncDir = join(dir, SYNC_DIR);
+  mkdirSync(syncDir, { recursive: true });
+  writeFileSync(join(syncDir, TRACKED_FILE), JSON.stringify([...new Set(tracked)].sort(), null, 2));
+}
+
+/** Check if a relative path is tracked. If tracked list is empty, everything is tracked. */
+export function isTracked(tracked: string[], relativePath: string): boolean {
+  if (tracked.length === 0) return true;
+  return tracked.some(pattern => {
+    // Exact match
+    if (relativePath === pattern) return true;
+    // Directory match (pattern "docs/" or "docs" matches "docs/anything.md")
+    const dir = pattern.endsWith("/") ? pattern : pattern + "/";
+    if (relativePath.startsWith(dir)) return true;
+    // Slug match (pattern without .md matches file)
+    if (!pattern.includes("/") && !pattern.endsWith(".md")) {
+      const slug = pattern.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+      const fileSlug = relativePath.replace(/\.md$/, "").split("/").pop()?.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+      if (slug === fileSlug) return true;
+    }
+    return false;
+  });
+}
 
 /** Hash file contents for change detection. Normalizes whitespace for stable comparison. */
 export function hashContent(content: string): string {

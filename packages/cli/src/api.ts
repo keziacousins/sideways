@@ -127,6 +127,10 @@ export function createClient(baseUrl: string, actorName?: string) {
       return request(`/api/documents/${space}/_sync${qs}`);
     },
 
+    getCommentCounts(space: string) {
+      return request(`/api/documents/${space}/_comment-counts`);
+    },
+
     createSpace(slug: string, name?: string, visibility: string = "private") {
       return request(`/api/spaces/${slug}`, {
         method: "PUT",
