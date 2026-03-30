@@ -671,7 +671,7 @@ program
     }
 
     // Show untracked files when selective tracking is active
-    if (tracked.length > 0) {
+    if (tracked && tracked.length > 0) {
       const allDiscovered = discoverFiles(syncRoot, config.ignore, config.sections);
       const untracked = allDiscovered.filter(f => !isTracked(tracked, f.relativePath));
       if (untracked.length > 0) {
