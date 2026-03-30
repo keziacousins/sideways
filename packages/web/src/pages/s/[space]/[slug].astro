@@ -1085,8 +1085,8 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving...";
       try {
-        const res = await fetch(`${API_URL}/api/documents/${spaceSlug}/${slug}`, {
-          method: "PUT",
+        const res = await fetch(`/s/${spaceSlug}/${slug}/save`, {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: textarea.value }),
         });
@@ -1103,6 +1103,21 @@ const themeCss = themeToCSS(space?.theme?.tokens);
         saveBtn.textContent = "Save";
       }
     });
+
+    // Auto-enter edit mode if ?edit=1 (e.g. newly created doc)
+    if (new URLSearchParams(window.location.search).has("edit")) {
+      editBtn.click();
+      // Pre-fill with heading prompt if content is empty
+      if (!rawContent.trim()) {
+        textarea.value = "# ";
+        requestAnimationFrame(() => {
+          textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+          textarea.focus();
+        });
+      }
+      // Clean up URL
+      history.replaceState(null, "", window.location.pathname);
+    }
   }
 
   // Copy markdown

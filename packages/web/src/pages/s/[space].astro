@@ -51,9 +51,17 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       <div class="space-header animate-in">
         <div class="space-header-top">
           <h1>{space.name}</h1>
-          {accessToken && (
-            <a href={`/s/${spaceSlug}/settings`} class="space-settings-link">Settings</a>
-          )}
+          <div class="space-header-actions">
+            {accessToken && (
+              <button class="new-doc-btn" id="new-doc-btn">
+                <Fragment set:html={icons.plus(14)} />
+                New document
+              </button>
+            )}
+            {accessToken && (
+              <a href={`/s/${spaceSlug}/settings`} class="space-settings-link">Settings</a>
+            )}
+          </div>
         </div>
         {space.description && <p class="space-desc">{space.description}</p>}
       </div>
@@ -80,25 +88,35 @@ const themeCss = themeToCSS(space?.theme?.tokens);
           </p>
         ) : (
           documents.map((doc, i) => (
-            <a
-              href={`/s/${spaceSlug}/${doc.slug}`}
-              class:list={["doc-card", "animate-in", { unread: doc.unread }]}
+            <div
+              class:list={["doc-card-row", "animate-in", { unread: doc.unread }]}
               style={`animation-delay: ${(i + 1) * 60}ms`}
               data-updated={doc.updatedAt || ""}
+              data-slug={doc.slug}
             >
-              <div class="doc-card-icon"><Fragment set:html={icons.document(16)} /></div>
-              <span class="doc-card-title">{doc.title}{doc.unread && <span class="unread-indicator">●</span>}</span>
-              {doc.updatedAt && (
-                <span class="doc-card-date">{new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+              <a
+                href={`/s/${spaceSlug}/${doc.slug}`}
+                class="doc-card"
+              >
+                <div class="doc-card-icon"><Fragment set:html={icons.document(16)} /></div>
+                <span class="doc-card-title">{doc.title}{doc.unread && <span class="unread-indicator">●</span>}</span>
+                {doc.updatedAt && (
+                  <span class="doc-card-date">{new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+                )}
+                {doc.tags?.length > 0 && (
+                  <div class="doc-tags">
+                    {doc.tags.map((tag) => (
+                      <span class="tag">{tag}</span>
+                    ))}
+                  </div>
+                )}
+              </a>
+              {accessToken && (
+                <button class="doc-rename-btn" title="Rename" data-slug={doc.slug} data-title={doc.title}>
+                  <Fragment set:html={icons.pencil(13)} />
+                </button>
               )}
-              {doc.tags?.length > 0 && (
-                <div class="doc-tags">
-                  {doc.tags.map((tag) => (
-                    <span class="tag">{tag}</span>
-                  ))}
-                </div>
-              )}
-            </a>
+            </div>
           ))
         )}
       </div>
@@ -120,6 +138,34 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+
+  .space-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .new-doc-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    background: none;
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-secondary);
+    font-size: var(--sw-text-sm);
+    cursor: pointer;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+  .new-doc-btn:hover {
+    border-color: var(--sw-accent);
+    color: var(--sw-accent);
+  }
+  .new-doc-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .space-settings-link {
@@ -157,20 +203,41 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     gap: 2px;
   }
 
+  .doc-card-row {
+    display: flex;
+    align-items: center;
+    border-radius: var(--sw-radius-md);
+    transition: background var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .doc-card-row:hover {
+    background: var(--sw-ink-light);
+  }
+
   .doc-card {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
-    border-radius: var(--sw-radius-md);
     text-decoration: none;
     color: inherit;
-    transition: background var(--sw-duration-fast) var(--sw-ease);
+    flex: 1;
+    min-width: 0;
   }
 
-  .doc-card:hover {
-    background: var(--sw-ink-light);
+  .doc-rename-btn {
+    background: none;
+    border: none;
+    color: var(--sw-text-ghost);
+    padding: 0.4rem;
+    margin-right: 0.5rem;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--sw-duration-fast) var(--sw-ease), color var(--sw-duration-fast) var(--sw-ease);
+    flex-shrink: 0;
   }
+  .doc-card-row:hover .doc-rename-btn { opacity: 1; }
+  .doc-rename-btn:hover { color: var(--sw-accent); }
 
   .doc-card-icon {
     color: var(--sw-text-tertiary);
@@ -305,7 +372,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
   function doSort() {
     if (!grid) return;
-    const cards = Array.from(grid.querySelectorAll(".doc-card")) as HTMLElement[];
+    const cards = Array.from(grid.querySelectorAll(".doc-card-row")) as HTMLElement[];
     cards.sort((a, b) => {
       let cmp = 0;
       switch (currentSort) {
@@ -352,9 +419,55 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     const res = await fetch(`/s/${spaceSlug}/mark-read`, { method: "POST" });
     if (res.ok) {
       // Remove all unread indicators
-      document.querySelectorAll(".doc-card.unread").forEach(el => el.classList.remove("unread"));
+      document.querySelectorAll(".doc-card-row.unread").forEach(el => el.classList.remove("unread"));
       document.querySelectorAll(".unread-indicator").forEach(el => el.remove());
       markAllBtn.style.display = "none";
     }
+  });
+
+  // New document
+  const newDocBtn = document.getElementById("new-doc-btn");
+  newDocBtn?.addEventListener("click", async () => {
+    const spaceSlug = window.location.pathname.split("/")[2];
+    newDocBtn.setAttribute("disabled", "");
+    newDocBtn.textContent = "Creating...";
+    const res = await fetch(`/s/${spaceSlug}/new-doc`, { method: "POST" });
+    if (res.ok) {
+      const { slug } = await res.json();
+      window.location.href = `/s/${spaceSlug}/${slug}?edit=1`;
+    } else {
+      alert("Failed to create document.");
+      newDocBtn.removeAttribute("disabled");
+      newDocBtn.textContent = "New document";
+    }
+  });
+
+  // Rename from listing
+  document.querySelectorAll(".doc-rename-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const el = btn as HTMLElement;
+      const docSlug = el.dataset.slug;
+      const currentTitle = el.dataset.title;
+      const newTitle = prompt("Rename document:", currentTitle);
+      if (!newTitle || newTitle === currentTitle) return;
+
+      const newSlug = newTitle.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+      const spaceSlug = window.location.pathname.split("/")[2];
+      const res = await fetch(`/s/${spaceSlug}/${docSlug}/rename`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle, slug: newSlug }),
+      });
+
+      if (res.ok) {
+        window.location.reload();
+      } else if (res.status === 409) {
+        alert("A document with that name already exists.");
+      } else {
+        alert("Rename failed.");
+      }
+    });
   });
 </script>
