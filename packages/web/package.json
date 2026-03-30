@@ -1,6 +1,6 @@
 {
   "name": "@sideways/web",
-  "version": "0.0.100",
+  "version": "0.0.101",
   "type": "module",
   "scripts": {
     "dev": "astro dev",

@@ -47,8 +47,10 @@ export default function Comments({
   const [comments, setComments] = useState<Comment[]>([]);
   const [isOpen, setIsOpenState] = useState(false);
 
+  const fetchRef = useRef<() => void>(() => {});
   const setIsOpen = (open: boolean) => {
     setIsOpenState(open);
+    if (open) fetchRef.current();
     // Notify layout to collapse/expand sidebar on narrow screens
     document.documentElement.classList.toggle("comments-open", open);
   };
@@ -134,6 +136,8 @@ export default function Comments({
       if (res.ok) setComments(await res.json());
     } catch {}
   }, [spaceSlug, docSlug, apiUrl, authFetch]);
+
+  fetchRef.current = fetchComments;
 
   useEffect(() => {
     fetchComments();
