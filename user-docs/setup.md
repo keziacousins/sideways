@@ -64,16 +64,25 @@ The directory structure maps to sections and document nesting:
 my-docs/
   readme.md                 → top-level document
   getting-started/          → section: "getting-started"
-    index.md                → section landing page
-    installation.md         → child of getting-started
-    installation/
-      linux.md              → child of installation
-      macos.md              → child of installation
+    index.md                → section page (parent for files in this dir)
+    quickstart.md           → child of getting-started
   api/                      → section: "api"
-    overview.md             → document in api section
+    index.md                → API section page
+    endpoints.md            → child of api
+    auth/
+      index.md              → Auth page (child of api, parent for files here)
+      oauth.md              → child of auth
+      keys.md               → child of auth
+  guides/                   → section: "guides" (no index.md = no parent page)
+    deploy.md               → flat doc in guides section
+    testing.md              → flat doc in guides section
 ```
 
-First-level directories become **sections**. Deeper nesting creates **parent/child document relationships**. An `index.md` in a directory becomes the parent page.
+**First-level directories** become **sections**.
+
+**`index.md`** in any directory becomes that directory's page — other files in the directory become its children. If there's no `index.md`, files appear flat in the section with no parent.
+
+**Deeper directories** nest further. `api/auth/index.md` is a child of `api/index.md`, and `api/auth/oauth.md` is a child of `api/auth/index.md`.
 
 ## Pulling Documents
 

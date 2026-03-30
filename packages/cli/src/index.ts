@@ -281,11 +281,13 @@ program
       let totalPulled = 0;
       let totalSkipped = 0;
 
-      /** Build filesystem path for a doc based on its section + parent hierarchy */
+      /** Build filesystem path for a doc based on its section + parent hierarchy.
+       *  Convention: index.md in a directory = that directory's page.
+       *  A doc with children always becomes dir/index.md. */
       function buildDocPath(doc: any): string {
         const parts: string[] = [];
 
-        // Walk parent chain
+        // Walk parent chain to build directory nesting
         const parentChain: string[] = [];
         let currentParentId = doc.parentId;
         const visited = new Set<string>();
@@ -297,33 +299,18 @@ program
           currentParentId = parentDoc?.parentId ?? null;
         }
 
-        // Section directory (only for docs without parents)
-        if (!doc.parentId && doc.sectionId) {
-          const sectionSlug = sectionSlugById.get(doc.sectionId);
-          if (sectionSlug) parts.push(sectionSlug);
-        } else if (doc.parentId && parentChain.length > 0) {
-          // Find root parent's section
-          let rootParentId = doc.parentId;
-          const rootVisited = new Set<string>();
-          while (rootParentId && !rootVisited.has(rootParentId)) {
-            rootVisited.add(rootParentId);
-            const p = allDocs.find((d: any) => d.id === rootParentId);
-            if (!p?.parentId) break;
-            rootParentId = p.parentId;
-          }
-          const rootParent = allDocs.find((d: any) => d.id === rootParentId);
-          if (rootParent?.sectionId) {
-            const secSlug = sectionSlugById.get(rootParent.sectionId);
-            if (secSlug && secSlug !== parentChain[0]) {
-              parts.push(secSlug);
-            }
+        // Section = first directory level
+        const sectionSlug = doc.sectionId ? sectionSlugById.get(doc.sectionId) : null;
+        if (sectionSlug) parts.push(sectionSlug);
+
+        // Parent chain = nested directories (skip section slug if it's already first)
+        for (const p of parentChain) {
+          if (parts.length === 0 || p !== parts[parts.length - 1]) {
+            parts.push(p);
           }
         }
 
-        parts.push(...parentChain);
-
         const hasChildren = hasChildrenSet.has(doc.id);
-        const sectionSlug = doc.sectionId ? sectionSlugById.get(doc.sectionId) : null;
         const isSectionIndex = sectionSlug && doc.slug === sectionSlug && !doc.parentId;
 
         if (isSectionIndex) {

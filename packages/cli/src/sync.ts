@@ -231,17 +231,13 @@ export function discoverFiles(rootDir: string, ignore: string[] = []): Discovere
   function walk(dir: string, relPath: string, depth: number, section: string | null, parentSlug: string | null) {
     if (!existsSync(dir)) return;
     const entries = readdirSync(dir).sort();
-
-    // Find index.md first — it becomes the parent for sibling files
-    const hasIndex = entries.includes("index.md") && statSync(join(dir, "index.md")).isFile();
     const dirSlug = relPath ? slugFromFilename(relPath.split("/").pop()!) : null;
 
-    // The parent slug for files in this directory:
-    // - If there's an index.md at depth >= 2, it's the parent
-    // - Otherwise inherit from caller
+    // index.md in a directory = the page for that directory
+    // It becomes the parent for all other files in this directory
+    const hasIndex = entries.includes("index.md") && statSync(join(dir, "index.md")).isFile();
     let effectiveParent = parentSlug;
 
-    // Process index.md first if present (at depth >= 1)
     if (hasIndex && depth >= 1) {
       const indexSlug = dirSlug || slugFromFilename("index");
       results.push({
@@ -249,7 +245,7 @@ export function discoverFiles(rootDir: string, ignore: string[] = []): Discovere
         filename: "index.md",
         slug: indexSlug,
         section: depth === 1 ? dirSlug : section,
-        parentSlug: depth >= 2 ? parentSlug : null,
+        parentSlug: parentSlug,
         depth,
       });
       effectiveParent = indexSlug;
@@ -268,7 +264,7 @@ export function discoverFiles(rootDir: string, ignore: string[] = []): Discovere
           filename: entry,
           slug: fileSlug,
           section: depth >= 1 ? (section || dirSlug) : null,
-          parentSlug: depth >= 2 ? effectiveParent : (hasIndex && depth === 1 ? effectiveParent : null),
+          parentSlug: hasIndex ? effectiveParent : parentSlug,
           depth,
         });
       }
@@ -282,10 +278,8 @@ export function discoverFiles(rootDir: string, ignore: string[] = []): Discovere
       if (stat.isDirectory()) {
         const childRel = relPath ? `${relPath}/${entry}` : entry;
         const childSection = depth === 0 ? slugFromFilename(entry) : section;
-        // The parent for files in a subdirectory is the matching .md file
-        // e.g. installation/ → parent is "installation" (from installation.md)
-        const dirAsSlug = slugFromFilename(entry);
-        const childParent = depth >= 1 ? dirAsSlug : null;
+        // Parent for files in subdirectory = this directory's index.md (if it exists)
+        const childParent = hasIndex ? effectiveParent : parentSlug;
         walk(fullPath, childRel, depth + 1, childSection, childParent);
       }
     }
