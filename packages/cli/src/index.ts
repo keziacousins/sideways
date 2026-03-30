@@ -123,13 +123,13 @@ program
   .action((paths: string[]) => {
     const config = requireConfig();
     const syncRoot = getSyncRoot(config);
-    const tracked = readTracked(syncRoot);
+    const tracked = readTracked(syncRoot) || [];
     const allFiles = discoverFiles(syncRoot, config.ignore);
 
     let added = 0;
     for (const p of paths) {
       if (p === ".") {
-        // Track everything — clear the tracked list
+        // Track everything — empty list means "all"
         writeTracked(syncRoot, []);
         console.log("Tracking all files (cleared explicit tracking list).");
         return;
@@ -187,7 +187,7 @@ program
     const syncRoot = getSyncRoot(config);
     let tracked = readTracked(syncRoot);
 
-    if (tracked.length === 0) {
+    if (!tracked || tracked.length === 0) {
       console.log("Currently tracking everything. Use 'sideways add <path>' to switch to selective tracking first.");
       return;
     }
@@ -409,6 +409,10 @@ program
 
       // Discover all files from the sync root, filtered by tracked list
       const tracked = readTracked(syncRoot);
+      if (tracked === null) {
+        console.error("No files tracked. Run 'sideways add <path>' or 'sideways add .' first.");
+        process.exit(1);
+      }
       const allFiles = discoverFiles(syncRoot, config.ignore).filter(f => isTracked(tracked, f.relativePath));
 
       // If path targets a single file, filter to just that
@@ -568,6 +572,9 @@ program
     await requireSpace(client, space);
 
     const tracked = readTracked(syncRoot);
+    if (tracked === null) {
+      console.log("\x1b[33mNo files tracked yet. Run 'sideways add <path>' or 'sideways add .' to start.\x1b[0m\n");
+    }
     const files = discoverFiles(syncRoot, config.ignore).filter(f => isTracked(tracked, f.relativePath));
     const remoteFiles = await client.getSyncInfo(space);
     const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
@@ -693,6 +700,10 @@ program
     }
 
     const tracked = readTracked(syncRoot);
+    if (tracked === null) {
+      console.error("No files tracked. Run 'sideways add <path>' or 'sideways add .' first.");
+      process.exit(1);
+    }
     const allFiles = discoverFiles(syncRoot, config.ignore).filter(f => isTracked(tracked, f.relativePath));
     const remoteFiles = await client.getSyncInfo(space);
     const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));

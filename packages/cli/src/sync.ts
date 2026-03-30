@@ -33,8 +33,8 @@ const SYNC_DIR = ".sideways";
 const SYNC_FILE = "sync.json";
 const TRACKED_FILE = "tracked.json";
 
-/** Read the tracked files list. Empty array = track everything (default). */
-export function readTracked(dir: string): string[] {
+/** Read the tracked files list. Returns null if no tracked.json exists (needs initial add). */
+export function readTracked(dir: string): string[] | null {
   const trackPath = join(dir, SYNC_DIR, TRACKED_FILE);
   if (existsSync(trackPath)) {
     try {
@@ -42,7 +42,12 @@ export function readTracked(dir: string): string[] {
       return Array.isArray(data) ? data : [];
     } catch {}
   }
-  return [];
+  return null;
+}
+
+/** Check if tracking has been initialised (tracked.json exists). */
+export function hasTracking(dir: string): boolean {
+  return existsSync(join(dir, SYNC_DIR, TRACKED_FILE));
 }
 
 /** Write the tracked files list. */
@@ -52,9 +57,9 @@ export function writeTracked(dir: string, tracked: string[]): void {
   writeFileSync(join(syncDir, TRACKED_FILE), JSON.stringify([...new Set(tracked)].sort(), null, 2));
 }
 
-/** Check if a relative path is tracked. If tracked list is empty, everything is tracked. */
-export function isTracked(tracked: string[], relativePath: string): boolean {
-  if (tracked.length === 0) return true;
+/** Check if a relative path is tracked. Null or empty array = everything is tracked. */
+export function isTracked(tracked: string[] | null, relativePath: string): boolean {
+  if (!tracked || tracked.length === 0) return true;
   return tracked.some(pattern => {
     // Exact match
     if (relativePath === pattern) return true;
