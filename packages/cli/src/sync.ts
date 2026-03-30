@@ -225,7 +225,13 @@ function shouldIgnore(name: string, extraIgnore: string[] = []): boolean {
   return all.includes(name);
 }
 
-export function discoverFiles(rootDir: string, ignore: string[] = []): DiscoveredFile[] {
+export interface SectionMappingInput {
+  path: string;
+  name?: string;
+  slug?: string;
+}
+
+export function discoverFiles(rootDir: string, ignore: string[] = [], sectionMappings?: SectionMappingInput[]): DiscoveredFile[] {
   const results: DiscoveredFile[] = [];
 
   function walk(dir: string, relPath: string, depth: number, section: string | null, parentSlug: string | null) {
@@ -285,6 +291,110 @@ export function discoverFiles(rootDir: string, ignore: string[] = []): Discovere
     }
   }
 
+  // If section mappings are provided, only discover from those paths
+  if (sectionMappings && sectionMappings.length > 0) {
+    for (const mapping of sectionMappings) {
+      const mappedDir = join(rootDir, mapping.path);
+      const sectionSlug = mapping.slug || slugFromFilename(mapping.name || mapping.path.split("/").pop() || "docs");
+
+      // Discover files within this mapped directory as if it's a section
+      // depth=1 because these are section-level (first-level dirs)
+      if (!existsSync(mappedDir)) continue;
+      const entries = readdirSync(mappedDir).sort();
+      const hasIndex = entries.includes("index.md") && statSync(join(mappedDir, "index.md")).isFile();
+      let parentSlug: string | null = null;
+
+      if (hasIndex) {
+        results.push({
+          relativePath: join(mapping.path, "index.md"),
+          filename: "index.md",
+          slug: sectionSlug,
+          section: sectionSlug,
+          parentSlug: null,
+          depth: 1,
+        });
+        parentSlug = sectionSlug;
+      }
+
+      // Walk the contents with the section already set
+      function walkMapped(dir: string, relPath: string, depth: number, parent: string | null) {
+        if (!existsSync(dir)) return;
+        const ents = readdirSync(dir).sort();
+        const hasIdx = ents.includes("index.md") && statSync(join(dir, "index.md")).isFile();
+        const dSlug = relPath ? slugFromFilename(relPath.split("/").pop()!) : null;
+        let effectiveParent = parent;
+
+        // index.md at deeper levels
+        if (hasIdx && depth > 1) {
+          const indexSlug = dSlug || "index";
+          results.push({
+            relativePath: join(mapping.path, relPath, "index.md"),
+            filename: "index.md",
+            slug: indexSlug,
+            section: sectionSlug,
+            parentSlug: parent,
+            depth,
+          });
+          effectiveParent = indexSlug;
+        }
+
+        for (const entry of ents) {
+          if (entry === "index.md") continue;
+          const fullPath = join(dir, entry);
+          const stat = statSync(fullPath);
+          if (stat.isFile() && entry.endsWith(".md")) {
+            results.push({
+              relativePath: join(mapping.path, relPath ? `${relPath}/${entry}` : entry),
+              filename: entry,
+              slug: slugFromFilename(entry),
+              section: sectionSlug,
+              parentSlug: hasIdx ? effectiveParent : parent,
+              depth,
+            });
+          }
+        }
+
+        for (const entry of ents) {
+          const fullPath = join(dir, entry);
+          if (shouldIgnore(entry, ignore)) continue;
+          const stat = statSync(fullPath);
+          if (stat.isDirectory()) {
+            const childRel = relPath ? `${relPath}/${entry}` : entry;
+            walkMapped(fullPath, childRel, depth + 1, hasIdx ? effectiveParent : parent);
+          }
+        }
+      }
+
+      // Walk non-index files and subdirectories
+      for (const entry of entries) {
+        if (entry === "index.md") continue;
+        const fullPath = join(mappedDir, entry);
+        const stat = statSync(fullPath);
+        if (stat.isFile() && entry.endsWith(".md")) {
+          results.push({
+            relativePath: join(mapping.path, entry),
+            filename: entry,
+            slug: slugFromFilename(entry),
+            section: sectionSlug,
+            parentSlug: hasIndex ? parentSlug : null,
+            depth: 1,
+          });
+        }
+      }
+      for (const entry of entries) {
+        if (entry === "index.md") continue;
+        const fullPath = join(mappedDir, entry);
+        if (shouldIgnore(entry, ignore)) continue;
+        const stat = statSync(fullPath);
+        if (stat.isDirectory()) {
+          walkMapped(fullPath, entry, 2, hasIndex ? parentSlug : null);
+        }
+      }
+    }
+    return results;
+  }
+
+  // Default: auto-discover from root (first-level dirs = sections)
   walk(rootDir, "", 0, null, null);
   return results;
 }

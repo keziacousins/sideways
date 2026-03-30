@@ -124,7 +124,7 @@ program
     const config = requireConfig();
     const syncRoot = getSyncRoot(config);
     const tracked = readTracked(syncRoot) || [];
-    const allFiles = discoverFiles(syncRoot, config.ignore);
+    const allFiles = discoverFiles(syncRoot, config.ignore, config.sections);
 
     let added = 0;
     for (const p of paths) {
@@ -281,6 +281,13 @@ program
       let totalPulled = 0;
       let totalSkipped = 0;
 
+      // Build reverse map: section slug → mapped path (if section mappings configured)
+      const sectionPathMap = new Map<string, string>();
+      for (const mapping of config.sections) {
+        const slug = mapping.slug || slugFromFilename(mapping.name || mapping.path.split("/").pop() || "docs");
+        sectionPathMap.set(slug, mapping.path);
+      }
+
       /** Build filesystem path for a doc based on its section + parent hierarchy.
        *  Convention: index.md in a directory = that directory's page.
        *  A doc with children always becomes dir/index.md. */
@@ -299,9 +306,15 @@ program
           currentParentId = parentDoc?.parentId ?? null;
         }
 
-        // Section = first directory level
+        // Section = first directory level (use mapped path if available)
         const sectionSlug = doc.sectionId ? sectionSlugById.get(doc.sectionId) : null;
-        if (sectionSlug) parts.push(sectionSlug);
+        const mappedPath = sectionSlug ? sectionPathMap.get(sectionSlug) : undefined;
+        if (mappedPath) {
+          // Use the full mapped path (e.g. "src/packages/api/docs") instead of slug
+          parts.push(mappedPath);
+        } else if (sectionSlug) {
+          parts.push(sectionSlug);
+        }
 
         // Parent chain = nested directories (skip section slug if it's already first)
         for (const p of parentChain) {
@@ -400,7 +413,7 @@ program
         console.error("No files tracked. Run 'sideways add <path>' or 'sideways add .' first.");
         process.exit(1);
       }
-      const allFiles = discoverFiles(syncRoot, config.ignore).filter(f => isTracked(tracked, f.relativePath));
+      const allFiles = discoverFiles(syncRoot, config.ignore, config.sections).filter(f => isTracked(tracked, f.relativePath));
 
       // If path targets a single file, filter to just that
       let files = allFiles;
@@ -562,7 +575,7 @@ program
     if (tracked === null) {
       console.log("\x1b[33mNo files tracked yet. Run 'sideways add <path>' or 'sideways add .' to start.\x1b[0m\n");
     }
-    const files = discoverFiles(syncRoot, config.ignore).filter(f => isTracked(tracked, f.relativePath));
+    const files = discoverFiles(syncRoot, config.ignore, config.sections).filter(f => isTracked(tracked, f.relativePath));
     const remoteFiles = await client.getSyncInfo(space);
     const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
     const syncState = readSyncState(syncRoot, space);
@@ -655,7 +668,7 @@ program
 
     // Show untracked files when selective tracking is active
     if (tracked.length > 0) {
-      const allDiscovered = discoverFiles(syncRoot, config.ignore);
+      const allDiscovered = discoverFiles(syncRoot, config.ignore, config.sections);
       const untracked = allDiscovered.filter(f => !isTracked(tracked, f.relativePath));
       if (untracked.length > 0) {
         console.log(`\n  ${untracked.length} untracked file(s) — use 'sideways add <path>' to track`);
@@ -691,7 +704,7 @@ program
       console.error("No files tracked. Run 'sideways add <path>' or 'sideways add .' first.");
       process.exit(1);
     }
-    const allFiles = discoverFiles(syncRoot, config.ignore).filter(f => isTracked(tracked, f.relativePath));
+    const allFiles = discoverFiles(syncRoot, config.ignore, config.sections).filter(f => isTracked(tracked, f.relativePath));
     const remoteFiles = await client.getSyncInfo(space);
     const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
     const syncState = readSyncState(syncRoot, space);
@@ -888,7 +901,7 @@ program
       process.exit(1);
     }
 
-    const files = discoverFiles(syncRoot, config.ignore);
+    const files = discoverFiles(syncRoot, config.ignore, config.sections);
     const file = resolveFile(files, slug);
     if (!file) {
       console.error(`No local file found for "${slug}"`);

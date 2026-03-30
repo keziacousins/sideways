@@ -7,6 +7,15 @@ export interface DirMapping {
   section: string | null;
 }
 
+export interface SectionMapping {
+  /** Relative path from root to the directory */
+  path: string;
+  /** Section name (display). Slug derived from this if slug not set. */
+  name?: string;
+  /** Section slug (URL-friendly). Auto-derived from name or path if omitted. */
+  slug?: string;
+}
+
 export interface ProjectConfig {
   space: string;
   spaceName: string | null;
@@ -14,6 +23,8 @@ export interface ProjectConfig {
   mappings: DirMapping[];
   /** If set, recursive sync from this directory. First-level dirs = sections, deeper = doc nesting. */
   root: string | null;
+  /** Explicit path-to-section mappings. When set, only these directories are synced. */
+  sections: SectionMapping[];
   /** Additional directory names to ignore during discovery */
   ignore: string[];
   /** Absolute path to the directory containing .sideways.yml */
@@ -42,6 +53,11 @@ export function findConfig(from: string = process.cwd()): ProjectConfig | null {
           section: m.section || null,
         })),
         root: parsed.root ?? null,
+        sections: (parsed.sections || []).map((s: any) => ({
+          path: s.path,
+          name: s.name,
+          slug: s.slug,
+        })),
         ignore: parsed.ignore ?? [],
         rootDir: dir,
       };
