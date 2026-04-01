@@ -270,6 +270,12 @@
   cursor: not-allowed;
 }
 
+.inline-reply-form {
+  margin-left: 1.5rem;
+  border-bottom: none;
+  padding: 0.5rem 0;
+}
+
 /* ── Comments List ────────────────────────────────────────────── */
 .comments-list {
   flex: 1;

@@ -350,9 +350,9 @@ export default function Comments({
             </div>
           )}
 
-          {isAuthenticated && (composing || replyTo || anchorText) && (
+          {isAuthenticated && (composing || anchorText) && !replyTo && (
             <form className="comment-form" onSubmit={(e) => { e.preventDefault(); submitComment(); }}>
-              {anchorText && !replyTo && (
+              {anchorText && (
                 <div className="comment-form-anchor">
                   <span>"{anchorText.slice(0, 60)}{anchorText.length > 60 ? "…" : ""}"</span>
                   <button type="button" onClick={() => { setAnchorText(null); setAnchorSection(null); setAnchorContext(null); }}>×</button>
@@ -373,11 +373,7 @@ export default function Comments({
                   el.style.height = "auto";
                   el.style.height = Math.max(el.scrollHeight, 32) + "px";
                 }}
-                placeholder={
-                  replyTo ? "Write a reply…"
-                    : anchorText ? "Add your comment…"
-                    : "Write a comment…"
-                }
+                placeholder={anchorText ? "Add your comment…" : "Write a comment…"}
                 rows={1}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && e.metaKey) submitComment();
@@ -389,7 +385,6 @@ export default function Comments({
                   type="button"
                   className="comment-form-cancel"
                   onClick={() => {
-                    setReplyTo(null);
                     setAnchorText(null);
                     setNewComment("");
                     setError(null);
@@ -446,6 +441,53 @@ export default function Comments({
                     canAct={isAuthenticated}
                   />
                 ))}
+                {replyTo === comment.id && (
+                  <form className="comment-form inline-reply-form" onSubmit={(e) => { e.preventDefault(); submitComment(); }}>
+                    <textarea
+                      autoFocus
+                      ref={(el) => {
+                        if (el) {
+                          el.style.height = "auto";
+                          el.style.height = Math.max(el.scrollHeight, 32) + "px";
+                        }
+                      }}
+                      value={newComment}
+                      onChange={(e) => {
+                        setNewComment(e.target.value);
+                        const el = e.target;
+                        el.style.height = "auto";
+                        el.style.height = Math.max(el.scrollHeight, 32) + "px";
+                      }}
+                      placeholder="Write a reply…"
+                      rows={1}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && e.metaKey) submitComment();
+                      }}
+                    />
+                    {error && <div className="comment-form-error">{error}</div>}
+                    <div className="comment-form-actions">
+                      <button
+                        type="button"
+                        className="comment-form-cancel"
+                        onClick={() => {
+                          setReplyTo(null);
+                          setNewComment("");
+                          setError(null);
+                          setComposing(false);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="comment-form-submit"
+                        disabled={!newComment.trim() || submitting}
+                      >
+                        {submitting ? "Posting…" : "Reply"}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             ))}
 
@@ -481,6 +523,36 @@ export default function Comments({
                         canAct={isAuthenticated}
                       />
                     ))}
+                    {replyTo === comment.id && (
+                      <form className="comment-form inline-reply-form" onSubmit={(e) => { e.preventDefault(); submitComment(); }}>
+                        <textarea
+                          autoFocus
+                          ref={(el) => {
+                            if (el) {
+                              el.style.height = "auto";
+                              el.style.height = Math.max(el.scrollHeight, 32) + "px";
+                            }
+                          }}
+                          value={newComment}
+                          onChange={(e) => {
+                            setNewComment(e.target.value);
+                            const el = e.target;
+                            el.style.height = "auto";
+                            el.style.height = Math.max(el.scrollHeight, 32) + "px";
+                          }}
+                          placeholder="Write a reply…"
+                          rows={1}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && e.metaKey) submitComment();
+                          }}
+                        />
+                        {error && <div className="comment-form-error">{error}</div>}
+                        <div className="comment-form-actions">
+                          <button type="button" className="comment-form-cancel" onClick={() => { setReplyTo(null); setNewComment(""); setError(null); setComposing(false); }}>Cancel</button>
+                          <button type="submit" className="comment-form-submit" disabled={!newComment.trim() || submitting}>{submitting ? "Posting…" : "Reply"}</button>
+                        </div>
+                      </form>
+                    )}
                   </div>
                 ))}
               </details>
