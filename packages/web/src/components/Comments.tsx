@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 
 interface Comment {
   id: string;
@@ -212,16 +213,23 @@ export default function Comments({
     const docContent = document.querySelector(".sw-doc-content");
     if (!docContent) return;
 
-    // Remove previous gutter markers
-    docContent.querySelectorAll(".comment-gutter-mark, .comment-gutter-target").forEach(el => el.remove());
+    // Remove previous gutter markers and reset position on their parent blocks
+    docContent.querySelectorAll(".comment-gutter-target").forEach(el => {
+      const parent = el.parentElement;
+      el.remove();
+      if (parent) parent.style.position = "";
+    });
+    docContent.querySelectorAll(".comment-gutter-mark").forEach(el => el.remove());
 
     // Add gutter markers for each anchored, unresolved comment
-    const anchored = comments.filter((c) => c.anchorText && !c.parentId && !c.resolved);
+    const anchored = comments.filter((c) => c.anchorText && !c.parentId && c.resolved === false);
     const contentRect = docContent.getBoundingClientRect();
 
     for (const comment of anchored) {
       const target = findTextInDOM(docContent, comment.anchorText!, comment.anchorSection, comment.anchorContext) as HTMLElement | null;
       if (target) {
+        // Target block needs position:relative so the click overlay is scoped to it
+        target.style.position = "relative";
 
         // Invisible click target on the block itself
         const clickTarget = document.createElement("div");
@@ -324,7 +332,7 @@ export default function Comments({
         {totalCount > 0 && <span className="comments-badge">{totalCount}</span>}
       </button>
 
-      {isOpen && (
+      {isOpen && createPortal(
         <div className="comments-panel-overlay">
           <div className="comments-panel-header">
             <h3>Comments</h3>
@@ -556,7 +564,8 @@ export default function Comments({
               </details>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
