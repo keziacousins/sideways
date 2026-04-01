@@ -91,9 +91,7 @@
   background: var(--sw-ink-light);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--sw-radius-lg);
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
+  overflow: hidden;
   z-index: 90;
   animation: panelIn var(--sw-duration) var(--sw-ease) both;
   display: flex;
