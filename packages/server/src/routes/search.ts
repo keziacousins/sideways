@@ -60,6 +60,7 @@ export function createSearchRoutes(db: Database) {
         d.slug as "docSlug",
         d.title,
         d.tags,
+        d.updated_at as "updatedAt",
         ts_rank_cd(d.search_tsv, to_tsquery('english', '${tsqueryStr.replace(/'/g, "''")}')) as rank,
         ts_headline(
           'english',

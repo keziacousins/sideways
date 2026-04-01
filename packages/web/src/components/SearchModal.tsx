@@ -8,6 +8,7 @@ interface SearchResult {
   tags: string[];
   snippet: string;
   rank: number;
+  updatedAt?: string;
 }
 
 interface Props {
@@ -141,8 +142,8 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
               onMouseEnter={() => setActiveIndex(i)}
             >
               <div className="search-result-header">
-                <span className="search-result-space">{r.spaceName}</span>
                 <span className="search-result-title">{r.title}</span>
+                <span className="search-result-space">{r.spaceName}</span>
               </div>
               {r.snippet && (
                 <div className="search-result-snippet" dangerouslySetInnerHTML={{
@@ -158,11 +159,21 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
                     .trim()
                 }} />
               )}
-              {r.tags?.length > 0 && (
-                <div className="search-result-tags">
-                  {r.tags.map(t => <span key={t} className="search-result-tag">{t}</span>)}
-                </div>
-              )}
+              <div className="search-result-meta">
+                {r.updatedAt && (
+                  <span className="search-result-date">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign: "-0.125em"}}>
+                      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    {" "}{new Date(r.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                )}
+                {r.tags?.length > 0 && (
+                  <span className="search-result-tags">
+                    {r.tags.map(t => <span key={t} className="search-result-tag">{t}</span>)}
+                  </span>
+                )}
+              </div>
             </a>
           ))}
         </div>
