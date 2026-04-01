@@ -81,8 +81,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
           if (result.refresh_token) {
             await session?.set("refresh_token", result.refresh_token);
           }
+        } else {
+          // Refresh failed — session is dead, redirect to login
+          await session?.set("access_token", null);
+          await session?.set("refresh_token", null);
+          await session?.set("user_name", null);
+          await session?.set("user_email", null);
+          const returnTo = encodeURIComponent(context.url.pathname);
+          return context.redirect(`/auth/login?returnTo=${returnTo}`);
         }
-        // On failure: keep stale token, don't clear session
       }
     } else if (needsRefresh && !refreshToken) {
       accessToken = null;
