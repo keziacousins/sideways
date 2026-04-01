@@ -69,8 +69,7 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Only show loading spinner if we have no results yet
-    if (results.length === 0) setLoading(true);
+    setLoading(true);
     try {
       const headers: Record<string, string> = {};
       if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
@@ -147,7 +146,7 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
         </div>
 
         <div className="search-results" ref={listRef}>
-          {loading && <div className="search-loading">Searching…</div>}
+          {loading && results.length === 0 && <div className="search-loading">Searching…</div>}
           {!loading && query.length >= 2 && results.length === 0 && (
             <div className="search-empty">No results for "{query}"</div>
           )}
