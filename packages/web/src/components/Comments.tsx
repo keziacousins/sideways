@@ -222,8 +222,6 @@ export default function Comments({
     for (const comment of anchored) {
       const target = findTextInDOM(docContent, comment.anchorText!, comment.anchorSection, comment.anchorContext) as HTMLElement | null;
       if (target) {
-        // Position bar and click target relative to the content container
-        target.style.position = "relative";
 
         // Invisible click target on the block itself
         const clickTarget = document.createElement("div");
