@@ -25,6 +25,7 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number>();
+  const abortRef = useRef<AbortController>();
 
   // Open on ⌘K / Ctrl+K or click on search trigger
   useEffect(() => {
@@ -60,21 +61,31 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
     }
   }, [open]);
 
-  // Debounced search
+  // Debounced search with abort for stale requests
   const search = useCallback(async (q: string) => {
-    if (q.length < 2) { setResults([]); return; }
+    if (q.length < 2) { setResults([]); setLoading(false); return; }
+    // Abort any in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     try {
       const headers: Record<string, string> = {};
       if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
-      const res = await fetch(`${apiUrl}/api/search?q=${encodeURIComponent(q)}&limit=10`, { headers });
+      const res = await fetch(`${apiUrl}/api/search?q=${encodeURIComponent(q)}&limit=10`, {
+        headers,
+        signal: controller.signal,
+      });
       if (res.ok) {
         const data = await res.json();
         setResults(data.results);
         setActiveIndex(0);
       }
-    } catch {} finally {
-      setLoading(false);
+    } catch (e: any) {
+      if (e.name === "AbortError") return; // superseded by newer request
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [apiUrl, accessToken]);
 
@@ -96,8 +107,14 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex(i => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && results[activeIndex]) {
-      navigate(results[activeIndex]);
+    } else if (e.key === "Enter") {
+      if (results[activeIndex]) {
+        navigate(results[activeIndex]);
+      } else {
+        // No results yet — search immediately
+        clearTimeout(timerRef.current);
+        search(query);
+      }
     }
   };
 
