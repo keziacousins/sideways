@@ -58,6 +58,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
                 New document
               </button>
             )}
+            {accessToken && (
+              <button class="space-watch-btn" id="space-watch-btn" title="Watch this space">
+                <Fragment set:html={icons.bell(15)} />
+              </button>
+            )}
             {space?.canWrite && (
               <a href={`/s/${spaceSlug}/settings`} class="space-settings-link">Settings</a>
             )}
@@ -167,6 +172,17 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     opacity: 0.5;
     cursor: not-allowed;
   }
+
+  .space-watch-btn {
+    background: none;
+    border: none;
+    color: var(--sw-text-ghost);
+    cursor: pointer;
+    padding: 0.3rem;
+    transition: color var(--sw-duration-fast) var(--sw-ease);
+  }
+  .space-watch-btn:hover { color: var(--sw-text-primary); }
+  .space-watch-btn.watching { color: var(--sw-accent); }
 
   .space-settings-link {
     font-size: var(--sw-text-sm);
@@ -424,6 +440,33 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       markAllBtn.style.display = "none";
     }
   });
+
+  // Space watch
+  const watchBtn = document.getElementById("space-watch-btn");
+  if (watchBtn) {
+    const spaceSlug = window.location.pathname.split("/")[2];
+    const bellOutline = watchBtn.innerHTML;
+    const bellFilled = bellOutline.replace('fill="none"', 'fill="currentColor"');
+
+    // Fetch initial state
+    fetch(`/s/${spaceSlug}/watch`).then(r => r.json()).then(data => {
+      if (data.watching) {
+        watchBtn.innerHTML = bellFilled;
+        watchBtn.classList.add("watching");
+        watchBtn.title = "Unwatch this space";
+      }
+    }).catch(() => {});
+
+    watchBtn.addEventListener("click", async () => {
+      const res = await fetch(`/s/${spaceSlug}/watch`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        watchBtn.innerHTML = data.watching ? bellFilled : bellOutline;
+        watchBtn.classList.toggle("watching", data.watching);
+        watchBtn.title = data.watching ? "Unwatch this space" : "Watch this space";
+      }
+    });
+  }
 
   // New document
   const newDocBtn = document.getElementById("new-doc-btn");

@@ -20,7 +20,7 @@ import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { buildPrintHTML, type ThemeTokens } from "../pdf/template.js";
 import { env } from "../env.js";
 import { validateTitle, validateSlug, validateTags, validateContent } from "../middleware/validate.js";
-import { notifyWatchers } from "../lib/notify.js";
+import { notifyWatchers, notifySpaceWatchers } from "../lib/notify.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -421,6 +421,18 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
             docSlug: slug,
             title: `${updated.title} was updated`,
             actorName: actor?.displayName,
+          }).then(async () => {
+            // Also notify space watchers (excluding doc watchers already notified)
+            const docWatchers = await db.query.documentWatches.findMany({
+              where: eq(documentWatches.documentId, existing.id),
+            });
+            await notifySpaceWatchers(db, space.id, existing.id, excludeId, docWatchers.map(w => w.userId), {
+              type: "doc_updated",
+              spaceSlug,
+              docSlug: slug,
+              title: `${updated.title} was updated`,
+              actorName: actor?.displayName,
+            });
           }).catch(() => {});
         }
       }
@@ -457,6 +469,17 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
     // Index for search
     updateSearchIndex(db, doc.id, doc.title, doc.tags || [], content).catch(() => {});
+
+    // Notify space watchers of new doc (async)
+    const actor = c.get("user") as AuthUser | null;
+    const excludeId = actor?.actorName ? "" : userId;
+    notifySpaceWatchers(db, space.id, doc.id, excludeId, [], {
+      type: "doc_created",
+      spaceSlug,
+      docSlug: slug,
+      title: `${doc.title} was created`,
+      actorName: actor?.displayName,
+    }).catch(() => {});
 
     return c.json(doc, 201);
   });

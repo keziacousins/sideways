@@ -1,6 +1,6 @@
 {
   "name": "@sideways/cli",
-  "version": "0.0.102",
+  "version": "0.0.103",
   "type": "module",
   "bin": {
     "sideways": "./bin/sideways"

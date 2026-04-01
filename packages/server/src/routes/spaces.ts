@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
-import { type Database, spaces, sections, spaceMembers, themes, users } from "@sideways/db";
+import { type Database, spaces, sections, spaceMembers, spaceWatches, themes, users } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
+import { autoWatchSpace } from "../lib/notify.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -136,6 +137,9 @@ export function createSpaceRoutes(db: Database) {
         personal: body.personal ?? false,
       })
       .returning();
+
+    // Auto-watch the space for the creator
+    autoWatchSpace(db, ownerId, space.id).catch(() => {});
 
     return c.json(space, 201);
   });
@@ -326,6 +330,47 @@ export function createSpaceRoutes(db: Database) {
 
     await db.delete(spaceMembers).where(eq(spaceMembers.id, c.req.param("memberId")));
     return c.json({ deleted: true });
+  });
+
+  /** Toggle space watch */
+  router.post("/:slug/watch", async (c) => {
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("slug")),
+    });
+    if (!space) return c.json({ error: "Not found" }, 404);
+
+    const existing = await db.query.spaceWatches.findFirst({
+      where: and(eq(spaceWatches.userId, user.id), eq(spaceWatches.spaceId, space.id)),
+    });
+
+    if (existing) {
+      await db.delete(spaceWatches).where(
+        and(eq(spaceWatches.userId, user.id), eq(spaceWatches.spaceId, space.id)),
+      );
+      return c.json({ watching: false });
+    }
+
+    await db.insert(spaceWatches).values({ userId: user.id, spaceId: space.id });
+    return c.json({ watching: true });
+  });
+
+  /** Check space watch status */
+  router.get("/:slug/watch", async (c) => {
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ watching: false });
+
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("slug")),
+    });
+    if (!space) return c.json({ error: "Not found" }, 404);
+
+    const existing = await db.query.spaceWatches.findFirst({
+      where: and(eq(spaceWatches.userId, user.id), eq(spaceWatches.spaceId, space.id)),
+    });
+    return c.json({ watching: !!existing });
   });
 
   return router;

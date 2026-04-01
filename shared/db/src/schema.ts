@@ -201,6 +201,16 @@ export const documentWatches = pgTable("document_watches", {
   index("watches_doc_idx").on(t.documentId),
 ]);
 
+/** Space watch subscriptions */
+export const spaceWatches = pgTable("space_watches", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("space_watches_pk").on(t.userId, t.spaceId),
+  index("space_watches_space_idx").on(t.spaceId),
+]);
+
 /** In-app notifications (read status derived from document_reads) */
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().defaultRandom(),

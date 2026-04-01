@@ -4,12 +4,12 @@
  */
 
 import { eq, and } from "drizzle-orm";
-import { type Database, notifications, documentWatches, comments } from "@sideways/db";
+import { type Database, notifications, documentWatches, spaceWatches, comments } from "@sideways/db";
 import { logger } from "../logger.js";
 
 interface NotifyOpts {
   db: Database;
-  type: "reply" | "mention" | "doc_updated" | "new_comment";
+  type: "reply" | "mention" | "doc_updated" | "new_comment" | "doc_created";
   userId: string;       // recipient
   documentId: string;
   commentId?: string;
@@ -80,11 +80,52 @@ export async function notifyWatchers(
   }
 }
 
+/** Notify all watchers of a space, excluding a specific user and already-notified doc watchers */
+export async function notifySpaceWatchers(
+  db: Database,
+  spaceId: string,
+  documentId: string,
+  excludeUserId: string,
+  alreadyNotified: string[],
+  opts: {
+    type: "doc_updated" | "new_comment" | "doc_created";
+    spaceSlug: string;
+    docSlug: string;
+    title: string;
+    body?: string;
+    actorName?: string;
+  },
+) {
+  try {
+    const watchers = await db.query.spaceWatches.findMany({
+      where: eq(spaceWatches.spaceId, spaceId),
+    });
+
+    const skip = new Set([excludeUserId, ...alreadyNotified]);
+    const recipients = watchers.map(w => w.userId).filter(id => !skip.has(id));
+
+    for (const userId of recipients) {
+      await createNotification({ db, userId, documentId, ...opts });
+    }
+  } catch (err: any) {
+    logger.error({ err: err.message }, "Failed to notify space watchers");
+  }
+}
+
 /** Auto-watch: add user as watcher if not already watching */
 export async function autoWatch(db: Database, userId: string, documentId: string) {
   try {
     await db.insert(documentWatches)
       .values({ userId, documentId })
+      .onConflictDoNothing();
+  } catch {}
+}
+
+/** Auto-watch a space */
+export async function autoWatchSpace(db: Database, userId: string, spaceId: string) {
+  try {
+    await db.insert(spaceWatches)
+      .values({ userId, spaceId })
       .onConflictDoNothing();
   } catch {}
 }
