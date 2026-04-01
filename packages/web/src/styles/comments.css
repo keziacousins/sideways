@@ -442,7 +442,7 @@
 
 /* ── Inline comment markers in document ───────────────────────── */
 /* ── Gutter comment markers ──────────────────────────────────── */
-/* Container must be relative for absolute positioning */
+/* Container must be relative for absolute positioning of gutter marks */
 .sw-doc-content {
   position: relative;
 }
