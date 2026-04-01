@@ -69,7 +69,8 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setLoading(true);
+    // Only show loading spinner if we have no results yet
+    if (results.length === 0) setLoading(true);
     try {
       const headers: Record<string, string> = {};
       if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
@@ -83,7 +84,7 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
         setActiveIndex(0);
       }
     } catch (e: any) {
-      if (e.name === "AbortError") return; // superseded by newer request
+      if (e.name === "AbortError") return;
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
