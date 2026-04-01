@@ -220,7 +220,7 @@ export default function Comments({
     const contentRect = docContent.getBoundingClientRect();
 
     for (const comment of anchored) {
-      const target = findTextInDOM(docContent, comment.anchorText!) as HTMLElement | null;
+      const target = findTextInDOM(docContent, comment.anchorText!, comment.anchorSection, comment.anchorContext) as HTMLElement | null;
       if (target) {
         // Position bar and click target relative to the content container
         target.style.position = "relative";
@@ -564,45 +564,79 @@ export default function Comments({
   );
 }
 
+/** Get the heading hierarchy path for an element within .sw-doc-content */
+function getSectionPathFor(root: Element, el: Element): string {
+  const headings = Array.from(root.querySelectorAll("h1, h2, h3, h4, h5, h6"));
+  const elTop = el.getBoundingClientRect().top;
+  const above = headings.filter(h => h.getBoundingClientRect().top < elTop);
+  if (above.length === 0) return "";
+
+  const levels = new Map<number, string>();
+  for (const h of above) {
+    const level = parseInt(h.tagName[1]);
+    levels.set(level, h.textContent?.trim() || "");
+    for (const [k] of levels) { if (k > level) levels.delete(k); }
+  }
+  return Array.from(levels.entries()).sort(([a], [b]) => a - b).map(([, t]) => t).join(" > ");
+}
+
 /**
  * Find a text string in the DOM that may span multiple elements.
+ * Uses anchorSection and anchorContext to disambiguate when multiple matches exist.
  * Returns the containing element (smallest block parent) or null.
  */
-function findTextInDOM(root: Element, searchText: string): Element | null {
-  // Search in the concatenated textContent of block-level elements
+function findTextInDOM(root: Element, searchText: string, anchorSection?: string | null, anchorContext?: string | null): Element | null {
   const blocks = root.querySelectorAll("p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, dd, dt");
   const needle = searchText.slice(0, 80).toLowerCase();
 
+  // Collect all matching blocks
+  const matches: Element[] = [];
   for (const block of blocks) {
     const text = (block.textContent || "").toLowerCase();
     if (text.includes(needle)) {
-      return block as Element;
+      matches.push(block);
     }
   }
 
-  // Fallback: search the whole content
-  const fullText = (root.textContent || "").toLowerCase();
-  if (fullText.includes(needle)) {
-    // Walk text nodes to find approximate location
+  if (matches.length === 0) {
+    // Fallback: walk text nodes
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const node = walker.currentNode as Text;
-      const nodeText = (node.textContent || "").toLowerCase();
-      if (nodeText.includes(needle.slice(0, 30))) {
-        return node.parentElement;
+      if ((node.textContent || "").toLowerCase().includes(needle.slice(0, 30))) {
+        if (node.parentElement) matches.push(node.parentElement);
       }
     }
   }
 
-  return null;
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0];
+
+  // Multiple matches — disambiguate using context and section
+  if (anchorContext) {
+    const ctxNeedle = anchorContext.slice(0, 100).toLowerCase();
+    const ctxMatch = matches.find(el => (el.textContent || "").toLowerCase().includes(ctxNeedle));
+    if (ctxMatch) return ctxMatch;
+  }
+
+  if (anchorSection) {
+    const sectionMatch = matches.find(el => {
+      const path = getSectionPathFor(root, el);
+      return path === anchorSection;
+    });
+    if (sectionMatch) return sectionMatch;
+  }
+
+  // Fall back to first match
+  return matches[0];
 }
 
 /** Find anchor text in the document and scroll to it with a flash highlight */
-function scrollToAnchor(anchorText: string, section: string | null) {
+function scrollToAnchor(anchorText: string, section: string | null, context?: string | null) {
   const docContent = document.querySelector(".sw-doc-content");
   if (!docContent) return;
 
-  const target = findTextInDOM(docContent, anchorText);
+  const target = findTextInDOM(docContent, anchorText, section, context);
   if (!target) return;
 
   // Scroll to the element
@@ -647,8 +681,8 @@ function CommentItem({
           className="comment-anchor"
           role="button"
           tabIndex={0}
-          onClick={() => scrollToAnchor(comment.anchorText!, comment.anchorSection)}
-          onKeyDown={(e) => { if (e.key === "Enter") scrollToAnchor(comment.anchorText!, comment.anchorSection); }}
+          onClick={() => scrollToAnchor(comment.anchorText!, comment.anchorSection, comment.anchorContext)}
+          onKeyDown={(e) => { if (e.key === "Enter") scrollToAnchor(comment.anchorText!, comment.anchorSection, comment.anchorContext); }}
         >
           {comment.anchorContext ? (
             // Show context with anchor text highlighted within it
