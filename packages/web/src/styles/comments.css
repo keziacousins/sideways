@@ -414,6 +414,10 @@
   color: var(--sw-accent);
 }
 
+.comment-action-danger:hover {
+  color: var(--sw-error);
+}
+
 /* ── Resolved Section ─────────────────────────────────────────── */
 .resolved-section {
   margin-top: 0.75rem;

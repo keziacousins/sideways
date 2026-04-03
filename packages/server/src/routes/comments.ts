@@ -208,6 +208,14 @@ export function createCommentRoutes(db: Database) {
       return c.json({ error: "Forbidden" }, 403);
     }
 
+    // Can only edit if no replies
+    const hasReplies = await db.query.comments.findFirst({
+      where: eq(comments.parentId, commentId),
+    });
+    if (hasReplies) {
+      return c.json({ error: "Cannot edit a comment that has replies" }, 409);
+    }
+
     const body = await c.req.json<{ body: string }>();
 
     const [updated] = await db
@@ -263,6 +271,14 @@ export function createCommentRoutes(db: Database) {
     if (!comment) return c.json({ error: "Comment not found" }, 404);
     if (comment.authorId !== user.id) {
       return c.json({ error: "Forbidden" }, 403);
+    }
+
+    // Can only delete if no replies
+    const hasReplies = await db.query.comments.findFirst({
+      where: eq(comments.parentId, commentId),
+    });
+    if (hasReplies) {
+      return c.json({ error: "Cannot delete a comment that has replies. Resolve it instead." }, 409);
     }
 
     await db.delete(comments).where(eq(comments.id, commentId));

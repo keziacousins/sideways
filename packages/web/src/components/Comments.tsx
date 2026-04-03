@@ -8,6 +8,7 @@ interface Comment {
   anchorSection: string | null;
   anchorContext: string | null;
   parentId: string | null;
+  authorId: string;
   resolved: boolean;
   createdAt: string;
   author: { name: string; email: string } | null;
@@ -67,6 +68,14 @@ export default function Comments({
   // Mutable token refs so we can refresh without re-rendering everything
   const tokenRef = useRef(initialAccessToken);
   const refreshRef = useRef(initialRefreshToken);
+
+  // Extract current user ID from JWT for ownership checks
+  const currentUserId = (() => {
+    try {
+      const payload = JSON.parse(atob(initialAccessToken?.split(".")[1] || ""));
+      return payload.ext?.user_id || null;
+    } catch { return null; }
+  })();
 
   /** Try to refresh the access token. Returns new token or null. */
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
@@ -306,6 +315,33 @@ export default function Comments({
     if (res.ok) await fetchComments();
   };
 
+  const deleteComment = async (id: string) => {
+    if (!confirm("Delete this comment?")) return;
+    const res = await authFetch(
+      `${apiUrl}/api/comments/${spaceSlug}/${docSlug}/${id}`,
+      { method: "DELETE" },
+    );
+    if (res.ok) {
+      await fetchComments();
+    } else if (res.status === 409) {
+      alert("Cannot delete a comment with replies. Resolve it instead.");
+    }
+  };
+
+  const editComment = async (id: string, currentBody: string) => {
+    const newBody = prompt("Edit comment:", currentBody);
+    if (!newBody || newBody === currentBody) return;
+    const res = await authFetch(
+      `${apiUrl}/api/comments/${spaceSlug}/${docSlug}/${id}`,
+      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: newBody }) },
+    );
+    if (res.ok) {
+      await fetchComments();
+    } else if (res.status === 409) {
+      alert("Cannot edit a comment with replies.");
+    }
+  };
+
   const isAuthenticated = !!tokenRef.current;
   const topLevel = comments.filter((c) => !c.parentId && !c.resolved);
   const resolved = comments.filter((c) => !c.parentId && c.resolved);
@@ -431,7 +467,11 @@ export default function Comments({
                     setComposing(true);
                   }}
                   onResolve={() => resolveComment(comment.id)}
+                  onEdit={() => editComment(comment.id, comment.body)}
+                  onDelete={() => deleteComment(comment.id)}
                   canAct={isAuthenticated}
+                  isOwner={comment.authorId === currentUserId}
+                  hasReplies={(replyMap.get(comment.id) || []).length > 0}
                 />
                 {(replyMap.get(comment.id) || []).map((reply) => (
                   <CommentItem spaceSlug={spaceSlug}
@@ -444,7 +484,10 @@ export default function Comments({
                       setError(null);
                       setComposing(true);
                     }}
+                    onEdit={() => editComment(reply.id, reply.body)}
+                    onDelete={() => deleteComment(reply.id)}
                     canAct={isAuthenticated}
+                    isOwner={reply.authorId === currentUserId}
                   />
                 ))}
                 {replyTo === comment.id && (
@@ -513,7 +556,11 @@ export default function Comments({
                         setComposing(true);
                       }}
                       onResolve={() => resolveComment(comment.id)}
+                      onEdit={() => editComment(comment.id, comment.body)}
+                      onDelete={() => deleteComment(comment.id)}
                       canAct={isAuthenticated}
+                      isOwner={comment.authorId === currentUserId}
+                      hasReplies={(replyMap.get(comment.id) || []).length > 0}
                     />
                     {(replyMap.get(comment.id) || []).map((reply) => (
                       <CommentItem spaceSlug={spaceSlug}
@@ -526,7 +573,10 @@ export default function Comments({
                           setError(null);
                           setComposing(true);
                         }}
+                        onEdit={() => editComment(reply.id, reply.body)}
+                        onDelete={() => deleteComment(reply.id)}
                         canAct={isAuthenticated}
+                        isOwner={reply.authorId === currentUserId}
                       />
                     ))}
                     {replyTo === comment.id && (
@@ -669,14 +719,22 @@ function CommentItem({
   isReply,
   onReply,
   onResolve,
+  onEdit,
+  onDelete,
   canAct,
+  isOwner,
+  hasReplies,
 }: {
   comment: Comment;
   spaceSlug: string;
   isReply?: boolean;
   onReply?: () => void;
   onResolve?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   canAct: boolean;
+  isOwner?: boolean;
+  hasReplies?: boolean;
 }) {
   return (
     <div className={`comment-item ${isReply ? "reply" : ""}`}>
@@ -725,6 +783,12 @@ function CommentItem({
       {canAct && (
         <div className="comment-actions">
           {onReply && <button onClick={onReply} className="comment-action">Reply</button>}
+          {isOwner && !hasReplies && onEdit && (
+            <button onClick={onEdit} className="comment-action">Edit</button>
+          )}
+          {isOwner && !hasReplies && onDelete && (
+            <button onClick={onDelete} className="comment-action comment-action-danger">Delete</button>
+          )}
           {onResolve && (
             <button onClick={onResolve} className="comment-action">
               {comment.resolved ? "Reopen" : "Resolve"}
