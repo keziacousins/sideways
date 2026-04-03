@@ -144,18 +144,16 @@ program
       const rel = relative(syncRoot, abs);
 
       // Check if it's a directory
-      try {
-        if (statSync(abs).isDirectory()) {
-          const dirRel = rel.endsWith("/") ? rel : rel + "/";
-          if (!tracked.includes(rel) && !tracked.includes(dirRel)) {
-            tracked.push(rel);
-            const matching = allFiles.filter(f => f.relativePath.startsWith(dirRel) || f.relativePath.startsWith(rel + "/"));
-            console.log(`  added: ${rel}/ (${matching.length} files)`);
-            added++;
-          }
-          continue;
+      if (existsSync(abs) && statSync(abs).isDirectory()) {
+        const dirRel = rel.endsWith("/") ? rel : rel + "/";
+        if (!tracked.includes(rel) && !tracked.includes(dirRel)) {
+          tracked.push(rel);
+          const matching = allFiles.filter(f => f.relativePath.startsWith(dirRel) || f.relativePath.startsWith(rel + "/"));
+          console.log(`  added: ${rel}/ (${matching.length} files)`);
+          added++;
         }
-      } catch {}
+        continue;
+      }
 
       // Single file
       const file = allFiles.find(f => f.relativePath === rel || f.filename === basename(p) || f.slug === slugFromFilename(basename(p)));
@@ -166,11 +164,15 @@ program
           added++;
         }
       } else {
-        // Not yet discovered (might be a new file path)
-        if (!tracked.includes(rel)) {
-          tracked.push(rel);
-          console.log(`  added: ${rel}`);
-          added++;
+        // Check if the file actually exists on disk
+        if (existsSync(abs) && statSync(abs).isFile()) {
+          if (!tracked.includes(rel)) {
+            tracked.push(rel);
+            console.log(`  added: ${rel}`);
+            added++;
+          }
+        } else {
+          console.error(`  not found: ${p}`);
         }
       }
     }
