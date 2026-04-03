@@ -434,6 +434,19 @@ program
             console.log(`  would push: ${slug}`);
             return;
           }
+          // Check if remote exists and warn about overwrite
+          if (!opts.force) {
+            const remoteInfo = await client.getSyncInfo(space);
+            const existing = remoteInfo.find((r: any) => r.slug === slug);
+            if (existing) {
+              const syncState = readSyncState(syncRoot, space);
+              const tracked = syncState.files[relative(syncRoot, absPath)];
+              if (tracked && existing.contentHash !== tracked.remoteHash) {
+                console.error(`  conflict: ${slug} has been modified on remote. Use --force to overwrite.`);
+                return;
+              }
+            }
+          }
           const body: Record<string, any> = { content, tags };
           if (title) body.title = title;
           const result = await client.putDocument(space, slug, body);
