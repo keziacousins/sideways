@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { apiFetch } from "../../../../lib/api.ts";
+import { apiFetch } from "../../../../../lib/api.ts";
 
 export const DELETE: APIRoute = async ({ params, locals }) => {
   if (!locals.accessToken) return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401, headers: { "Content-Type": "application/json" } });
