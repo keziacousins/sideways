@@ -1005,6 +1005,26 @@ program
     console.log(`Moved ${slug} → ${targetSpace}/${result.slug}`);
   });
 
+// ── section ──────────────────────────────────────────────────────────
+
+program
+  .command("section <slug> [section-slug]")
+  .description("Move a document into a section, or remove it from its current section")
+  .option("--space <space>", "Override space from config")
+  .action(async (input: string, section: string | undefined, opts: { space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = getClient(config.api);
+    const slug = toSlug(input);
+
+    await client.patchDocument(space, slug, { section: section || null });
+    if (section) {
+      console.log(`Moved ${slug} → section "${section}"`);
+    } else {
+      console.log(`Removed ${slug} from its section`);
+    }
+  });
+
 // ── duplicate ─────────────────────────────────────────────────────────
 
 program
