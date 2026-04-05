@@ -248,11 +248,19 @@ program
 
         writeFileSync(filePath, output);
 
+        const relPath = relative(syncRoot, filePath);
+
+        // Add to tracked list if not already tracked
+        const tracked = readTracked(syncRoot) || [];
+        if (tracked.length > 0 && !isTracked(tracked, relPath)) {
+          tracked.push(relPath);
+          writeTracked(syncRoot, tracked);
+        }
+
         const syncInfo = await client.getSyncInfo(space).catch(() => []);
         const remote = syncInfo.find((r: any) => r.slug === slug);
         if (remote) {
           const syncState = readSyncState(syncRoot, space);
-          const relPath = relative(syncRoot, filePath);
           syncState.files[relPath] = {
             slug,
             remoteVersion: remote.version,
