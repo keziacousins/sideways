@@ -155,6 +155,24 @@ const themeCss = themeToCSS(space?.theme?.tokens);
                     <Fragment set:html={icons.duplicate(14)} />
                     Duplicate
                   </button>
+                  {sections.length > 0 && (
+                    <div class="action-submenu-wrap">
+                      <button class="action-item" id="action-move">
+                        <Fragment set:html={icons.document(14)} />
+                        Move to&hellip;
+                      </button>
+                      <div class="submenu-dropdown" id="move-submenu" style="display: none;">
+                        <button class="submenu-item" data-section="">
+                          No section {!currentDoc?.sectionId ? '(current)' : ''}
+                        </button>
+                        {sections.map((s) => (
+                          <button class="submenu-item" data-section={s.slug}>
+                            {s.title} {currentDoc?.sectionId === s.id ? '(current)' : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <button class="action-item action-danger" id="action-delete">
                     <Fragment set:html={icons.trash(14)} />
                     Delete
@@ -404,6 +422,44 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   .action-item.action-danger:hover {
     background: rgba(248, 113, 113, 0.08);
     color: var(--sw-error);
+  }
+
+  .action-submenu-wrap {
+    position: relative;
+  }
+
+  .submenu-dropdown {
+    position: absolute;
+    right: 100%;
+    top: 0;
+    margin-right: 0.25rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    box-shadow: var(--sw-shadow-lg);
+    min-width: 160px;
+    z-index: 51;
+    padding: 0.25rem;
+  }
+
+  .submenu-item {
+    display: block;
+    width: 100%;
+    padding: 0.4rem 0.65rem;
+    background: none;
+    border: none;
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-secondary);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm);
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .submenu-item:hover {
+    background: var(--sw-ink-light);
+    color: var(--sw-text-primary);
   }
 
   .doc-toolbar-left {
@@ -1187,6 +1243,36 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     a.href = `/s/${spaceSlug}/${slug}/pdf`;
     a.download = `${slug}.pdf`;
     a.click();
+  });
+
+  // Move to section
+  const moveBtn = document.getElementById("action-move");
+  const moveSubmenu = document.getElementById("move-submenu");
+
+  moveBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const visible = moveSubmenu.style.display !== "none";
+    moveSubmenu.style.display = visible ? "none" : "block";
+  });
+
+  document.querySelectorAll(".submenu-item").forEach((item) => {
+    item.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const section = e.target.dataset.section;
+      const body = { section: section || null };
+
+      const res = await fetch(`/s/${spaceSlug}/${slug}/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        alert("Move failed.");
+      }
+    });
   });
 
   // Delete
