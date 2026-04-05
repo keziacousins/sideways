@@ -92,6 +92,11 @@ if ! $QUICK; then
   ssh $VM "set -a && source $APP_DIR/.env && set +a && cd $APP_DIR && pnpm --filter @sideways/web build"
 fi
 
+# ── Push database schema ─────────────────────────────────────────────
+
+echo "==> Pushing database schema..."
+ssh $VM "set -a && source $APP_DIR/.env && set +a && cd $APP_DIR/shared/db && npx drizzle-kit push"
+
 # ── Deploy nginx config ──────────────────────────────────────────────
 
 echo "==> Updating nginx..."

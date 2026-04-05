@@ -1,0 +1,248 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+const { token } = Astro.params;
+const { accessToken } = Astro.locals;
+const userName = await Astro.session?.get("user_name");
+
+// Fetch invite metadata (public endpoint)
+let invite: { spaceName: string; spaceSlug: string; inviterName: string; role: string } | null = null;
+let inviteError: string | null = null;
+
+try {
+  const res = await fetch(`${API_URL}/api/invite/${token}`);
+  if (res.ok) {
+    invite = await res.json();
+  } else {
+    const data = await res.json();
+    inviteError = data.error || "Invalid invite link";
+  }
+} catch {
+  inviteError = "Could not reach server";
+}
+
+const isLoggedIn = !!userName;
+---
+
+<BaseLayout title={invite ? `Join ${invite.spaceName}` : "Invite"}>
+  <div class="invite-page">
+    <div class="invite-card animate-in">
+      <div class="invite-logo">
+        <span class="logo-mark">S</span>
+      </div>
+
+      {inviteError ? (
+        <div class="invite-error-state">
+          <h1>Invite unavailable</h1>
+          <p class="invite-detail">{inviteError === "Invite expired" ? "This invite link has expired." : inviteError === "Invite already claimed" ? "This invite has already been used." : inviteError}</p>
+          <a href="/" class="btn-home">Go to Sideways</a>
+        </div>
+      ) : invite && (
+        <div class="invite-content">
+          <h1>You've been invited</h1>
+          <p class="invite-detail">
+            <strong>{invite.inviterName}</strong> shared the space <strong>{invite.spaceName}</strong> with you as {invite.role === "admin" ? "an" : "a"} <span class="role-badge">{invite.role}</span>.
+          </p>
+
+          {isLoggedIn ? (
+            <div class="invite-actions">
+              <p class="invite-hint">Signed in as {userName}</p>
+              <button type="button" id="claim-btn" class="btn-claim">Accept invite</button>
+            </div>
+          ) : (
+            <div class="invite-actions">
+              <p class="invite-hint">Sign in or create an account to accept this invite.</p>
+              <div class="invite-buttons">
+                <a href={`/auth/login?returnTo=/invite/${token}`} class="btn-claim">Sign in</a>
+                <a href={`/auth/signup?returnTo=/invite/${token}`} class="btn-secondary">Create account</a>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  </div>
+</BaseLayout>
+
+<script define:vars={{ API_URL, token, accessToken }}>
+  const claimBtn = document.getElementById("claim-btn");
+  if (claimBtn) {
+    claimBtn.addEventListener("click", async () => {
+      claimBtn.textContent = "Accepting...";
+      claimBtn.disabled = true;
+
+      try {
+        const res = await fetch(`${API_URL}/api/invite/${token}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          window.location.href = `/s/${data.spaceSlug}`;
+        } else if (data.spaceSlug) {
+          // Already a member or owner — just redirect
+          window.location.href = `/s/${data.spaceSlug}`;
+        } else {
+          alert(data.error || "Failed to accept invite");
+          claimBtn.textContent = "Accept invite";
+          claimBtn.disabled = false;
+        }
+      } catch {
+        alert("Connection error. Please try again.");
+        claimBtn.textContent = "Accept invite";
+        claimBtn.disabled = false;
+      }
+    });
+  }
+</script>
+
+<style>
+  .invite-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - var(--sw-header-height) - 4rem);
+  }
+
+  .invite-card {
+    width: 100%;
+    max-width: 420px;
+    padding: 2.5rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-lg);
+    text-align: center;
+  }
+
+  .invite-logo {
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .invite-logo .logo-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-display);
+    font-weight: 600;
+    font-size: var(--sw-text-xl);
+  }
+
+  .invite-card h1 {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-2xl);
+    font-weight: 400;
+    margin-bottom: 0.75rem;
+  }
+
+  .invite-detail {
+    color: var(--sw-text-secondary);
+    font-size: var(--sw-text-base);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+  }
+
+  .invite-detail strong {
+    color: var(--sw-text-primary);
+  }
+
+  .role-badge {
+    display: inline-block;
+    font-size: var(--sw-text-sm);
+    padding: 0.1em 0.5em;
+    background: var(--sw-ink-surface);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-accent);
+    font-weight: 500;
+  }
+
+  .invite-hint {
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-tertiary);
+    margin-bottom: 1rem;
+  }
+
+  .invite-actions {
+    margin-top: 0.5rem;
+  }
+
+  .invite-buttons {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+
+  .btn-claim {
+    display: inline-block;
+    padding: 0.65rem 1.5rem;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
+    border: none;
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-base);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .btn-claim:hover {
+    background: var(--sw-accent-strong);
+    box-shadow: var(--sw-shadow-glow);
+  }
+
+  .btn-claim:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    display: inline-block;
+    padding: 0.65rem 1.5rem;
+    background: none;
+    color: var(--sw-text-secondary);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-base);
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--sw-accent);
+    color: var(--sw-accent);
+  }
+
+  .invite-error-state {
+    color: var(--sw-text-secondary);
+  }
+
+  .btn-home {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.5rem 1.25rem;
+    color: var(--sw-accent);
+    text-decoration: none;
+    font-size: var(--sw-text-sm);
+  }
+
+  .btn-home:hover {
+    text-decoration: underline;
+  }
+</style>

@@ -22,8 +22,8 @@ export async function canAccessSpace(
   if (visibility === "org") return true;
   if (user.id === ownerId) return true;
 
-  // Check membership for "shared" visibility
-  if (visibility === "shared") {
+  // Check membership for shared and private spaces
+  if (visibility === "shared" || visibility === "private") {
     const member = await db.query.spaceMembers.findFirst({
       where: (m, { and, eq }) =>
         and(eq(m.spaceId, spaceId), eq(m.userId, user.id)),

@@ -13,17 +13,20 @@ if (!userName) {
 let space: any = null;
 let members: any[] = [];
 let themes: any[] = [];
+let shareLinksData: any[] = [];
 
 try {
   const spaceRes = await apiFetch(`/api/spaces/${spaceSlug}`, accessToken);
   if (spaceRes.ok) space = await spaceRes.json();
 
-  const [membersRes, themesRes] = await Promise.all([
+  const [membersRes, themesRes, shareRes] = await Promise.all([
     apiFetch(`/api/spaces/${spaceSlug}/members`, accessToken),
     apiFetch(`/api/themes`, accessToken),
+    apiFetch(`/api/spaces/${spaceSlug}/share`, accessToken),
   ]);
   if (membersRes.ok) members = await membersRes.json();
   if (themesRes.ok) themes = await themesRes.json();
+  if (shareRes.ok) shareLinksData = await shareRes.json();
 } catch {}
 
 if (!space) return Astro.redirect("/");
@@ -121,6 +124,54 @@ if (!space) return Astro.redirect("/");
       </table>
     </section>
 
+    <section class="settings-section">
+      <h2>Share Links</h2>
+      <p class="settings-hint">Generate a link to invite someone to this space. Each link can be used once.</p>
+
+      <div class="share-create">
+        <select id="share-role">
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
+        </select>
+        <select id="share-expiry">
+          <option value="7">Expires in 7 days</option>
+          <option value="1">Expires in 1 day</option>
+          <option value="14">Expires in 14 days</option>
+          <option value="30">Expires in 30 days</option>
+        </select>
+        <button type="button" id="create-share-btn" class="btn-add">Create link</button>
+      </div>
+
+      <div id="share-link-result" class="share-link-result" style="display: none;">
+        <input type="text" id="share-link-url" readonly />
+        <button type="button" id="copy-share-link" class="btn-copy">Copy</button>
+      </div>
+
+      {shareLinksData.length > 0 && (
+        <table class="member-table" id="share-table">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Expires</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {shareLinksData.map((link: any) => (
+              <tr data-link-id={link.id}>
+                <td><span class="role-badge">{link.role}</span></td>
+                <td class="share-expires">{new Date(link.expiresAt).toLocaleDateString()}</td>
+                <td>
+                  <button type="button" class="btn-remove btn-revoke" data-link-id={link.id}>Revoke</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+
     <section class="settings-section danger-zone">
       <h2>Danger Zone</h2>
       <div class="danger-action">
@@ -213,6 +264,58 @@ if (!space) return Astro.redirect("/");
     });
   });
 
+  // Create share link
+  document.getElementById("create-share-btn")?.addEventListener("click", async () => {
+    const role = document.getElementById("share-role").value;
+    const expiresInDays = parseInt(document.getElementById("share-expiry").value);
+
+    const res = await fetch(`/s/${spaceSlug}/settings/share`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role, expiresInDays }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const url = `${window.location.origin}/invite/${data.token}`;
+      const resultDiv = document.getElementById("share-link-result");
+      const urlInput = document.getElementById("share-link-url");
+      urlInput.value = url;
+      resultDiv.style.display = "flex";
+    } else {
+      const data = await res.json();
+      alert(data.error || "Failed to create share link.");
+    }
+  });
+
+  // Copy share link
+  document.getElementById("copy-share-link")?.addEventListener("click", () => {
+    const urlInput = document.getElementById("share-link-url");
+    urlInput.select();
+    navigator.clipboard.writeText(urlInput.value);
+    const btn = document.getElementById("copy-share-link");
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+  });
+
+  // Revoke share link
+  document.querySelectorAll(".btn-revoke").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const linkId = e.target.dataset.linkId;
+      if (!confirm("Revoke this share link?")) return;
+
+      const res = await fetch(`/s/${spaceSlug}/settings/share/${linkId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        e.target.closest("tr")?.remove();
+      } else {
+        alert("Failed to revoke link.");
+      }
+    });
+  });
+
   // Delete space
   document.getElementById("delete-space")?.addEventListener("click", async () => {
     const confirm1 = confirm("Delete this space and ALL its documents? This cannot be undone.");
@@ -288,6 +391,14 @@ if (!space) return Astro.redirect("/");
   .role-badge { font-size: var(--sw-text-xs); padding: 0.15em 0.5em; background: var(--sw-ink-surface); border-radius: var(--sw-radius-sm); color: var(--sw-text-secondary); }
   .btn-remove { padding: 0.2rem 0.5rem; background: none; border: 1px solid var(--sw-border); border-radius: var(--sw-radius-sm); color: var(--sw-text-tertiary); font-size: var(--sw-text-xs); cursor: pointer; }
   .btn-remove:hover { border-color: var(--sw-error); color: var(--sw-error); }
+
+  .share-create { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .share-create select { padding: 0.45rem 0.5rem; background: var(--sw-ink); border: 1px solid var(--sw-border-strong); border-radius: var(--sw-radius-md); color: var(--sw-text-secondary); font-size: var(--sw-text-sm); }
+  .share-link-result { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .share-link-result input { flex: 1; padding: 0.45rem 0.65rem; background: var(--sw-ink-deep); border: 1px solid var(--sw-border-strong); border-radius: var(--sw-radius-md); color: var(--sw-accent); font-size: var(--sw-text-sm); font-family: var(--sw-font-mono, monospace); }
+  .btn-copy { padding: 0.45rem 0.85rem; background: var(--sw-accent); color: var(--sw-ink-deepest); border: none; border-radius: var(--sw-radius-md); font-size: var(--sw-text-sm); font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn-copy:hover { background: var(--sw-accent-strong); }
+  .share-expires { font-size: var(--sw-text-sm); color: var(--sw-text-tertiary); }
 
   .danger-zone h2 { color: var(--sw-error); }
   .danger-action { display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid rgba(248, 113, 113, 0.2); border-radius: var(--sw-radius-md); }

@@ -211,6 +211,22 @@ export const spaceWatches = pgTable("space_watches", {
   index("space_watches_space_idx").on(t.spaceId),
 ]);
 
+/** Share links — single-claim invite tokens for spaces */
+export const shareLinks = pgTable("share_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  token: text("token").notNull(),
+  spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["viewer", "editor", "admin"] }).notNull().default("viewer"),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  claimedBy: uuid("claimed_by").references(() => users.id),
+  claimedAt: timestamp("claimed_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("share_links_token_idx").on(t.token),
+  index("share_links_space_idx").on(t.spaceId),
+]);
+
 /** In-app notifications (read status derived from document_reads) */
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().defaultRandom(),

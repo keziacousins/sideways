@@ -12,6 +12,7 @@ import { createMcpRoutes } from "./routes/mcp.js";
 import { createThemeRoutes } from "./routes/themes.js";
 import { createNotificationRoutes } from "./routes/notifications.js";
 import { createSearchRoutes } from "./routes/search.js";
+import { createShareRoutes, createInviteRoutes } from "./routes/share.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { requestLogMiddleware } from "./middleware/requestLog.js";
 import { logger } from "./logger.js";
@@ -50,6 +51,7 @@ import { requireAuth } from "./middleware/auth.js";
 const PUBLIC_API_PATHS = [
   "/api/auth/",        // login, register, token exchange
   "/api/mcp",          // MCP handles its own auth via API key
+  "/api/invite/",      // invite metadata (GET is public, POST checks auth internally)
 ];
 
 app.use("/api/*", async (c, next) => {
@@ -136,6 +138,8 @@ app.route("/api/mcp", createMcpRoutes(db));
 app.route("/api/themes", createThemeRoutes(db, storage));
 app.route("/api/notifications", createNotificationRoutes(db));
 app.route("/api/search", createSearchRoutes(db));
+app.route("/api/spaces", createShareRoutes(db));
+app.route("/api/invite", createInviteRoutes(db));
 
 // Cleanup expired API keys every hour
 import { lt } from "drizzle-orm";
