@@ -22,8 +22,37 @@ const API_URL = import.meta.env.PUBLIC_API_URL || PUBLIC_URL;
 
       <h3>Install</h3>
       <p class="setup-prereq">Requires <strong>Node.js 18+</strong></p>
+
+      <h4>Option A: Install script</h4>
+      <p>Download the script, inspect it, then run:</p>
       <div class="code-block" data-copy="cli-install">
-        <code id="cli-install">curl -fsSL {PUBLIC_URL}/install.sh | sh -s -- {PUBLIC_URL}</code>
+        <code id="cli-install">curl -fsSL {PUBLIC_URL}/install.sh -o install.sh
+less install.sh
+sh install.sh {PUBLIC_URL}</code>
+      </div>
+      <details class="script-preview">
+        <summary>View install script</summary>
+        <div class="code-block">
+          <code>{`#!/bin/sh
+# Downloads two files to ~/.local/bin/:
+#   sideways.cjs     — CLI bundle
+#   sideways-mcp.cjs — MCP server bundle
+# Creates a 'sideways' wrapper script.
+# No system-level changes. No sudo required.`}</code>
+        </div>
+        <p><a href={`${PUBLIC_URL}/install.sh`} target="_blank">View full script</a></p>
+      </details>
+
+      <h4>Option B: Manual download</h4>
+      <p>Download the files directly and place them on your PATH:</p>
+      <div class="code-block" data-copy="cli-manual">
+        <code id="cli-manual">{`mkdir -p ~/.local/bin
+curl -fsSL ${PUBLIC_URL}/downloads/sideways.cjs -o ~/.local/bin/sideways.cjs
+curl -fsSL ${PUBLIC_URL}/downloads/sideways-mcp.cjs -o ~/.local/bin/sideways-mcp.cjs
+
+# Create wrapper
+printf '#!/bin/sh\\nexec node "$(dirname "$0")/sideways.cjs" "$@"\\n' > ~/.local/bin/sideways
+chmod +x ~/.local/bin/sideways`}</code>
       </div>
 
       <h3>Quick start</h3>
@@ -234,6 +263,34 @@ sideways status</code>
   .setup-prereq {
     font-size: var(--sw-text-xs) !important;
     color: var(--sw-text-ghost) !important;
+  }
+
+  .setup-section h4 {
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm);
+    font-weight: 500;
+    color: var(--sw-text-secondary);
+    margin-top: 1.25rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .script-preview {
+    margin-bottom: 1rem;
+  }
+
+  .script-preview summary {
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-tertiary);
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+  }
+
+  .script-preview summary:hover {
+    color: var(--sw-accent);
+  }
+
+  .script-preview p {
+    font-size: var(--sw-text-xs) !important;
   }
 
   /* ── Code blocks ──────────────── */
