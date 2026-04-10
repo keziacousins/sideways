@@ -33,6 +33,18 @@ RUN mkdir -p /usr/share/fonts/newsreader && \
     wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/newsreader/Newsreader-Italic%5Bopsz%2Cwght%5D.ttf" \
       -O /usr/share/fonts/newsreader/Newsreader-Italic-Variable.ttf
 
+# Download Oswald Variable TTF from Google Fonts GitHub
+RUN mkdir -p /usr/share/fonts/oswald && \
+    wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/Oswald%5Bwght%5D.ttf" \
+      -O /usr/share/fonts/oswald/Oswald-Variable.ttf
+
+# Download EB Garamond Variable TTF from Google Fonts GitHub
+RUN mkdir -p /usr/share/fonts/eb-garamond && \
+    wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf" \
+      -O /usr/share/fonts/eb-garamond/EBGaramond-Variable.ttf && \
+    wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf" \
+      -O /usr/share/fonts/eb-garamond/EBGaramond-Italic-Variable.ttf
+
 # Copy custom/licensed fonts from repo (e.g. Proxima Nova for themes)
 COPY fonts/ /usr/share/fonts/custom/
 

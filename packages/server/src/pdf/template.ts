@@ -30,7 +30,12 @@ export interface ThemeTokens {
   print?: {
     paperSize?: string;
     headerRight?: string;
+    headerLeft?: string;
     footerCenter?: string;
+    margins?: string;
+    compact?: boolean;
+    defaultTitlePage?: boolean;
+    defaultToc?: boolean;
   };
 }
 
@@ -74,6 +79,13 @@ function isValidPaperSize(v: string): boolean {
   return /^(A[0-5]|B[0-5]|letter|legal|ledger|\d+mm\s+\d+mm|\d+in\s+\d+in)$/i.test(v.trim());
 }
 
+/** Validate CSS margin value — 1-4 values like "1.5cm 2cm" */
+function isValidMargins(v: string): boolean {
+  const parts = v.trim().split(/\s+/);
+  if (parts.length < 1 || parts.length > 4) return false;
+  return parts.every(p => /^\d+(\.\d+)?(cm|mm|in|pt|px)$/.test(p));
+}
+
 /** Generate CSS custom properties from theme tokens — print CSS uses these with fallbacks */
 function buildThemeCSS(theme: ThemeTokens): string {
   const vars: string[] = [];
@@ -97,8 +109,14 @@ function buildThemeCSS(theme: ThemeTokens): string {
   if (theme.print?.paperSize && isValidPaperSize(theme.print.paperSize))
     vars.push(`--th-paper-size: ${theme.print.paperSize}`);
 
-  if (vars.length === 0) return "";
-  return `\n/* Theme tokens */\n:root { ${vars.join("; ")}; }`;
+  let extra = "";
+  if (theme.print?.margins && isValidMargins(theme.print.margins)) {
+    extra += `\n@page { margin: ${theme.print.margins}; }`;
+  }
+
+  if (vars.length === 0 && !extra) return "";
+  const root = vars.length > 0 ? `\n:root { ${vars.join("; ")}; }` : "";
+  return `\n/* Theme tokens */${root}${extra}`;
 }
 
 export function buildPrintHTML(options: TemplateOptions): string {
@@ -154,6 +172,13 @@ export function buildPrintHTML(options: TemplateOptions): string {
 
   // Build CSS: base print styles + theme overrides
   const themeCSS = theme ? buildThemeCSS(theme) : "";
+  const isCompact = theme?.print?.compact === true;
+  const bodyClass = isCompact ? ' class="compact"' : "";
+
+  // Header-left: inject a hidden element that sets a named string for @page @top-left
+  const headerLeftEl = theme?.print?.headerLeft
+    ? `<div class="print-header-left-source">${escapeHtml(theme.print.headerLeft)}</div>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -162,7 +187,8 @@ export function buildPrintHTML(options: TemplateOptions): string {
   <title>${escapeHtml(title)}</title>
   <style>${printCSS}${themeCSS}</style>
 </head>
-<body>
+<body${bodyClass}>
+  ${headerLeftEl}
   ${titlePage}
   ${toc}
   <div class="print-content">

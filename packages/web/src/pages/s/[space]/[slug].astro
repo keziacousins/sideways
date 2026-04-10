@@ -27,6 +27,7 @@ let doc: {
 } | null = null;
 let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number; unread?: boolean }[] = [];
 let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
+let themes: { id: string; name: string; tokens: any }[] = [];
 let rawContent = "";
 
 try {
@@ -34,16 +35,18 @@ try {
   if (spaceRes.ok) {
     space = await spaceRes.json();
 
-    const [docRes, rawRes, docsRes, sectionsRes] = await Promise.all([
+    const [docRes, rawRes, docsRes, sectionsRes, themesRes] = await Promise.all([
       apiFetch(`/api/documents/${spaceSlug}/${slug}/render`, accessToken),
       apiFetch(`/api/documents/${spaceSlug}/${slug}`, accessToken),
       apiFetch(`/api/documents?space=${spaceSlug}`, accessToken),
       apiFetch(`/api/spaces/${spaceSlug}/sections`, accessToken),
+      apiFetch(`/api/themes`, accessToken),
     ]);
 
     if (docRes.ok) doc = await docRes.json();
     if (docsRes.ok) documents = await docsRes.json();
     if (sectionsRes.ok) sections = await sectionsRes.json();
+    if (themesRes.ok) themes = await themesRes.json();
     if (rawRes.ok) {
       const rawDoc = await rawRes.json();
       rawContent = rawDoc.content || "";
@@ -142,7 +145,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
             <div class="actions-dropdown" id="actions-dropdown" style="display: none;">
               <button class="action-item" id="action-pdf">
                 <Fragment set:html={icons.document(14)} />
-                Download PDF
+                Download PDF&hellip;
               </button>
               {space?.canWrite && (
                 <>
@@ -225,6 +228,40 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       <a href={`/s/${spaceSlug}`}>Back to {space?.name || "space"}</a>
     </div>
   )}
+
+  <!-- PDF download modal -->
+  <div class="pdf-overlay" id="pdf-overlay" style="display: none;">
+    <div class="pdf-modal">
+      <div class="pdf-modal-header">
+        <h3>Download PDF</h3>
+        <button class="pdf-modal-close" id="pdf-modal-close">&times;</button>
+      </div>
+      <div class="pdf-modal-body">
+        <div class="pdf-field">
+          <label for="pdf-theme">Print theme</label>
+          <select id="pdf-theme">
+            <option value="">Space default</option>
+            {themes.map((t) => (
+              <option value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <div class="pdf-field pdf-checks">
+          <label>
+            <input type="checkbox" id="pdf-cover" checked />
+            Cover page
+          </label>
+          <label>
+            <input type="checkbox" id="pdf-toc" checked />
+            Table of contents
+          </label>
+        </div>
+      </div>
+      <div class="pdf-modal-footer">
+        <button class="pdf-btn-download" id="pdf-btn-download">Download</button>
+      </div>
+    </div>
+  </div>
 </BaseLayout>
 
 <style>
@@ -492,6 +529,133 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     height: 1px;
     background: var(--sw-border);
     margin: 0.2rem 0.4rem;
+  }
+
+  /* ── PDF download modal ── */
+  .pdf-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 9, 12, 0.5);
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pdf-modal {
+    width: 100%;
+    max-width: 340px;
+    background: var(--sw-ink);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: var(--sw-radius-lg);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+  }
+
+  .pdf-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--sw-border);
+  }
+
+  .pdf-modal-header h3 {
+    margin: 0;
+    font-size: var(--sw-text-sm);
+    font-weight: 600;
+    color: var(--sw-text-primary);
+  }
+
+  .pdf-modal-close {
+    background: none;
+    border: none;
+    color: var(--sw-text-ghost);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 0.2rem;
+    line-height: 1;
+  }
+
+  .pdf-modal-close:hover {
+    color: var(--sw-text-primary);
+  }
+
+  .pdf-modal-body {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .pdf-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .pdf-field > label {
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-tertiary);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .pdf-field select {
+    background: var(--sw-ink-light);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-primary);
+    font-size: var(--sw-text-sm);
+    padding: 0.4rem 0.5rem;
+    font-family: var(--sw-font-body);
+    width: 100%;
+  }
+
+  .pdf-checks {
+    flex-direction: row;
+    gap: 1rem;
+  }
+
+  .pdf-checks label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-secondary);
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+  }
+
+  .pdf-checks input[type="checkbox"] {
+    accent-color: var(--sw-accent);
+  }
+
+  .pdf-modal-footer {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--sw-border);
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .pdf-btn-download {
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
+    border: none;
+    border-radius: var(--sw-radius-sm);
+    padding: 0.45rem 1.2rem;
+    font-size: var(--sw-text-sm);
+    font-weight: 500;
+    font-family: var(--sw-font-body);
+    cursor: pointer;
+    transition: opacity var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .pdf-btn-download:hover {
+    opacity: 0.85;
   }
 
   /* ── Mobile ── */
@@ -954,7 +1118,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     );
   });
 </script>
-<script define:vars={{ rawContent, API_URL, spaceSlug, slug }}>
+<script define:vars={{ rawContent, API_URL, spaceSlug, slug, pdfThemesJson: JSON.stringify(themes.map(t => ({ id: t.id, name: t.name, tokens: t.tokens }))) }}>
   // Editor mode toggle
   const editBtn = document.getElementById("edit-toggle");
   const docView = document.getElementById("doc-view");
@@ -1237,12 +1401,66 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     }
   });
 
-  // Download PDF
+  // Download PDF modal
+  const pdfOverlay = document.getElementById("pdf-overlay");
+  const pdfThemeSelect = document.getElementById("pdf-theme");
+  const pdfCover = document.getElementById("pdf-cover");
+  const pdfToc = document.getElementById("pdf-toc");
+
+  function openPdfModal() {
+    updatePdfDefaults();
+    pdfOverlay.style.display = "flex";
+  }
+
+  function closePdfModal() {
+    pdfOverlay.style.display = "none";
+  }
+
+  function updatePdfDefaults() {
+    if (!pdfThemeSelect || !pdfCover || !pdfToc) return;
+    const themeId = pdfThemeSelect.value;
+    const allThemes = JSON.parse(pdfThemesJson);
+    const theme = allThemes.find((t) => t.id === themeId);
+    if (theme?.tokens?.print) {
+      pdfCover.checked = theme.tokens.print.defaultTitlePage !== false;
+      pdfToc.checked = theme.tokens.print.defaultToc !== false;
+    } else {
+      pdfCover.checked = true;
+      pdfToc.checked = true;
+    }
+  }
+
   document.getElementById("action-pdf")?.addEventListener("click", () => {
+    if (actionsDropdown) actionsDropdown.style.display = "none";
+    openPdfModal();
+  });
+
+  document.getElementById("pdf-modal-close")?.addEventListener("click", closePdfModal);
+
+  pdfOverlay?.addEventListener("click", (e) => {
+    if (e.target === pdfOverlay) closePdfModal();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && pdfOverlay?.style.display !== "none") {
+      closePdfModal();
+    }
+  });
+
+  pdfThemeSelect?.addEventListener("change", updatePdfDefaults);
+
+  document.getElementById("pdf-btn-download")?.addEventListener("click", () => {
+    const params = new URLSearchParams();
+    if (pdfThemeSelect?.value) params.set("theme", pdfThemeSelect.value);
+    if (pdfCover && !pdfCover.checked) params.set("title-page", "false");
+    if (pdfToc && !pdfToc.checked) params.set("toc", "false");
+
+    const qs = params.toString();
     const a = document.createElement("a");
-    a.href = `/s/${spaceSlug}/${slug}/pdf`;
+    a.href = `/s/${spaceSlug}/${slug}/pdf${qs ? `?${qs}` : ""}`;
     a.download = `${slug}.pdf`;
     a.click();
+    closePdfModal();
   });
 
   // Move to section

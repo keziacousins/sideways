@@ -9,6 +9,13 @@
   size: A4;
   margin: 2.5cm 2cm 2.5cm 2cm;
 
+  @top-left {
+    content: string(header-left);
+    font-family: "Inter", sans-serif;
+    font-size: 8pt;
+    color: #aaa;
+  }
+
   @top-right {
     content: string(doc-title);
     font-family: "Inter", sans-serif;
@@ -27,6 +34,7 @@
 /* Title page: no header, no footer, no page number */
 @page title-page {
   margin: 0;
+  @top-left { content: none; }
   @top-right { content: none; }
   @bottom-center { content: none; }
 }
@@ -38,6 +46,7 @@
 
 /* First content page: suppress header (title is already visible) */
 @page content-first {
+  @top-left { content: none; }
   @top-right { content: none; }
 }
 
@@ -428,3 +437,88 @@ body {
 .hljs-type, .hljs-title.class_ { color: #953800; }
 .hljs-variable, .hljs-template-variable { color: #953800; }
 .hljs-meta { color: #0550ae; }
+
+/* ══════════════════════════════════════════════════════════════
+   CUSTOM PAGE HEADERS (theme-driven)
+   ══════════════════════════════════════════════════════════════ */
+
+/* Hidden source element that sets the named string for @top-left */
+.print-header-left-source {
+  position: absolute;
+  visibility: hidden;
+  height: 0;
+  string-set: header-left content();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COMPACT MODE — for CVs, letters, dense documents
+   ══════════════════════════════════════════════════════════════ */
+body.compact {
+  font-size: 10pt;
+  line-height: 1.4;
+}
+
+body.compact .print-content h1 {
+  font-size: 22pt;
+  margin-bottom: 0.15em;
+  padding-bottom: 0.25em;
+  border-bottom: 1.5pt solid var(--th-color-accent, #2b5797);
+}
+
+body.compact .print-content h2 {
+  font-size: 13pt;
+  margin-top: 1.1em;
+  margin-bottom: 0.3em;
+}
+
+body.compact .print-content h3 {
+  font-size: 11pt;
+  margin-top: 0.9em;
+  margin-bottom: 0.2em;
+}
+
+body.compact .print-content h4 {
+  font-size: 8.5pt;
+  margin-top: 0.8em;
+  margin-bottom: 0.15em;
+}
+
+body.compact .print-content h1 + h2,
+body.compact .print-content h2 + h3,
+body.compact .print-content h3 + h4 {
+  margin-top: 0.2em;
+}
+
+body.compact .print-content p {
+  margin: 0 0 0.5em;
+}
+
+body.compact .print-content ul,
+body.compact .print-content ol {
+  margin: 0 0 0.5em;
+}
+
+body.compact .print-content li {
+  margin-bottom: 0.1em;
+}
+
+body.compact .print-content blockquote {
+  margin: 0 0 0.5em;
+  padding: 0.3em 0.8em;
+  font-size: 10pt;
+}
+
+body.compact .print-content pre {
+  margin: 0 0 0.7em;
+  padding: 0.5em 0.7em;
+  font-size: 8pt;
+}
+
+body.compact .print-content table {
+  margin: 0 0 0.7em;
+  font-size: 8.5pt;
+}
+
+body.compact .print-content hr {
+  margin: 1em 0;
+}

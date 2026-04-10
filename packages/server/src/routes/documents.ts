@@ -791,12 +791,18 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const spaceSlug = c.req.param("space");
     const html = await renderMarkdown(latestVersion.content, { target: "pdf", spaceSlug });
 
-    // Resolve theme if space has one
+    // Resolve theme: explicit ?theme=<id> overrides the space's theme
     let theme: ThemeTokens | undefined;
-    if (space.themeId) {
+    const themeOverride = c.req.query("theme");
+    const themeId = themeOverride || space.themeId;
+
+    if (themeId) {
       const themeRow = await db.query.themes.findFirst({
-        where: eq(themes.id, space.themeId),
+        where: eq(themes.id, themeId),
       });
+      if (themeOverride && !themeRow) {
+        return c.json({ error: "Theme not found" }, 404);
+      }
       if (themeRow) {
         theme = themeRow.tokens as ThemeTokens;
         // Embed logo as base64 data URL for WeasyPrint (it can't fetch external URLs)
@@ -814,9 +820,15 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       }
     }
 
-    // Build the full print HTML document
-    const showToc = c.req.query("toc") !== "false";
-    const showTitlePage = c.req.query("title-page") !== "false";
+    // Resolve title-page/toc: explicit query param > theme default > true
+    const tocParam = c.req.query("toc");
+    const titlePageParam = c.req.query("title-page");
+    const showToc = tocParam !== undefined
+      ? tocParam !== "false"
+      : theme?.print?.defaultToc ?? true;
+    const showTitlePage = titlePageParam !== undefined
+      ? titlePageParam !== "false"
+      : theme?.print?.defaultTitlePage ?? true;
 
     const printHTML = buildPrintHTML({
       title: doc.title,

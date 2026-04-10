@@ -1269,9 +1269,10 @@ program
   .description("Export a document as PDF")
   .option("--space <space>", "Override space from config")
   .option("-o, --output <path>", "Output file path")
+  .option("--theme <id>", "Print theme ID (overrides space theme)")
   .option("--no-toc", "Omit table of contents")
   .option("--no-title-page", "Omit title page")
-  .action(async (input: string, opts: { space?: string; output?: string; toc?: boolean; titlePage?: boolean }) => {
+  .action(async (input: string, opts: { space?: string; output?: string; theme?: string; toc?: boolean; titlePage?: boolean }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
@@ -1280,6 +1281,7 @@ program
     const res = await client.downloadPdf(space, slug, {
       toc: opts.toc,
       titlePage: opts.titlePage,
+      theme: opts.theme,
     });
 
     const outPath = opts.output || `${slug}.pdf`;

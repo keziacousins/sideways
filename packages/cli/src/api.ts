@@ -216,7 +216,7 @@ export function createClient(baseUrl: string, actorName?: string) {
     async downloadPdf(
       space: string,
       slug: string,
-      opts?: { toc?: boolean; titlePage?: boolean },
+      opts?: { toc?: boolean; titlePage?: boolean; theme?: string },
     ): Promise<Response> {
       const creds = getStoredCredentials();
       const headers: Record<string, string> = {};
@@ -225,6 +225,7 @@ export function createClient(baseUrl: string, actorName?: string) {
       const params = new URLSearchParams();
       if (opts?.toc === false) params.set("toc", "false");
       if (opts?.titlePage === false) params.set("title-page", "false");
+      if (opts?.theme) params.set("theme", opts.theme);
       const qs = params.toString() ? `?${params}` : "";
 
       const res = await fetch(
