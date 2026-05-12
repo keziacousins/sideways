@@ -1,6 +1,6 @@
 {
   "name": "@sideways/server",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -26,6 +26,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/node": "^25.7.0",
     "tsx": "^4.19.0"
   }
 }
