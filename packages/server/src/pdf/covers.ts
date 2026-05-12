@@ -25,7 +25,6 @@ function logoImg(url: string, maxHeight = "60px"): string {
 
 /** Centered: logo top-center, title large centered, subtitle, date at bottom */
 function centered(opts: CoverOptions): string {
-  const accent = opts.accent || "#c8a84e";
   return `<div class="cover-centered" style="
     page: title-page;
     page-break-after: always;
@@ -99,7 +98,6 @@ function leftAligned(opts: CoverOptions): string {
 
 /** Minimal: no logo, title only, thin rule, date small */
 function minimal(opts: CoverOptions): string {
-  const accent = opts.accent || "#c8a84e";
   return `<div class="cover-minimal" style="
     page: title-page;
     page-break-after: always;

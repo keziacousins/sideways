@@ -106,7 +106,7 @@ export function createSearchRoutes(db: Database) {
         total,
         query: q,
       });
-    } catch (err: any) {
+    } catch {
       // tsquery parse error (invalid search syntax)
       return c.json({ results: [], total: 0, query: q, error: "Invalid search query" });
     }

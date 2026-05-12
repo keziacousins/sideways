@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
@@ -165,7 +165,7 @@ describe("Auth", () => {
       const { authHeader } = await createTestUserWithKey();
 
       // Create a second key
-      const { body: newKey } = await api("/api/keys", {
+      await api("/api/keys", {
         method: "POST",
         body: JSON.stringify({ name: "To revoke" }),
         headers: authHeader,
@@ -188,7 +188,7 @@ describe("Auth", () => {
 
   describe("visibility with auth", () => {
     it("allows authenticated user to read private space they own", async () => {
-      const { authHeader, userId } = await createTestUserWithKey();
+      const { authHeader } = await createTestUserWithKey();
 
       // Create a private space
       const spaceSlug = `private-${Date.now()}`;

@@ -8,7 +8,7 @@ function isValidColor(v: string): boolean {
 }
 
 function isValidFont(v: string): boolean {
-  return /^[a-zA-Z0-9\s\-]+$/.test(v.trim()) && v.length <= 60;
+  return /^[a-zA-Z0-9\s-]+$/.test(v.trim()) && v.length <= 60;
 }
 
 /** Map of custom font names to their font file paths (served from /fonts/) */

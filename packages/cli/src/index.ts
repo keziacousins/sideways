@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "no
 import { basename, resolve, join, relative } from "node:path";
 import { findConfig, createConfig, requireConfig } from "./config.js";
 import { createClient } from "./api.js";
-import { login, clearCredentials, getStoredCredentials, storeCredentials } from "./auth.js";
+import { login, clearCredentials, getStoredCredentials } from "./auth.js";
 import { requireSpace, ensureSpace } from "./preflight.js";
 import { embedComments, extractComments, type SerializedComment } from "@sideways/markdown";
 import {
@@ -1140,7 +1140,7 @@ program
   .option("--limit <n>", "Max results", "10")
   .action(async (query: string, opts: { space?: string; limit?: string }) => {
     const config = findConfig();
-    const client = getClient(config?.api || getStoredCredentials()?.api_url || "http://localhost:4100");
+    const baseUrl = config?.api || getStoredCredentials()?.api_url || "http://localhost:4100";
 
     const params = new URLSearchParams({ q: query, limit: opts.limit || "10" });
     if (opts.space) params.set("space", opts.space);
@@ -1149,7 +1149,7 @@ program
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (creds?.api_key) headers["Authorization"] = `Bearer ${creds.api_key}`;
 
-    const res = await fetch(`${config?.api || getStoredCredentials()?.api_url || "http://localhost:4100"}/api/search?${params}`, { headers });
+    const res = await fetch(`${baseUrl}/api/search?${params}`, { headers });
     if (!res.ok) {
       console.error("Search failed.");
       process.exit(1);

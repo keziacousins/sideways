@@ -1,5 +1,4 @@
-import { eq } from "drizzle-orm";
-import { type Database, spaces, spaceMembers } from "@sideways/db";
+import { type Database } from "@sideways/db";
 import type { AuthUser } from "./auth.js";
 
 /**

@@ -8,7 +8,6 @@ import {
   documentVersions,
   documentReads,
   documentWatches,
-  notifications,
   sections,
   spaces,
   themes,
@@ -676,7 +675,6 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
     // Determine target space
     let targetSpaceId = space.id;
-    let targetOwnerId = space.ownerId;
     if (body.targetSpace && body.targetSpace !== c.req.param("space")) {
       const ts = await db.query.spaces.findFirst({
         where: eq(spaces.slug, body.targetSpace),
@@ -689,7 +687,6 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       }
 
       targetSpaceId = ts.id;
-      targetOwnerId = ts.ownerId;
     }
 
     // Generate unique slug

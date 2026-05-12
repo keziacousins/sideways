@@ -3,8 +3,8 @@
  * Called from route handlers after mutations.
  */
 
-import { eq, and } from "drizzle-orm";
-import { type Database, notifications, documentWatches, spaceWatches, comments } from "@sideways/db";
+import { eq } from "drizzle-orm";
+import { type Database, notifications, documentWatches, spaceWatches } from "@sideways/db";
 import { logger } from "../logger.js";
 
 interface NotifyOpts {

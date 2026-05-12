@@ -11,7 +11,7 @@ import { logger } from "../logger.js";
 import type { Database } from "@sideways/db";
 import pkg from "../../package.json" with { type: "json" };
 
-export function createMcpRoutes(db: Database) {
+export function createMcpRoutes(_db: Database) {
   const router = new Hono();
 
   function makeApiFetch(apiKey: string) {
@@ -80,7 +80,7 @@ export function createMcpRoutes(db: Database) {
       method: c.req.raw.method,
       headers: fixedHeaders,
       body: c.req.raw.body,
-      // @ts-ignore duplex needed for streaming body
+      // @ts-expect-error duplex needed for streaming body
       duplex: "half",
     });
 

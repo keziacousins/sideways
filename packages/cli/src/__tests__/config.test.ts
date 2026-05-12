@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { findConfig, createConfig } from "../config.js";
@@ -37,7 +37,7 @@ describe("config", () => {
     it("walks up to find config in parent directory", () => {
       const parent = makeTempDir();
       const child = join(parent, "sub");
-      require("node:fs").mkdirSync(child);
+      mkdirSync(child);
       writeFileSync(
         join(parent, ".sideways.yml"),
         "space: parent-space\n",

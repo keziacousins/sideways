@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { type Database, notifications, documentReads } from "@sideways/db";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthUser } from "../middleware/auth.js";

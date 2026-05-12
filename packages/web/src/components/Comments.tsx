@@ -300,7 +300,7 @@ export default function Comments({
       } else {
         setError(`Failed to post comment (${res.status})`);
       }
-    } catch (e) {
+    } catch {
       setError("Connection error. Is the server running?");
     } finally {
       setSubmitting(false);

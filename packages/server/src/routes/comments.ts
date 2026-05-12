@@ -6,12 +6,11 @@ import {
   documents,
   documentWatches,
   spaces,
-  users,
 } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
-import { createNotification, notifyWatchers, autoWatch, parseMentions } from "../lib/notify.js";
+import { createNotification, autoWatch, parseMentions } from "../lib/notify.js";
 
 export function createCommentRoutes(db: Database) {
   const router = new Hono();

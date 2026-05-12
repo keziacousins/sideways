@@ -71,7 +71,7 @@ function isValidColor(v: string): boolean {
 
 /** Validate a font family name — alphanumeric, spaces, hyphens only */
 function isValidFont(v: string): boolean {
-  return /^[a-zA-Z0-9\s\-]+$/.test(v.trim()) && v.length <= 60;
+  return /^[a-zA-Z0-9\s-]+$/.test(v.trim()) && v.length <= 60;
 }
 
 /** Validate paper size */

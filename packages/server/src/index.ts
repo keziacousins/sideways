@@ -43,10 +43,6 @@ app.use("*", requestLogMiddleware);
 // Auth middleware on all routes — sets user if token present, null otherwise
 app.use("*", authMiddleware(db));
 
-// Require auth by default on all API routes (fail-closed).
-// Routes that support anonymous access (public spaces/docs) handle it
-// internally via canAccessSpace — they still need user to be set.
-import { requireAuth } from "./middleware/auth.js";
 
 const PUBLIC_API_PATHS = [
   "/api/auth/",        // login, register, token exchange
@@ -146,7 +142,7 @@ import { lt } from "drizzle-orm";
 import { apiKeys } from "@sideways/db";
 setInterval(async () => {
   try {
-    const result = await db.delete(apiKeys).where(lt(apiKeys.expiresAt, new Date()));
+    await db.delete(apiKeys).where(lt(apiKeys.expiresAt, new Date()));
     logger.debug("Cleaned up expired API keys");
   } catch (err: any) {
     logger.error({ err: err.message }, "API key cleanup failed");

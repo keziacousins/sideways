@@ -20,7 +20,7 @@ interface Props {
  */
 export default function WikiLinkAutocomplete({ apiUrl, spaceSlug, accessToken }: Props) {
   const [active, setActive] = useState(false);
-  const [query, setQuery] = useState("");
+  const [, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<DocSuggestion[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [position, setPosition] = useState({ top: 0, left: 0 });
