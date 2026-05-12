@@ -24,4 +24,14 @@ export const env = {
     process.env.KRATOS_ADMIN_URL || "http://localhost:4434",
   weasyPrintUrl:
     process.env.WEASYPRINT_URL || "http://localhost:5001",
+
+  /**
+   * Additional CORS origins beyond the public/dev defaults.
+   * Comma-separated list of exact origins (scheme + host [+ port], no path).
+   * e.g. CORS_ORIGINS="https://docs.example.com,https://staging.example.com"
+   */
+  corsOrigins: (process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
 };

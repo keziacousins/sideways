@@ -23,19 +23,21 @@ const storage = createStorage({ filerUrl: env.seaweedFilerUrl });
 
 const app = new Hono();
 
+// CORS is credentialed — wildcards are not permitted. The allow-list
+// derives from PUBLIC_URL/PUBLIC_API_URL plus an explicit CORS_ORIGINS
+// env var. localhost is included to support local dev with split web/API
+// ports; in production the env values should be set to the deployed
+// origin(s) only.
+const ALLOWED_ORIGINS = [
+  env.publicUrl,
+  env.publicApiUrl,
+  "http://localhost:4000",
+  "http://localhost:4100",
+  ...env.corsOrigins,
+];
+
 app.use("*", cors({
-  origin: (origin) => {
-    // Allow requests from our own frontend, Tailscale, and localhost dev
-    const allowed = [
-      env.publicUrl,
-      env.publicApiUrl,
-      "http://localhost:4000",
-      "http://localhost:4100",
-    ];
-    // Also allow any *.ts.net (Tailscale) origin
-    if (origin?.endsWith(".ts.net")) return origin;
-    return allowed.includes(origin) ? origin : allowed[0];
-  },
+  origin: (origin) => (ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]),
   credentials: true,
 }));
 app.use("*", requestLogMiddleware);
