@@ -208,6 +208,10 @@ export function createClient(baseUrl: string, actorName?: string) {
       return request("/api/keys");
     },
 
+    listThemes() {
+      return request("/api/themes");
+    },
+
     deleteKey(id: string) {
       return request(`/api/keys/${id}`, { method: "DELETE" });
     },
@@ -236,7 +240,9 @@ export function createClient(baseUrl: string, actorName?: string) {
       if (!res.ok) {
         const body = await res.text();
         if (res.status === 404) {
-          console.error("Document not found.");
+          let message = "Not found.";
+          try { message = JSON.parse(body).error || message; } catch {}
+          console.error(message);
           process.exit(1);
         }
         if (res.status === 503) {

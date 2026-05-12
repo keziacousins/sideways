@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, ilike } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { renderMarkdown } from "@sideways/markdown";
 import {
@@ -791,32 +791,52 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const spaceSlug = c.req.param("space");
     const html = await renderMarkdown(latestVersion.content, { target: "pdf", spaceSlug });
 
-    // Resolve theme: explicit ?theme=<id> overrides the space's theme
+    // Resolve theme: explicit ?theme=<id|name> overrides the space's theme
     let theme: ThemeTokens | undefined;
     const themeOverride = c.req.query("theme");
-    const themeId = themeOverride || space.themeId;
+    const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
-    if (themeId) {
-      const themeRow = await db.query.themes.findFirst({
-        where: eq(themes.id, themeId),
-      });
-      if (themeOverride && !themeRow) {
-        return c.json({ error: "Theme not found" }, 404);
-      }
-      if (themeRow) {
-        theme = themeRow.tokens as ThemeTokens;
-        // Embed logo as base64 data URL for WeasyPrint (it can't fetch external URLs)
-        if (theme.logo && themeRow.logoAssets?.length) {
-          try {
-            const logoRes = await storage.download(themeRow.logoAssets[0]);
-            const logoBuffer = await logoRes.arrayBuffer();
-            const ext = themeRow.logoAssets[0].split(".").pop() || "png";
-            const mimeTypes: Record<string, string> = { svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg" };
-            const mime = mimeTypes[ext] || "image/png";
-            const b64 = Buffer.from(logoBuffer).toString("base64");
-            theme = { ...theme, logo: `data:${mime};base64,${b64}` };
-          } catch {}
+    let themeRow: typeof themes.$inferSelect | undefined;
+    if (themeOverride) {
+      if (isUuid(themeOverride)) {
+        themeRow = await db.query.themes.findFirst({
+          where: eq(themes.id, themeOverride),
+        });
+      } else {
+        // Exact case-insensitive match first; fall back to substring
+        themeRow = await db.query.themes.findFirst({
+          where: ilike(themes.name, themeOverride),
+          orderBy: (t, { asc }) => asc(t.createdAt),
+        });
+        if (!themeRow) {
+          themeRow = await db.query.themes.findFirst({
+            where: ilike(themes.name, `%${themeOverride}%`),
+            orderBy: (t, { asc }) => asc(t.createdAt),
+          });
         }
+      }
+      if (!themeRow) {
+        return c.json({ error: `Theme "${themeOverride}" not found` }, 404);
+      }
+    } else if (space.themeId) {
+      themeRow = await db.query.themes.findFirst({
+        where: eq(themes.id, space.themeId),
+      });
+    }
+
+    if (themeRow) {
+      theme = themeRow.tokens as ThemeTokens;
+      // Embed logo as base64 data URL for WeasyPrint (it can't fetch external URLs)
+      if (theme.logo && themeRow.logoAssets?.length) {
+        try {
+          const logoRes = await storage.download(themeRow.logoAssets[0]);
+          const logoBuffer = await logoRes.arrayBuffer();
+          const ext = themeRow.logoAssets[0].split(".").pop() || "png";
+          const mimeTypes: Record<string, string> = { svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg" };
+          const mime = mimeTypes[ext] || "image/png";
+          const b64 = Buffer.from(logoBuffer).toString("base64");
+          theme = { ...theme, logo: `data:${mime};base64,${b64}` };
+        } catch {}
       }
     }
 

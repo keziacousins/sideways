@@ -1269,7 +1269,7 @@ program
   .description("Export a document as PDF")
   .option("--space <space>", "Override space from config")
   .option("-o, --output <path>", "Output file path")
-  .option("--theme <id>", "Print theme ID (overrides space theme)")
+  .option("--theme <id-or-name>", "Print theme ID or name (overrides space theme)")
   .option("--no-toc", "Omit table of contents")
   .option("--no-title-page", "Omit title page")
   .action(async (input: string, opts: { space?: string; output?: string; theme?: string; toc?: boolean; titlePage?: boolean }) => {
@@ -1340,6 +1340,25 @@ program
     }
     for (const k of keys) {
       console.log(`  ${k.prefix}... — ${k.name || "(unnamed)"} — created ${new Date(k.createdAt).toLocaleDateString()}`);
+    }
+  });
+
+// ── themes ────────────────────────────────────────────────────────────
+
+program
+  .command("themes")
+  .description("List print themes")
+  .action(async () => {
+    const config = findConfig();
+    const client = createClient(config?.api || getStoredCredentials()?.api_url || "http://localhost:4100");
+    const themes = await client.listThemes();
+    if (themes.length === 0) {
+      console.log("No themes.");
+      return;
+    }
+    const nameWidth = Math.max(...themes.map((t: { name: string }) => t.name.length));
+    for (const t of themes) {
+      console.log(`  ${t.name.padEnd(nameWidth)}  ${t.id}`);
     }
   });
 

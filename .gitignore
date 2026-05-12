@@ -6,3 +6,5 @@ dist/
 !.env.example
 *.tsbuildinfo
 references/
+.DS_Store
+.sideways/
