@@ -333,20 +333,17 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const content = body.content ?? "";
     const hash = hasContent ? contentHash(content) : null;
 
-    // Find or create space
-    let space = await db.query.spaces.findFirst({
+    // Space must exist — auto-create is intentionally disabled here to
+    // avoid namespace squatting via PUT. Use POST /api/spaces to create.
+    const space = await db.query.spaces.findFirst({
       where: eq(spaces.slug, spaceSlug),
     });
-    if (!space) {
-      [space] = await db
-        .insert(spaces)
-        .values({
-          slug: spaceSlug,
-          name: spaceSlug,
-          visibility: "private",
-          ownerId: userId,
-        })
-        .returning();
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
+    // Caller must have write access to the target space.
+    const user = c.get("user") as AuthUser | null;
+    if (!(await canWriteSpace(db, space.id, space.ownerId, user))) {
+      return c.json({ error: "Forbidden" }, 403);
     }
 
     // Resolve section slug to ID if provided
