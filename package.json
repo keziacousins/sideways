@@ -1,6 +1,6 @@
 {
   "name": "sideways",
-  "version": "0.0.125",
+  "version": "0.0.126",
   "private": true,
   "description": "Neither markup nor markdown, but something else entirely.",
   "scripts": {

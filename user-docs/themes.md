@@ -28,9 +28,9 @@ A theme is a JSON object with these properties:
   "coverLayout": "left-aligned",
   "coverSubtitle": "Engineering Documentation",
   "fonts": {
-    "display": "Proxima Nova",
+    "display": "Georgia",
     "displayWeight": "700",
-    "body": "Proxima Nova",
+    "body": "Georgia",
     "mono": "Fira Code"
   },
   "colors": {

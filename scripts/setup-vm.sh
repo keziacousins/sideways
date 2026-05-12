@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# One-time setup for the localhost VM.
-# Run this locally: ./scripts/setup-vm.sh
+# One-time setup for the Sideways deploy host.
+# Run this locally: DEPLOY_HOST=user@host ./scripts/setup-vm.sh
 #
 # Installs Node.js, pnpm, nginx, and sets up systemd services.
 
 set -euo pipefail
 
-VM="$DEPLOY_HOST"
-APP_DIR="/opt/sideways"
+VM="${DEPLOY_HOST:?Set DEPLOY_HOST=user@host (target SSH destination)}"
+APP_DIR="${APP_DIR:-/opt/sideways}"
+SERVICE_USER="${SERVICE_USER:-admin}"
 
-echo "==> Installing Node.js 22, pnpm, and nginx on localhost..."
+echo "==> Installing Node.js 22, pnpm, and nginx on $VM..."
 
-ssh $VM "sudo bash -s" <<'REMOTE'
+ssh "$VM" "APP_DIR='$APP_DIR' SERVICE_USER='$SERVICE_USER' sudo --preserve-env=APP_DIR,SERVICE_USER bash -s" <<'REMOTE'
 set -euo pipefail
 
 # Node.js 22 via NodeSource
@@ -47,44 +48,44 @@ else
 fi
 
 # App directory
-mkdir -p /opt/sideways
-chown admin:admin /opt/sideways
+mkdir -p "$APP_DIR"
+chown "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
 
 # Systemd service: sideways-api
-cat > /etc/systemd/system/sideways-api.service <<'EOF'
+cat > /etc/systemd/system/sideways-api.service <<EOF
 [Unit]
 Description=Sideways API Server
 After=network.target
 
 [Service]
 Type=simple
-User=admin
-WorkingDirectory=/opt/sideways
+User=$SERVICE_USER
+WorkingDirectory=$APP_DIR
 ExecStart=/usr/bin/tsx packages/server/src/index.ts
 Restart=on-failure
 RestartSec=3
-EnvironmentFile=/opt/sideways/.env
+EnvironmentFile=$APP_DIR/.env
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 # Systemd service: sideways-web
-cat > /etc/systemd/system/sideways-web.service <<'EOF'
+cat > /etc/systemd/system/sideways-web.service <<EOF
 [Unit]
 Description=Sideways Web Frontend
 After=network.target sideways-api.service
 
 [Service]
 Type=simple
-User=admin
-WorkingDirectory=/opt/sideways/packages/web
+User=$SERVICE_USER
+WorkingDirectory=$APP_DIR/packages/web
 ExecStart=/usr/bin/node dist/server/entry.mjs
 Environment=HOST=0.0.0.0
 Environment=PORT=4000
 Restart=on-failure
 RestartSec=3
-EnvironmentFile=/opt/sideways/.env
+EnvironmentFile=$APP_DIR/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -93,7 +94,7 @@ EOF
 systemctl daemon-reload
 systemctl enable sideways-api sideways-web
 
-echo "==> VM setup complete."
+echo "==> Deploy host setup complete."
 REMOTE
 
-echo "==> Done. Now run ./scripts/deploy.sh to deploy."
+echo "==> Done. Now run: DEPLOY_HOST=$VM ./scripts/deploy.sh"

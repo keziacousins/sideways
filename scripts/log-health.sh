@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Log health check for Sideways.
-# Scans service logs and system state on localhost.
+# Scans service logs and system state on the deploy host.
 #
 # Usage:
-#   ./scripts/log-health.sh           # default: last 1 hour
-#   ./scripts/log-health.sh 24h       # last 24 hours
-#   ./scripts/log-health.sh 7d        # last 7 days
+#   DEPLOY_HOST=user@host ./scripts/log-health.sh        # default: last 1 hour
+#   DEPLOY_HOST=user@host ./scripts/log-health.sh 24h    # last 24 hours
+#   DEPLOY_HOST=user@host ./scripts/log-health.sh 7d     # last 7 days
 
 set -uo pipefail
 
-VM="$DEPLOY_HOST"
+VM="${DEPLOY_HOST:?Set DEPLOY_HOST=user@host (target SSH destination)}"
 SINCE="${1:-1h}"
 
 echo "═══════════════════════════════════════════════"

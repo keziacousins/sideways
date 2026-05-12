@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Activity report for Sideways.
-# Queries Postgres on localhost for signups, content, and usage stats.
+# Queries the deploy host's Postgres for signups, content, and usage stats.
 #
 # Usage:
-#   ./scripts/admin-report.sh           # default: last 7 days
-#   ./scripts/admin-report.sh 1         # last 1 day
-#   ./scripts/admin-report.sh 30        # last 30 days
+#   DEPLOY_HOST=user@host ./scripts/admin-report.sh        # default: last 7 days
+#   DEPLOY_HOST=user@host ./scripts/admin-report.sh 1      # last 1 day
+#   DEPLOY_HOST=user@host ./scripts/admin-report.sh 30     # last 30 days
 
 set -uo pipefail
 
-VM="$DEPLOY_HOST"
+VM="${DEPLOY_HOST:?Set DEPLOY_HOST=user@host (target SSH destination)}"
 DAYS="${1:-7}"
 PSQL="docker exec admin-postgres-1 psql -U sideways -d sideways --no-align --tuples-only"
 

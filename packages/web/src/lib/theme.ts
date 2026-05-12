@@ -12,14 +12,7 @@ function isValidFont(v: string): boolean {
 }
 
 /** Map of custom font names to their font file paths (served from /fonts/) */
-const CUSTOM_FONTS: Record<string, { regular: string; bold: string; italic?: string; boldItalic?: string }> = {
-  "Proxima Nova": {
-    regular: "/fonts/proxima-nova/proximanova-regular.otf",
-    bold: "/fonts/proxima-nova/proximanova-bold.otf",
-    italic: "/fonts/proxima-nova/proximanova-regularit.otf",
-    boldItalic: "/fonts/proxima-nova/proximanova-boldit.otf",
-  },
-};
+const CUSTOM_FONTS: Record<string, { regular: string; bold: string; italic?: string; boldItalic?: string }> = {};
 
 function fontFaceRules(fontName: string): string {
   const font = CUSTOM_FONTS[fontName];

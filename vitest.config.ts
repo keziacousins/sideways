@@ -7,8 +7,10 @@ export default defineConfig({
     exclude: ["**/node_modules/**", "**/references/**", "**/dist/**", "**/e2e/**"],
     env: {
       DATABASE_URL:
+        process.env.TEST_DATABASE_URL ||
         "postgres://sideways:sideways@localhost:5432/sideways_test",
-      SEAWEEDFS_FILER_URL: "http://localhost:8888",
+      SEAWEEDFS_FILER_URL:
+        process.env.TEST_SEAWEEDFS_FILER_URL || "http://localhost:8888",
       TEST_API_URL: "http://localhost:4100",
     },
     globalSetup: "./vitest.global-setup.ts",

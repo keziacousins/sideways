@@ -1,6 +1,7 @@
 import postgres from "postgres";
 
 const TEST_DB_URL =
+  process.env.TEST_DATABASE_URL ||
   "postgres://sideways:sideways@localhost:5432/sideways_test";
 
 /**

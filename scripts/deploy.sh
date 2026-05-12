@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
-# Deploy Sideways to localhost VM.
+# Deploy Sideways to a remote host over SSH.
+#
+# Required env vars:
+#   DEPLOY_HOST   SSH target, e.g. admin@my-server.example.com
+#
+# Optional env vars:
+#   APP_DIR       Remote application directory (default: /opt/sideways)
+#   INFRA_DIR     Remote infra (docker compose) directory (default: home dir of DEPLOY_HOST user)
 #
 # Usage:
-#   ./scripts/deploy.sh          # full deploy (sync + build + restart all)
-#   ./scripts/deploy.sh --quick  # sync + restart (skip build, use existing)
-#   ./scripts/deploy.sh --infra  # only sync and rebuild Docker infra
+#   DEPLOY_HOST=admin@my-server ./scripts/deploy.sh           # full deploy
+#   DEPLOY_HOST=admin@my-server ./scripts/deploy.sh --quick   # skip build
+#   DEPLOY_HOST=admin@my-server ./scripts/deploy.sh --infra   # rebuild Docker infra only
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VM="$DEPLOY_HOST"
-APP_DIR="/opt/sideways"
-INFRA_DIR="/home/admin"
+VM="${DEPLOY_HOST:?Set DEPLOY_HOST=user@host (target SSH destination)}"
+APP_DIR="${APP_DIR:-/opt/sideways}"
+INFRA_DIR="${INFRA_DIR:-/home/admin}"
 
 QUICK=false
 INFRA_ONLY=false
@@ -129,7 +136,7 @@ echo "  Web:  $WEB_STATUS"
 echo ""
 
 if [[ "$API_STATUS" == *"ok"* ]]; then
-  echo "==> Deploy complete. Site: http://localhost"
+  echo "==> Deploy complete."
 else
   echo "==> Deploy finished but API health check failed."
   echo "    Check logs: ssh $VM 'journalctl -u sideways-api -n 50'"

@@ -45,8 +45,9 @@ RUN mkdir -p /usr/share/fonts/eb-garamond && \
     wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf" \
       -O /usr/share/fonts/eb-garamond/EBGaramond-Italic-Variable.ttf
 
-# Copy custom/licensed fonts from repo (e.g. Proxima Nova for themes)
-COPY fonts/ /usr/share/fonts/custom/
+# To add your own licensed fonts (e.g. for branded themes), drop .otf/.ttf
+# files into infra/weasyprint/fonts/ before building, then uncomment:
+# COPY fonts/ /usr/share/fonts/custom/
 
 # Register all fonts with fontconfig
 RUN fc-cache -f -v
