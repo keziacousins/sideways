@@ -9,6 +9,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { registerTools, INSTRUCTIONS } from "@sideways/mcp/tools";
 import { logger } from "../logger.js";
 import type { Database } from "@sideways/db";
+import pkg from "../../package.json" with { type: "json" };
 
 export function createMcpRoutes(db: Database) {
   const router = new Hono();
@@ -56,7 +57,7 @@ export function createMcpRoutes(db: Database) {
     logger.debug({ method }, "MCP request");
 
     // Stateless: fresh server + transport per request, no session tracking
-    const server = new McpServer({ name: "sideways", version: "0.0.2" }, { instructions: INSTRUCTIONS });
+    const server = new McpServer({ name: "sideways", version: pkg.version }, { instructions: INSTRUCTIONS });
     registerTools(server, makeApiFetch(apiKey));
 
     const transport = new WebStandardStreamableHTTPServerTransport({

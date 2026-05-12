@@ -3,6 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools, INSTRUCTIONS } from "./tools.js";
+import pkg from "../package.json" with { type: "json" };
 
 const API_URL = process.env.SIDEWAYS_API_URL || "http://localhost:4100";
 const API_KEY = process.env.SIDEWAYS_API_KEY || "";
@@ -25,7 +26,7 @@ async function apiFetch(path: string, options?: RequestInit) {
 }
 
 const server = new McpServer(
-  { name: "sideways", version: "0.0.2" },
+  { name: "sideways", version: pkg.version },
   { instructions: INSTRUCTIONS },
 );
 
