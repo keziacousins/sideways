@@ -15,12 +15,33 @@ interface Comment {
   actorName: string | null;
 }
 
-/** Render wiki-links and basic inline markdown in comment text */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Render wiki-links and basic inline markdown in comment text.
+ *
+ * The body is untrusted user input. HTML-escape it first so script tags,
+ * event handlers, and other markup are inert; then layer our limited set
+ * of formatting transforms on top of the escaped string. The transforms
+ * only insert known-safe tags (a, strong, em, code, br) with known-safe
+ * attribute values (a className constant and a route-based href).
+ */
 function renderCommentBody(body: string, spaceSlug: string): string {
-  return body
+  const safeSpace = encodeURIComponent(spaceSlug);
+  return escapeHtml(body)
     // Wiki-links: [[slug|text]] or [[slug]]
-    .replace(/\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g, (_, slug, text) =>
-      `<a href="/s/${spaceSlug}/${slug.trim()}" class="wiki-link">${(text || slug).trim()}</a>`)
+    .replace(/\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g, (_, slug, text) => {
+      const slugTrim = slug.trim();
+      const label = (text || slug).trim();
+      return `<a href="/s/${safeSpace}/${encodeURIComponent(slugTrim)}" class="wiki-link">${label}</a>`;
+    })
     // Bold
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     // Italic
