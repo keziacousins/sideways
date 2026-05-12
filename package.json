@@ -1,6 +1,6 @@
 {
   "name": "sideways",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "private": true,
   "type": "module",
   "description": "Neither markup nor markdown, but something else entirely.",

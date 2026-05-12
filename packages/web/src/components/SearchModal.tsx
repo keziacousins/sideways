@@ -1,4 +1,38 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+
+/**
+ * Render a Postgres ts_headline snippet safely.
+ *
+ * ts_headline does NOT HTML-escape the source content — it just wraps matches
+ * with <mark>…</mark>. To prevent stored XSS via document content, we render
+ * the surrounding text as React text nodes (auto-escaped) and only emit a
+ * real <mark> element around the highlighted spans.
+ */
+function renderSnippet(snippet: string): ReactNode[] {
+  const cleaned = snippet
+    .replace(/```[\s\S]*?```/g, " ") // strip code blocks
+    .replace(/`([^`]+)`/g, "$1") // strip inline code
+    .replace(/\*\*([^*]+)\*\*/g, "$1") // strip bold
+    .replace(/\*([^*]+)\*/g, "$1") // strip italic
+    .replace(/#{1,6}\s+/g, "") // strip headings
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // strip links
+    .replace(/\n/g, " · ") // newlines to separator
+    .replace(/\s+/g, " ") // collapse whitespace
+    .trim();
+
+  const parts: ReactNode[] = [];
+  const regex = /<mark>([\s\S]*?)<\/mark>/g;
+  let lastIndex = 0;
+  let key = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(cleaned)) !== null) {
+    if (match.index > lastIndex) parts.push(cleaned.slice(lastIndex, match.index));
+    parts.push(<mark key={key++}>{match[1]}</mark>);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < cleaned.length) parts.push(cleaned.slice(lastIndex));
+  return parts;
+}
 
 interface SearchResult {
   spaceSlug: string;
@@ -163,18 +197,7 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
                 <span className="search-result-space">{r.spaceName}</span>
               </div>
               {r.snippet && (
-                <div className="search-result-snippet" dangerouslySetInnerHTML={{
-                  __html: r.snippet
-                    .replace(/```[\s\S]*?```/g, " ") // strip code blocks
-                    .replace(/`([^`]+)`/g, "$1")       // strip inline code
-                    .replace(/\*\*([^*]+)\*\*/g, "$1") // strip bold
-                    .replace(/\*([^*]+)\*/g, "$1")     // strip italic
-                    .replace(/#{1,6}\s+/g, "")         // strip headings
-                    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // strip links
-                    .replace(/\n/g, " · ")             // newlines to separator
-                    .replace(/\s+/g, " ")              // collapse whitespace
-                    .trim()
-                }} />
+                <div className="search-result-snippet">{renderSnippet(r.snippet)}</div>
               )}
               <div className="search-result-meta">
                 {r.updatedAt && (
