@@ -3,6 +3,8 @@
  * Uses the filer HTTP API for file operations.
  */
 
+import { Buffer } from "node:buffer";
+
 export interface StorageConfig {
   filerUrl: string;
 }
