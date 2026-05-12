@@ -10,11 +10,16 @@ Add to your Claude Desktop MCP configuration:
 {
   "mcpServers": {
     "sideways": {
-      "url": "https://your-sideways-instance/api/mcp?key=sk-your-api-key"
+      "url": "https://your-sideways-instance/api/mcp",
+      "headers": {
+        "Authorization": "Bearer sk-your-api-key"
+      }
     }
   }
 }
 ```
+
+The API key must be passed in the `Authorization` header — Sideways no longer accepts keys via `?key=` query parameter (they would leak through browser history, server logs, and the `Referer` header).
 
 Create an API key with an agent name (e.g. "Claude") in the web UI under API Keys. This ensures comments and edits are attributed to the agent.
 

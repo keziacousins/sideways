@@ -35,15 +35,16 @@ export function createMcpRoutes(_db: Database) {
   function extractKey(c: any): string | null {
     const auth = c.req.header("authorization");
     if (auth?.startsWith("Bearer ")) return auth.slice(7);
-    const key = c.req.query("key");
-    if (key) return key;
     return null;
   }
 
   router.all("/*", async (c) => {
     const apiKey = extractKey(c);
     if (!apiKey) {
-      return c.json({ error: "API key required. Pass as Bearer token or ?key= param." }, 401);
+      return c.json(
+        { error: "API key required. Pass as `Authorization: Bearer <key>`." },
+        401,
+      );
     }
 
     const method = c.req.method;

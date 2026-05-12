@@ -99,7 +99,8 @@ sideways status</code>
         <code id="mcp-desktop">{JSON.stringify({
   mcpServers: {
     sideways: {
-      url: `${API_URL}/api/mcp?key=YOUR_API_KEY`
+      url: `${API_URL}/api/mcp`,
+      headers: { Authorization: "Bearer YOUR_API_KEY" }
     }
   }
 }, null, 2)}</code>
