@@ -1,10 +1,34 @@
+# Dependencies & build output
 node_modules/
 dist/
 .astro/
+*.tsbuildinfo
+
+# Environment
 .env
 .env.*
 !.env.example
-*.tsbuildinfo
-references/
+
+# OS
 .DS_Store
+
+# Editor / agent local config
+.claude/
+.mcp.json
+
+# Local Sideways CLI sync state and per-checkout config
 .sideways/
+.sideways.yml
+
+# Local-only working files
+references/
+for-pf-theme/
+
+# Internal planning / scratch docs (kept out of public repo)
+PLAN.md
+PLAN-*.md
+PRD.md
+PRD-*.md
+FEATURES-*.md
+PROPOSAL-*.md
+TODO.md
