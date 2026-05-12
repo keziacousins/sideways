@@ -34,6 +34,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Generate Astro types
+        run: pnpm --filter @sideways/web exec astro sync
       - run: pnpm typecheck
 
   audit:

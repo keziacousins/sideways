@@ -9,12 +9,7 @@
     "skipLibCheck": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "baseUrl": ".",
-    "paths": {
-      "@sideways/types": ["./shared/types/src"],
-      "@sideways/markdown": ["./shared/markdown/src"]
-    }
+    "sourceMap": true
   },
   "exclude": ["node_modules", "dist"]
 }
