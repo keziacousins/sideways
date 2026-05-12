@@ -1,6 +1,6 @@
 {
   "name": "@sideways/server",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
