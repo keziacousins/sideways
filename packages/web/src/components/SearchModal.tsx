@@ -24,8 +24,8 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<number>();
-  const abortRef = useRef<AbortController>();
+  const timerRef = useRef<number | undefined>(undefined);
+  const abortRef = useRef<AbortController | undefined>(undefined);
 
   // Open on ⌘K / Ctrl+K or click on search trigger
   useEffect(() => {

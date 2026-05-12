@@ -30,6 +30,9 @@ importers:
       '@sideways/markdown':
         specifier: workspace:*
         version: link:../../shared/markdown
+      '@sideways/types':
+        specifier: workspace:*
+        version: link:../../shared/types
       commander:
         specifier: ^13.1.0
         version: 13.1.0
@@ -212,8 +215,16 @@ importers:
       unist-util-visit:
         specifier: ^5.1.0
         version: 5.1.0
+    devDependencies:
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
 
-  shared/storage: {}
+  shared/storage:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.15
+        version: 22.19.15
 
   shared/types: {}
 

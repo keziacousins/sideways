@@ -32,6 +32,7 @@ export interface Document {
   id: string;
   spaceId: string;
   sectionId: string | null;
+  parentId: string | null;
   slug: string;
   title: string;
   position: number;

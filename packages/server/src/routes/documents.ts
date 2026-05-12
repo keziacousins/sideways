@@ -137,14 +137,13 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
           eq(sections.slug, sectionSlug),
         ),
       });
-      if (section) sectionId = section.id;
+      if (!section) return c.json([]);
+      sectionId = section.id;
     }
 
     const whereClause = sectionId
       ? and(eq(documents.spaceId, space.id), eq(documents.sectionId, sectionId))
-      : sectionSlug
-        ? and(eq(documents.spaceId, space.id), eq(documents.sectionId, sectionId)) // no match — empty
-        : eq(documents.spaceId, space.id);
+      : eq(documents.spaceId, space.id);
 
     const docs = await db.query.documents.findMany({
       where: whereClause,
@@ -443,19 +442,17 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       return c.json(updated, 200);
     }
 
-    const insertValues: Record<string, any> = {
-      spaceId: space.id,
-      slug,
-      title: derivedTitle || slug,
-      tags: body.tags ?? [],
-      position: body.position ?? 0,
-    };
-    if (sectionId) insertValues.sectionId = sectionId;
-    if (parentId) insertValues.parentId = parentId;
-
     const [doc] = await db
       .insert(documents)
-      .values(insertValues)
+      .values({
+        spaceId: space.id,
+        slug,
+        title: derivedTitle || slug,
+        tags: body.tags ?? [],
+        position: body.position ?? 0,
+        ...(sectionId ? { sectionId } : {}),
+        ...(parentId ? { parentId } : {}),
+      })
       .returning();
 
     await db.insert(documentVersions).values({
@@ -668,11 +665,12 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     });
     if (!doc) return c.json({ error: "Not found" }, 404);
 
-    const body = await c.req.json<{
+    type DuplicateBody = {
       targetSpace?: string;
       targetSlug?: string;
       targetSection?: string;
-    }>().catch(() => ({}));
+    };
+    const body: DuplicateBody = await c.req.json<DuplicateBody>().catch(() => ({}));
 
     const userId = await getUserId(c, db);
 

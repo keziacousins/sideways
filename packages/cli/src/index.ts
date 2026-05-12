@@ -1081,7 +1081,7 @@ program
     }
 
     const result = await client.updateSpace(space, { [field]: value });
-    console.log(`Updated ${field} → "${result[field]}"`);
+    console.log(`Updated ${field} → "${(result as unknown as Record<string, unknown>)[field]}"`);
   });
 
 // ── members ───────────────────────────────────────────────────────────

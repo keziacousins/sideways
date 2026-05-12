@@ -19,19 +19,21 @@ export function createStorage(config: StorageConfig) {
     /**
      * Upload a file to SeaweedFS via the filer.
      * @param path — destination path, e.g. "/assets/doc123/image.png"
-     * @param data — file content as Buffer or ReadableStream
+     * @param data — file content as Buffer or Blob
      * @param contentType — MIME type
      */
     async upload(
       path: string,
-      data: Buffer | ReadableStream | Blob,
+      data: Buffer | Blob,
       contentType: string,
     ): Promise<UploadResult> {
       const formData = new FormData();
+      // Node's Buffer is structurally a BlobPart at runtime, but its TS type
+      // (ArrayBufferLike vs. ArrayBuffer) trips the lib.dom BlobPart constraint.
       const blob =
         data instanceof Blob
           ? data
-          : new Blob([data as Buffer], { type: contentType });
+          : new Blob([data as unknown as BlobPart], { type: contentType });
       formData.append("file", blob, path.split("/").pop() || "file");
 
       const res = await fetch(`${filerUrl}${path}`, {

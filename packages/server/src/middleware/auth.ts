@@ -15,6 +15,12 @@ export interface AuthUser {
   displayName: string;
 }
 
+declare module "hono" {
+  interface ContextVariableMap {
+    user: AuthUser | null;
+  }
+}
+
 /** Cached JWKS fetcher — validates JWT signatures against Hydra's public keys */
 const JWKS = createRemoteJWKSet(
   new URL(`${env.hydraPublicUrl}/.well-known/jwks.json`),

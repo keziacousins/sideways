@@ -27,7 +27,7 @@ export default function WikiLinkAutocomplete({ apiUrl, spaceSlug, accessToken }:
   const targetRef = useRef<HTMLTextAreaElement | null>(null);
   const triggerPosRef = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<number>();
+  const timerRef = useRef<number | undefined>(undefined);
 
   const fetchSuggestions = useCallback(async (q: string) => {
     if (q.length < 1) { setSuggestions([]); return; }

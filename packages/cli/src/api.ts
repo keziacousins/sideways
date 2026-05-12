@@ -1,11 +1,69 @@
+import type { Document, Section, Space } from "@sideways/types";
 import { getStoredCredentials } from "./auth.js";
 
 /**
  * Thin API client for the Sideways server.
  */
 
+/** A single entry from /api/documents/{space}/_sync */
+export interface SyncInfo {
+  slug: string;
+  title: string;
+  version: number;
+  contentHash: string;
+  updatedAt: string;
+}
+
+/** A document with its current content (GET /api/documents/{space}/{slug}) */
+export interface DocumentWithContent extends Document {
+  content: string;
+  version: number;
+  contentHash: string;
+  sectionSlug: string | null;
+  parentSlug: string | null;
+}
+
+/** Comment payload returned by the server (with denormalised author + threading) */
+export interface CommentResponse {
+  id: string;
+  body: string;
+  author: { id: string; name: string; email: string } | null;
+  createdAt: string;
+  anchorText: string | null;
+  anchorSection: string | null;
+  anchorContext: string | null;
+  parentId: string | null;
+  resolved: boolean;
+}
+
+/** Space member with joined user fields (name/email) */
+export interface SpaceMemberResponse {
+  id: string;
+  userId: string;
+  role: "viewer" | "editor" | "admin";
+  name: string;
+  email: string;
+}
+
+/** API key summary returned by /api/keys */
+export interface ApiKeySummary {
+  id: string;
+  name: string | null;
+  prefix: string;
+  actorName: string | null;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+/** A printable theme summary returned by /api/themes */
+export interface ThemeSummary {
+  id: string;
+  name: string;
+}
+
 export function createClient(baseUrl: string, actorName?: string) {
-  async function request(path: string, options?: RequestInit) {
+  async function request<T = unknown>(path: string, options?: RequestInit): Promise<T> {
     const creds = getStoredCredentials();
     const authHeaders: Record<string, string> = {};
     if (creds?.api_key) {
@@ -64,19 +122,19 @@ export function createClient(baseUrl: string, actorName?: string) {
 
   return {
     listSpaces() {
-      return request("/api/spaces");
+      return request<Space[]>("/api/spaces");
     },
 
     getSpace(slug: string) {
-      return request(`/api/spaces/${slug}`);
+      return request<Space>(`/api/spaces/${slug}`);
     },
 
     listDocuments(space: string) {
-      return request(`/api/documents?space=${space}`);
+      return request<Document[]>(`/api/documents?space=${space}`);
     },
 
     getDocument(space: string, slug: string) {
-      return request(`/api/documents/${space}/${slug}`);
+      return request<DocumentWithContent>(`/api/documents/${space}/${slug}`);
     },
 
     putDocument(
@@ -84,28 +142,28 @@ export function createClient(baseUrl: string, actorName?: string) {
       slug: string,
       body: { title?: string; content?: string; tags?: string[]; sectionSlug?: string; parentSlug?: string; updatedAt?: string },
     ) {
-      return request(`/api/documents/${space}/${slug}`, {
+      return request<DocumentWithContent>(`/api/documents/${space}/${slug}`, {
         method: "PUT",
         body: JSON.stringify(body),
       });
     },
 
     patchDocument(space: string, slug: string, patch: Record<string, any>) {
-      return request(`/api/documents/${space}/${slug}`, {
+      return request<DocumentWithContent>(`/api/documents/${space}/${slug}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
     },
 
     duplicateDocument(space: string, slug: string, opts?: { targetSpace?: string; targetSlug?: string }) {
-      return request(`/api/documents/${space}/${slug}/duplicate`, {
+      return request<DocumentWithContent>(`/api/documents/${space}/${slug}/duplicate`, {
         method: "POST",
         body: JSON.stringify(opts || {}),
       });
     },
 
     deleteDocument(space: string, slug: string) {
-      return request(`/api/documents/${space}/${slug}`, {
+      return request<void>(`/api/documents/${space}/${slug}`, {
         method: "DELETE",
       });
     },
@@ -124,66 +182,68 @@ export function createClient(baseUrl: string, actorName?: string) {
 
     getSyncInfo(space: string, section?: string) {
       const qs = section ? `?section=${section}` : "";
-      return request(`/api/documents/${space}/_sync${qs}`);
+      return request<SyncInfo[]>(`/api/documents/${space}/_sync${qs}`);
     },
 
     getCommentCounts(space: string) {
-      return request(`/api/documents/${space}/_comment-counts`);
+      return request<Array<{ slug: string; count: number }>>(`/api/documents/${space}/_comment-counts`);
     },
 
     createSpace(slug: string, name?: string, visibility: string = "private") {
-      return request(`/api/spaces/${slug}`, {
+      return request<Space>(`/api/spaces/${slug}`, {
         method: "PUT",
         body: JSON.stringify({ name: name || slug, visibility }),
       });
     },
 
     updateSpace(slug: string, updates: Record<string, any>) {
-      return request(`/api/spaces/${slug}`, {
+      return request<Space>(`/api/spaces/${slug}`, {
         method: "PUT",
         body: JSON.stringify(updates),
       });
     },
 
     getSpaceMembers(slug: string) {
-      return request(`/api/spaces/${slug}/members`);
+      return request<SpaceMemberResponse[]>(`/api/spaces/${slug}/members`);
     },
 
     addSpaceMember(slug: string, email: string, role: string) {
-      return request(`/api/spaces/${slug}/members`, {
+      return request<SpaceMemberResponse>(`/api/spaces/${slug}/members`, {
         method: "PUT",
         body: JSON.stringify({ email, role }),
       });
     },
 
     removeSpaceMember(slug: string, memberId: string) {
-      return request(`/api/spaces/${slug}/members/${memberId}`, {
+      return request<void>(`/api/spaces/${slug}/members/${memberId}`, {
         method: "DELETE",
       });
     },
 
     deleteSpace(slug: string) {
-      return request(`/api/spaces/${slug}`, { method: "DELETE" });
+      return request<void>(`/api/spaces/${slug}`, { method: "DELETE" });
     },
 
     listSections(space: string) {
-      return request(`/api/spaces/${space}/sections`);
+      return request<Section[]>(`/api/spaces/${space}/sections`);
     },
 
     createSection(space: string, slug: string, title?: string) {
-      return request(`/api/spaces/${space}/sections/${slug}`, {
+      return request<Section>(`/api/spaces/${space}/sections/${slug}`, {
         method: "PUT",
         body: JSON.stringify({ title: title || slug }),
       });
     },
 
     getVersions(space: string, slug: string) {
-      return request(`/api/documents/${space}/${slug}/versions`);
+      return request<Array<{ version: number; contentHash: string; createdAt: string; createdBy: string }>>(
+        `/api/documents/${space}/${slug}/versions`,
+      );
     },
 
     getComments(space: string, slug: string, includeResolved = false) {
       const qs = includeResolved ? "?include_resolved=true" : "";
-      return request(`/api/comments/${space}/${slug}${qs}`);
+      return request<CommentResponse[]>(`/api/comments/${space}/${slug}${qs}`);
     },
 
     addComment(space: string, slug: string, body: {
@@ -192,28 +252,28 @@ export function createClient(baseUrl: string, actorName?: string) {
       anchorSection?: string;
       parentId?: string;
     }) {
-      return request(`/api/comments/${space}/${slug}`, {
+      return request<CommentResponse>(`/api/comments/${space}/${slug}`, {
         method: "POST",
         body: JSON.stringify(body),
       });
     },
 
     resolveComment(space: string, slug: string, commentId: string) {
-      return request(`/api/comments/${space}/${slug}/${commentId}/resolve`, {
+      return request<CommentResponse>(`/api/comments/${space}/${slug}/${commentId}/resolve`, {
         method: "POST",
       });
     },
 
     listKeys() {
-      return request("/api/keys");
+      return request<ApiKeySummary[]>("/api/keys");
     },
 
     listThemes() {
-      return request("/api/themes");
+      return request<ThemeSummary[]>("/api/themes");
     },
 
     deleteKey(id: string) {
-      return request(`/api/keys/${id}`, { method: "DELETE" });
+      return request<void>(`/api/keys/${id}`, { method: "DELETE" });
     },
 
     /** Download PDF — returns raw Response (not parsed JSON) */
