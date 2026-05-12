@@ -10,14 +10,14 @@ VM="${DEPLOY_HOST:?Set DEPLOY_HOST=user@host (target SSH destination)}"
 APP_DIR="${APP_DIR:-/opt/sideways}"
 SERVICE_USER="${SERVICE_USER:-admin}"
 
-echo "==> Installing Node.js 22, pnpm, and nginx on $VM..."
+echo "==> Installing Node.js 24, pnpm, and nginx on $VM..."
 
 ssh "$VM" "APP_DIR='$APP_DIR' SERVICE_USER='$SERVICE_USER' sudo --preserve-env=APP_DIR,SERVICE_USER bash -s" <<'REMOTE'
 set -euo pipefail
 
-# Node.js 22 via NodeSource
+# Node.js 24 via NodeSource
 if ! command -v node &>/dev/null; then
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
   apt-get install -y nodejs
   echo "Node $(node --version) installed"
 else

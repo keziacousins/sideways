@@ -1,6 +1,6 @@
 {
   "name": "sideways",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": true,
   "type": "module",
   "description": "Neither markup nor markdown, but something else entirely.",
@@ -13,6 +13,9 @@
     "typecheck": "pnpm -r exec tsc --noEmit"
   },
   "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=24"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",

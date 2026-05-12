@@ -20,7 +20,7 @@ This repository is the v1 implementation: a Node/Astro/Hono stack backed by Post
 
 ## Quick start (local dev)
 
-Requires Node 22+, pnpm 10+, and Docker.
+Requires Node 24+, pnpm 10+, and Docker.
 
 ```bash
 # 1. Bring up infra (Postgres, Kratos, Hydra, SeaweedFS, WeasyPrint, Mailhog)
