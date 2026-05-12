@@ -1,6 +1,6 @@
 {
   "name": "@sideways/web",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "scripts": {
     "dev": "astro dev",
@@ -8,14 +8,14 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/node": "^9.5.5",
-    "@astrojs/react": "^4.2.0",
-    "@fontsource-variable/inter": "^5.2.8",
+    "@astrojs/node": "^10.1.0",
+    "@astrojs/react": "^5.0.4",
     "@fontsource-variable/fira-code": "^5.2.7",
+    "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/newsreader": "^5.2.10",
     "@sideways/markdown": "workspace:*",
     "@sideways/types": "workspace:*",
-    "astro": "^5.6.0",
+    "astro": "^6.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

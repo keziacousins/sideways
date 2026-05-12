@@ -1,6 +1,6 @@
 {
   "name": "sideways",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "type": "module",
   "description": "Neither markup nor markdown, but something else entirely.",
@@ -17,7 +17,18 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "sharp"
-    ]
+    ],
+    "overrides": {
+      "axios": "^1.15.1",
+      "defu": "^6.1.5",
+      "fast-uri": "^3.1.2",
+      "follow-redirects": "^1.16.0",
+      "ip-address": "^10.1.1",
+      "path-to-regexp": "^8.4.0",
+      "postcss": "^8.5.10",
+      "esbuild": "^0.27.4",
+      "@hono/node-server": "^1.19.13"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

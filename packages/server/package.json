@@ -1,6 +1,6 @@
 {
   "name": "@sideways/server",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -8,7 +8,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.0",
+    "@hono/node-server": "^2.0.2",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@ory/client": "^1.22.32",
     "@sideways/db": "workspace:*",
@@ -16,8 +16,8 @@
     "@sideways/mcp": "workspace:*",
     "@sideways/storage": "workspace:*",
     "@sideways/types": "workspace:*",
-    "drizzle-orm": "^0.44.0",
-    "hono": "^4.7.0",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.18",
     "hono-rate-limiter": "^0.5.3",
     "jose": "^6.2.2",
     "pino": "^10.3.1",
