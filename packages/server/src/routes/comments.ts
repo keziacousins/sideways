@@ -79,6 +79,11 @@ export function createCommentRoutes(db: Database) {
     });
     if (!space) return c.json({ error: "Space not found" }, 404);
 
+    // The caller must be able to read the space before they can comment in it.
+    if (!(await canAccessSpace(db, space.id, space.visibility, space.ownerId, user))) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
     const doc = await db.query.documents.findFirst({
       where: and(
         eq(documents.spaceId, space.id),
