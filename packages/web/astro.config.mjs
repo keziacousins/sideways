@@ -7,7 +7,10 @@ export default defineConfig({
   adapter: node({ mode: "standalone" }),
   integrations: [react()],
   server: { port: 4000 },
-  security: { checkOrigin: false },
+  // CSRF protection: refuse POST/PUT/PATCH/DELETE when the Origin header
+  // doesn't match the host. Astro's built-in check; combined with the
+  // SameSite=Lax session cookie this closes most browser-driven CSRF paths.
+  security: { checkOrigin: true },
   session: {
     driver: "fs",
     options: {
