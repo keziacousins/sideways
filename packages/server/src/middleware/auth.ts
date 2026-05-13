@@ -38,7 +38,9 @@ const RESERVED_ACTOR_NAMES = new Set([
  * stripping, too long, control characters, or on the reserved list).
  */
 function sanitiseActorName(raw: string): string | null {
-  const stripped = raw.replace(/[\x00-\x1f\x7f]/g, "").trim();
+  // \p{C} = Unicode "Other" category: control chars (C0/C1, DEL), format
+  // marks, surrogates. None of these belong in a display name.
+  const stripped = raw.replace(/\p{C}/gu, "").trim();
   if (!stripped || stripped.length > 50) return null;
   if (RESERVED_ACTOR_NAMES.has(stripped.toLowerCase())) return null;
   return stripped;
