@@ -126,6 +126,9 @@ export const themes = pgTable("themes", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   orgId: uuid("org_id"),
+  /** User who created the theme — gates mutation and deletion. Nullable for
+   *  pre-migration rows; null means "no owner", treated as immutable. */
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   /** Design tokens: colors, spacing, font choices */
   tokens: jsonb("tokens").notNull().default({}),
   /** SeaweedFS keys for logo assets */

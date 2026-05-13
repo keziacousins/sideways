@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { type Database, themes } from "@sideways/db";
 import type { Storage } from "@sideways/storage";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, type AuthUser } from "../middleware/auth.js";
+import { validateLogoUpload } from "../middleware/themeLogo.js";
+
+const MAX_NAME_LENGTH = 100;
 
 export function createThemeRoutes(db: Database, storage: Storage) {
   const router = new Hono();
@@ -27,7 +30,7 @@ export function createThemeRoutes(db: Database, storage: Storage) {
     return c.json(theme);
   });
 
-  /** Create a theme */
+  /** Create a theme — the caller becomes the owner. */
   router.post("/", async (c) => {
     const body = await c.req.json<{
       name: string;
@@ -35,29 +38,52 @@ export function createThemeRoutes(db: Database, storage: Storage) {
     }>();
 
     if (!body.name) return c.json({ error: "Name required" }, 400);
+    if (body.name.length > MAX_NAME_LENGTH) {
+      return c.json({ error: `Name too long (max ${MAX_NAME_LENGTH})` }, 400);
+    }
 
+    const user = c.get("user") as AuthUser;
     const [theme] = await db
       .insert(themes)
       .values({
         name: body.name,
         tokens: body.tokens || {},
+        createdBy: user.id,
       })
       .returning();
 
     return c.json(theme, 201);
   });
 
-  /** Update a theme */
+  /**
+   * Mutating routes (PUT/DELETE/logo upload) require the caller to be the
+   * theme's owner. Themes with no owner (pre-migration rows) are treated as
+   * immutable; an admin can re-assign them by setting createdBy directly.
+   */
+  function requireOwnership(existing: { createdBy: string | null }, user: AuthUser): boolean {
+    return existing.createdBy !== null && existing.createdBy === user.id;
+  }
+
+  /** Update a theme — owner only */
   router.put("/:id", async (c) => {
     const existing = await db.query.themes.findFirst({
       where: eq(themes.id, c.req.param("id")),
     });
     if (!existing) return c.json({ error: "Theme not found" }, 404);
 
+    const user = c.get("user") as AuthUser;
+    if (!requireOwnership(existing, user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
     const body = await c.req.json<{
       name?: string;
       tokens?: Record<string, any>;
     }>();
+
+    if (body.name && body.name.length > MAX_NAME_LENGTH) {
+      return c.json({ error: `Name too long (max ${MAX_NAME_LENGTH})` }, 400);
+    }
 
     const [updated] = await db
       .update(themes)
@@ -72,31 +98,43 @@ export function createThemeRoutes(db: Database, storage: Storage) {
     return c.json(updated);
   });
 
-  /** Delete a theme */
+  /** Delete a theme — owner only */
   router.delete("/:id", async (c) => {
     const existing = await db.query.themes.findFirst({
       where: eq(themes.id, c.req.param("id")),
     });
     if (!existing) return c.json({ error: "Theme not found" }, 404);
 
+    const user = c.get("user") as AuthUser;
+    if (!requireOwnership(existing, user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
     await db.delete(themes).where(eq(themes.id, existing.id));
     return c.json({ deleted: true });
   });
 
-  /** Upload a logo for a theme */
+  /** Upload a logo for a theme — owner only, validated content */
   router.post("/:id/logo", async (c) => {
     const existing = await db.query.themes.findFirst({
       where: eq(themes.id, c.req.param("id")),
     });
     if (!existing) return c.json({ error: "Theme not found" }, 404);
 
-    const contentType = c.req.header("content-type") || "image/png";
-    const body = await c.req.arrayBuffer();
+    const user = c.get("user") as AuthUser;
+    if (!requireOwnership(existing, user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
 
-    // Store in SeaweedFS
-    const ext = contentType.includes("svg") ? "svg" : contentType.includes("png") ? "png" : "jpg";
-    const filename = `theme-${existing.id}-logo.${ext}`;
-    const result = await storage.upload(`/themes/${filename}`, Buffer.from(body), contentType);
+    const body = await c.req.arrayBuffer();
+    const validation = validateLogoUpload(body);
+    if ("error" in validation) {
+      return c.json({ error: validation.error }, 400);
+    }
+    const { bytes, mimeType, extension } = validation;
+
+    const filename = `theme-${existing.id}-logo.${extension}`;
+    const result = await storage.upload(`/themes/${filename}`, Buffer.from(bytes), mimeType);
     const storageKey = result.path;
 
     // Build public URL
@@ -128,11 +166,21 @@ export function createThemeRoutes(db: Database, storage: Storage) {
     try {
       const res = await storage.download(theme.logoAssets[0]);
       const ext = theme.logoAssets[0].split(".").pop() || "png";
-      const mimeTypes: Record<string, string> = { svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg" };
+      const mimeTypes: Record<string, string> = {
+        svg: "image/svg+xml",
+        png: "image/png",
+        jpg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+      };
 
       return new Response(res.body, {
         headers: {
           "Content-Type": mimeTypes[ext] || "image/png",
+          // Force SVG (and anything else) to render in <img>, not inline.
+          // CSP would do the same; this is belt-and-braces.
+          "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; sandbox",
+          "X-Content-Type-Options": "nosniff",
           "Cache-Control": "public, max-age=86400",
         },
       });
