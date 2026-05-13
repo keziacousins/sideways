@@ -45,6 +45,16 @@ selfservice:
                 response:
                   ignore: true
                 can_interrupt: false
+                # Shared secret authenticating Kratos → API. The literal value
+                # below is overridden at runtime via the
+                # SELFSERVICE_FLOWS_REGISTRATION_AFTER_PASSWORD_HOOKS_0_CONFIG_AUTH_CONFIG_VALUE
+                # env var (see infra/compose.yml).
+                auth:
+                  type: api_key
+                  config:
+                    in: header
+                    name: Authorization
+                    value: Bearer change-me-kratos-webhook-secret
 
     login:
       ui_url: http://localhost:4000/auth/login

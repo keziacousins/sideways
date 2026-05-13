@@ -34,6 +34,14 @@ export const env = {
   apiAudience: process.env.API_AUDIENCE || "sideways-api",
 
   /**
+   * Shared secret authenticating Kratos → /api/auth/hooks/registration.
+   * Kratos sends this in the Authorization header (configured in compose.yml).
+   * Required in production; the dev default is intentionally insecure so a
+   * missing secret fails loudly.
+   */
+  kratosWebhookSecret: process.env.KRATOS_WEBHOOK_SECRET || "",
+
+  /**
    * Additional CORS origins beyond the public/dev defaults.
    * Comma-separated list of exact origins (scheme + host [+ port], no path).
    * e.g. CORS_ORIGINS="https://docs.example.com,https://staging.example.com"

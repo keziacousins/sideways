@@ -1,9 +1,19 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
+import { Buffer } from "node:buffer";
+import { timingSafeEqual as nodeTimingSafeEqual } from "node:crypto";
 import { type Database, users } from "@sideways/db";
 import { env } from "../env.js";
 import type { AuthUser } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+
+/** Constant-time string compare to avoid leaking byte-by-byte match info. */
+function timingSafeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return nodeTimingSafeEqual(aBuf, bBuf);
+}
 
 const HYDRA_ADMIN = env.hydraAdminUrl;
 const KRATOS_PUBLIC = env.kratosPublicUrl;
@@ -160,6 +170,18 @@ export function createAuthRoutes(db: Database) {
   // ── Kratos webhook ───────────────────────────────────────────────────
 
   router.post("/hooks/registration", async (c) => {
+    // The /api/auth/* prefix is on the public allowlist, so this route must
+    // authenticate itself against a shared secret. Kratos is configured to
+    // send Authorization: Bearer <KRATOS_WEBHOOK_SECRET>.
+    if (!env.kratosWebhookSecret) {
+      return c.json({ error: "KRATOS_WEBHOOK_SECRET not configured" }, 500);
+    }
+    const supplied = c.req.header("authorization");
+    const expected = `Bearer ${env.kratosWebhookSecret}`;
+    if (!supplied || !timingSafeEqual(supplied, expected)) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
     const body = await c.req.json<{
       identity_id: string;
       email: string;
