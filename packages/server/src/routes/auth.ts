@@ -285,8 +285,27 @@ export function createAuthRoutes(db: Database) {
             });
 
             if (existingByEmail) {
+              // Only link the Kratos subject when the row has no subject yet
+              // — the legitimate "registration webhook hasn't fired" race.
+              // Refusing to rebind an already-linked account prevents a
+              // second Kratos identity (e.g. after a delete+recreate, or
+              // any future config that allows duplicate emails) from
+              // silently taking over the existing Sideways account.
+              if (existingByEmail.hydraSubject && existingByEmail.hydraSubject !== subject) {
+                console.error(
+                  "[consent] Refusing to rebind existing user",
+                  { userId: existingByEmail.id, existing: existingByEmail.hydraSubject, attempted: subject },
+                );
+                return c.text(
+                  "An account with this email is already linked to a different identity. " +
+                  "Contact an administrator to resolve.",
+                  409,
+                );
+              }
+              // Set the subject; preserve the existing name (Kratos traits
+              // are user-mutable and not trusted to overwrite display data).
               await db.update(users)
-                .set({ hydraSubject: subject, name: identity.traits.name || existingByEmail.name })
+                .set({ hydraSubject: subject })
                 .where(eq(users.id, existingByEmail.id));
               user = { ...existingByEmail, hydraSubject: subject };
             } else {
