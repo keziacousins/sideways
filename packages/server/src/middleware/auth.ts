@@ -21,6 +21,29 @@ declare module "hono" {
   }
 }
 
+/** Names a header-supplied actor cannot use — avoid impersonating built-ins. */
+const RESERVED_ACTOR_NAMES = new Set([
+  "system",
+  "sideways",
+  "sideways system",
+  "admin",
+  "administrator",
+  "root",
+  "anonymous",
+]);
+
+/**
+ * Normalise and validate an actor name supplied via the X-Sideways-Actor
+ * header. Returns the cleaned name, or null if it's unusable (empty after
+ * stripping, too long, control characters, or on the reserved list).
+ */
+function sanitiseActorName(raw: string): string | null {
+  const stripped = raw.replace(/[\x00-\x1f\x7f]/g, "").trim();
+  if (!stripped || stripped.length > 50) return null;
+  if (RESERVED_ACTOR_NAMES.has(stripped.toLowerCase())) return null;
+  return stripped;
+}
+
 /** Cached JWKS fetcher — validates JWT signatures against Hydra's public keys */
 const JWKS = createRemoteJWKSet(
   new URL(`${env.hydraPublicUrl}/.well-known/jwks.json`),
@@ -50,11 +73,19 @@ export function authMiddleware(db: Database) {
       // API key path
       if (token.startsWith("sk-")) {
         const user = await resolveApiKey(db, token);
-        // X-Sideways-Actor header overrides display name (e.g. CLI --as flag)
+        // X-Sideways-Actor header overrides the actor display name (e.g.
+        // CLI --as flag). Restricted to API keys that were created with a
+        // stored actorName — i.e. keys explicitly marked as agent keys.
+        // This keeps the "agent identity" affordance for the CLI while
+        // preventing an arbitrary key holder from spoofing reserved names
+        // like "System" in comments and notifications.
         const actorOverride = c.req.header("X-Sideways-Actor");
-        if (user && actorOverride) {
-          user.actorName = actorOverride;
-          user.displayName = `${actorOverride} via ${user.name}`;
+        if (user && user.actorName && actorOverride) {
+          const cleaned = sanitiseActorName(actorOverride);
+          if (cleaned) {
+            user.actorName = cleaned;
+            user.displayName = `${cleaned} via ${user.name}`;
+          }
         }
         c.set("user", user);
         return next();
