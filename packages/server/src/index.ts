@@ -46,16 +46,35 @@ app.use("*", requestLogMiddleware);
 app.use("*", authMiddleware(db));
 
 
-const PUBLIC_API_PATHS = [
-  "/api/auth/",        // login, register, token exchange
+/**
+ * Routes that are intentionally reachable without a JWT/API-key Bearer.
+ * Listed explicitly (rather than by prefix) so any new auth-adjacent route
+ * defaults to requiring authentication. Each one either:
+ *   - has its own authentication (the Kratos webhook checks a shared secret),
+ *   - is a redirect target for an OAuth challenge from Hydra,
+ *   - or accepts OAuth client credentials in the body.
+ */
+const PUBLIC_API_PATHS = new Set([
+  "/api/auth/login",                  // Kratos login form (POST) + Hydra login challenge (GET)
+  "/api/auth/register",               // Kratos registration submit
+  "/api/auth/hooks/registration",     // Kratos → API webhook (own shared-secret auth)
+  "/api/auth/consent",                // Hydra consent challenge redirect target
+  "/api/auth/logout",                 // Hydra logout challenge redirect target
+  "/api/auth/authorize",              // OAuth authorize redirect builder
+  "/api/auth/token",                  // OAuth token exchange (client credentials)
+]);
+
+// Prefix-matched public surfaces (e.g. the MCP transport and invite tokens
+// which encode auth in the token/path itself).
+const PUBLIC_API_PREFIXES = [
   "/api/mcp",          // MCP handles its own auth via API key
   "/api/invite/",      // invite metadata (GET is public, POST checks auth internally)
 ];
 
 app.use("/api/*", async (c, next) => {
   const path = c.req.path;
-  // Allow public paths through
-  if (PUBLIC_API_PATHS.some(p => path.startsWith(p))) return next();
+  if (PUBLIC_API_PATHS.has(path)) return next();
+  if (PUBLIC_API_PREFIXES.some((p) => path.startsWith(p))) return next();
   // Allow GET requests for read endpoints (visibility middleware handles access)
   if (c.req.method === "GET") return next();
   // All other API requests require authentication
