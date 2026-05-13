@@ -26,6 +26,14 @@ export const env = {
     process.env.WEASYPRINT_URL || "http://localhost:5001",
 
   /**
+   * Required audience claim on JWT access tokens. The consent route forces
+   * this into grant_access_token_audience and the auth middleware rejects
+   * tokens that don't carry it. Override only if you've reconfigured the
+   * Hydra client audience to something else.
+   */
+  apiAudience: process.env.API_AUDIENCE || "sideways-api",
+
+  /**
    * Additional CORS origins beyond the public/dev defaults.
    * Comma-separated list of exact origins (scheme + host [+ port], no path).
    * e.g. CORS_ORIGINS="https://docs.example.com,https://staging.example.com"

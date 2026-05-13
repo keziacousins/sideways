@@ -284,15 +284,23 @@ export function createAuthRoutes(db: Database) {
         }
       }
 
-      // Inject claims — these go into the JWT access token
+      // Inject claims — these go into the JWT access token.
+      // Force the Sideways API audience so the middleware's audience check
+      // accepts the token; intersect with whatever the client requested so
+      // we don't silently grant access to audiences we don't know about.
+      const requestedAudience: string[] =
+        consentRequest.requested_access_token_audience || [];
+      const grantedAudience = Array.from(
+        new Set<string>([env.apiAudience, ...requestedAudience]),
+      );
+
       const completion = await hydraAdmin(
         `/admin/oauth2/auth/requests/consent/accept?consent_challenge=${challenge}`,
         {
           method: "PUT",
           body: JSON.stringify({
             grant_scope: consentRequest.requested_scope,
-            grant_access_token_audience:
-              consentRequest.requested_access_token_audience,
+            grant_access_token_audience: grantedAudience,
             remember: true,
             remember_for: 3600,
             session: {

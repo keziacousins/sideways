@@ -64,6 +64,7 @@ export function authMiddleware(db: Database) {
       try {
         const { payload } = await jwtVerify(token, JWKS, {
           issuer: env.hydraIssuerUrl,
+          audience: env.apiAudience,
         });
 
         // Custom claims injected at consent
