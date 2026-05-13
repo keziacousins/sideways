@@ -1,6 +1,6 @@
 {
   "name": "@sideways/mcp",
-  "version": "1.0.25",
+  "version": "1.0.26",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {

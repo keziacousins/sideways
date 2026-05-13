@@ -73,8 +73,22 @@ app.get("/health", (c) => c.json({ status: "ok", version: rootPkg.version }));
 // Hydra public proxy — browser hits localhost, we forward to Hydra.
 // Preserves cookies/CSRF because the browser stays on localhost.
 // In production, nginx handles this instead.
+//
+// Allowlist of paths we proxy. Anything else under /oauth2/ returns 404
+// so future Hydra endpoints aren't automatically Internet-reachable.
+const OAUTH_PROXY_ALLOW = new Set([
+  "/oauth2/auth",
+  "/oauth2/token",
+  "/oauth2/revoke",
+  "/oauth2/userinfo",
+  "/oauth2/sessions/logout",
+]);
+
 app.all("/oauth2/*", async (c) => {
   const path = c.req.path;
+  if (!OAUTH_PROXY_ALLOW.has(path)) {
+    return c.json({ error: "Not found" }, 404);
+  }
   const url = new URL(path, env.hydraPublicUrl);
   url.search = new URL(c.req.url).search;
 
