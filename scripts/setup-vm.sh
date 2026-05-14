@@ -15,25 +15,34 @@ echo "==> Installing Node.js 24, pnpm, and nginx on $VM..."
 ssh "$VM" "APP_DIR='$APP_DIR' SERVICE_USER='$SERVICE_USER' sudo --preserve-env=APP_DIR,SERVICE_USER bash -s" <<'REMOTE'
 set -euo pipefail
 
-# Node.js 24 via NodeSource
-if ! command -v node &>/dev/null; then
-  curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+# Node.js 24 via NodeSource. Reinstall if the major version is below 24 —
+# package.json's "engines" field requires it.
+DESIRED_NODE_MAJOR=24
+CURRENT_NODE_MAJOR=0
+if command -v node &>/dev/null; then
+  CURRENT_NODE_MAJOR=$(node --version | sed -E 's/^v([0-9]+).*/\1/')
+fi
+
+if [ "$CURRENT_NODE_MAJOR" -lt "$DESIRED_NODE_MAJOR" ]; then
+  echo "Installing Node.js $DESIRED_NODE_MAJOR (was: ${CURRENT_NODE_MAJOR:-none})..."
+  curl -fsSL "https://deb.nodesource.com/setup_${DESIRED_NODE_MAJOR}.x" | bash -
   apt-get install -y nodejs
   echo "Node $(node --version) installed"
 else
-  echo "Node $(node --version) already installed"
+  echo "Node $(node --version) is already at or above $DESIRED_NODE_MAJOR"
 fi
 
-# pnpm
-if ! command -v pnpm &>/dev/null; then
+# pnpm — reinstall after a Node bump so the shim points at the new node.
+if ! command -v pnpm &>/dev/null || [ "$CURRENT_NODE_MAJOR" -lt "$DESIRED_NODE_MAJOR" ]; then
   npm install -g pnpm
   echo "pnpm $(pnpm --version) installed"
 else
   echo "pnpm $(pnpm --version) already installed"
 fi
 
-# tsx (for running TypeScript directly in production)
-if ! command -v tsx &>/dev/null; then
+# tsx (for running TypeScript directly in production). Same logic: reinstall
+# after a Node bump.
+if ! command -v tsx &>/dev/null || [ "$CURRENT_NODE_MAJOR" -lt "$DESIRED_NODE_MAJOR" ]; then
   npm install -g tsx
   echo "tsx installed"
 fi

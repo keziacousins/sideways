@@ -80,11 +80,33 @@ rsync -az --delete \
 # ── Sync infra too ───────────────────────────────────────────────────
 sync_infra
 
-# ── Build on VM ──────────────────────────────────────────────────────
-
 # ── Create app .env if missing ───────────────────────────────────────
 
 ssh $VM "test -f $APP_DIR/.env || cp $APP_DIR/.env.example $APP_DIR/.env"
+
+# ── Validate .env files have every key from .env.example ─────────────
+#
+# Catches the case where a new required secret/var lands on main but the
+# VM's .env wasn't updated — failing here is much friendlier than a
+# cryptic interpolation error inside docker compose three steps later.
+
+check_env_keys() {
+  local label="$1" example_path="$2" actual_path="$3"
+  local example_keys actual_keys missing
+  example_keys=$(ssh $VM "grep -E '^[A-Z_][A-Z0-9_]*=' $example_path | cut -d= -f1 | sort -u")
+  actual_keys=$(ssh $VM "grep -E '^[A-Z_][A-Z0-9_]*=' $actual_path  | cut -d= -f1 | sort -u")
+  missing=$(comm -23 <(echo "$example_keys") <(echo "$actual_keys"))
+  if [ -n "$missing" ]; then
+    echo "==> Missing keys in $label ($actual_path):"
+    echo "$missing" | sed 's/^/    - /'
+    echo "    Run ./scripts/gen-secrets.sh for fresh secret values."
+    exit 1
+  fi
+}
+
+echo "==> Validating env files..."
+check_env_keys "infra .env"  "$INFRA_DIR/.env.example" "$INFRA_DIR/.env"
+check_env_keys "app .env"    "$APP_DIR/.env.example"   "$APP_DIR/.env"
 
 # ── Build on VM ──────────────────────────────────────────────────────
 
@@ -112,10 +134,11 @@ ssh $VM "sudo cp $APP_DIR/infra/nginx.conf /etc/nginx/sites-available/sideways &
   sudo rm -f /etc/nginx/sites-enabled/default && \
   sudo nginx -t && sudo systemctl reload nginx"
 
-# ── Restart Docker services (picks up .env changes) ──────────────────
+# ── Restart Docker services (rebuilds local images so kratos/hydra
+#    config changes baked via Dockerfile actually land) ───────────────
 
 echo "==> Restarting Docker services..."
-ssh $VM "cd $INFRA_DIR && docker compose up -d"
+ssh $VM "cd $INFRA_DIR && docker compose up -d --build"
 
 # ── Restart app services ─────────────────────────────────────────────
 
