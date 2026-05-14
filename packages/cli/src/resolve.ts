@@ -17,7 +17,7 @@
  * have a local file yet). Other commands must resolve via path.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { resolve, relative, isAbsolute, sep } from "node:path";
 import type { ProjectConfig } from "./config.js";
 import { slugFromFilename } from "./sync.js";
@@ -132,7 +132,7 @@ function walkForSlug(
 ): void {
   let entries: string[];
   try {
-    entries = require("node:fs").readdirSync(dir);
+    entries = readdirSync(dir);
   } catch {
     return;
   }
@@ -141,7 +141,7 @@ function walkForSlug(
     const full = resolve(dir, entry);
     let stat;
     try {
-      stat = require("node:fs").statSync(full);
+      stat = statSync(full);
     } catch {
       continue;
     }
