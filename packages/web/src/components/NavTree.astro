@@ -1,0 +1,88 @@
+---
+/**
+ * Recursive sidebar nav renderer. Handles three NavItem shapes:
+ *
+ *   section    — top-level grouping (collapsible, non-clickable)
+ *   directory  — path-component header (collapsible; clickable if it has
+ *                a backing `index.md` doc surfaced as `docSlug`)
+ *   doc        — a leaf document link
+ *
+ * Used by Sidebar.astro and recursively by itself.
+ */
+import type { NavItem } from "../lib/nav.ts";
+import Self from "./NavTree.astro";
+
+interface Props {
+  spaceSlug: string;
+  items: NavItem[];
+  activeSlug?: string;
+  /** Indentation depth — used to pick a CSS class for left padding. */
+  depth?: number;
+}
+
+const { spaceSlug, items, activeSlug, depth = 0 } = Astro.props;
+
+function containsActive(item: NavItem, slug?: string): boolean {
+  if (!slug) return false;
+  if (item.type === "doc" && item.slug === slug) return true;
+  if (item.type === "directory") {
+    if (item.docSlug === slug) return true;
+    return item.children.some(c => containsActive(c, slug));
+  }
+  if (item.type === "section") {
+    return item.children.some(c => containsActive(c, slug));
+  }
+  return false;
+}
+
+function isActive(item: NavItem, slug?: string): boolean {
+  if (!slug) return false;
+  if (item.type === "doc") return item.slug === slug;
+  if (item.type === "directory") return item.docSlug === slug;
+  return false;
+}
+---
+
+<ul class:list={["nav-children", { "nav-tree-root": depth === 0 }]}>
+  {items.map((item) => (
+    <li class:list={[
+      "nav-item",
+      { active: isActive(item, activeSlug), unread: (item as any).unread },
+    ]}>
+      {item.type === "section" && (
+        <details open>
+          <summary class="nav-section">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+            <span>{item.title}</span>
+          </summary>
+          <Self spaceSlug={spaceSlug} items={item.children} activeSlug={activeSlug} depth={depth + 1} />
+        </details>
+      )}
+
+      {item.type === "directory" && (
+        <details open={containsActive(item, activeSlug)}>
+          <summary class:list={["nav-directory", `nav-depth-${Math.min(depth + 1, 4)}`]}>
+            <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+            {item.docSlug ? (
+              <a href={`/s/${spaceSlug}/${item.docSlug}`} class="nav-link nav-link-inline">{item.name}</a>
+            ) : (
+              <span class="nav-directory-label">{item.name}</span>
+            )}
+          </summary>
+          <Self spaceSlug={spaceSlug} items={item.children} activeSlug={activeSlug} depth={depth + 1} />
+        </details>
+      )}
+
+      {item.type === "doc" && (
+        <a
+          href={`/s/${spaceSlug}/${item.slug}`}
+          class:list={["nav-link", `nav-depth-${Math.min(depth, 4)}`]}
+        >{item.title}</a>
+      )}
+    </li>
+  ))}
+</ul>

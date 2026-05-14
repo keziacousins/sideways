@@ -1,6 +1,34 @@
 import { defineMiddleware } from "astro:middleware";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+const PUBLIC_URL = import.meta.env.PUBLIC_URL || "http://localhost:4000";
+
+const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Proxy-aware CSRF check. Replaces Astro's built-in `checkOrigin`, which
+ * compares against the request's Host header — wrong behind an HTTPS-
+ * terminating reverse proxy where the inner connection is http://localhost.
+ *
+ * Rules:
+ *   - GET/HEAD/OPTIONS: skip (no state change).
+ *   - State-changing: require Origin to match PUBLIC_URL exactly. Missing
+ *     or mismatched Origin → 403.
+ *
+ * SameSite=Lax on the session cookie already blocks most cross-site POSTs;
+ * this is defense-in-depth for browser primitives that bypass SameSite.
+ */
+function checkOrigin(request: Request): Response | null {
+  if (!STATE_CHANGING_METHODS.has(request.method)) return null;
+  const origin = request.headers.get("origin");
+  if (origin !== PUBLIC_URL) {
+    return new Response("Cross-site request forbidden", {
+      status: 403,
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+  return null;
+}
 
 /**
  * In-flight refresh deduplication.
@@ -41,6 +69,9 @@ async function doRefresh(refreshToken: string): Promise<{ access_token: string; 
  * only one actual refresh call is made. The rest wait for the same result.
  */
 export const onRequest = defineMiddleware(async (context, next) => {
+  const csrf = checkOrigin(context.request);
+  if (csrf) return csrf;
+
   const { session } = context;
 
   let accessToken = await session?.get("access_token");

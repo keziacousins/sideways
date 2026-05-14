@@ -65,6 +65,21 @@ function contentHash(content: string): string {
   return createHash("sha256").update(content).digest("hex").slice(0, 16);
 }
 
+/** Resolve a section slug to its id within a space. Falls back to the space's
+ *  `default` section if no slug is provided. Returns null if the named section
+ *  doesn't exist (caller decides whether to error or fall back). */
+async function resolveSectionId(
+  db: Database,
+  spaceId: string,
+  sectionSlug: string | undefined,
+): Promise<string | null> {
+  const slug = sectionSlug ?? "default";
+  const section = await db.query.sections.findFirst({
+    where: and(eq(sections.spaceId, spaceId), eq(sections.slug, slug)),
+  });
+  return section?.id ?? null;
+}
+
 export function createDocumentRoutes(db: Database, storage: Storage) {
   const router = new Hono();
 
@@ -149,6 +164,14 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       orderBy: [documents.position, documents.title],
     });
 
+    // Pre-fetch all sections in the space so we can resolve sectionId → slug
+    // without an N+1 round trip.
+    const allSections = await db.query.sections.findMany({
+      where: eq(sections.spaceId, space.id),
+      columns: { id: true, slug: true },
+    });
+    const sectionSlugById = new Map(allSections.map(s => [s.id, s.slug]));
+
     const syncInfo = await Promise.all(
       docs.map(async (doc) => {
         const latest = await db.query.documentVersions.findFirst({
@@ -159,6 +182,8 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         return {
           slug: doc.slug,
           title: doc.title,
+          sectionSlug: sectionSlugById.get(doc.sectionId) ?? "default",
+          path: doc.path,
           version: latest?.version ?? 0,
           contentHash: latest?.contentHash ?? "",
           updatedAt: doc.updatedAt.toISOString(),
@@ -309,6 +334,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       position?: number;
       sectionSlug?: string;
       parentSlug?: string;
+      path?: string;
       updatedAt?: string;
     }>();
 
@@ -346,13 +372,11 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       return c.json({ error: "Forbidden" }, 403);
     }
 
-    // Resolve section slug to ID if provided
+    // Resolve section slug to ID if provided. For updates, leave undefined when
+    // not supplied so the existing sectionId is preserved.
     let sectionId: string | null | undefined = undefined;
     if (body.sectionSlug) {
-      const section = await db.query.sections.findFirst({
-        where: and(eq(sections.spaceId, space.id), eq(sections.slug, body.sectionSlug)),
-      });
-      if (section) sectionId = section.id;
+      sectionId = await resolveSectionId(db, space.id, body.sectionSlug);
     }
 
     // Resolve parent doc slug to ID if provided
@@ -383,6 +407,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       };
       if (sectionId !== undefined) updates.sectionId = sectionId;
       if (parentId !== undefined) updates.parentId = parentId;
+      if (body.path !== undefined) updates.path = body.path;
 
       const [updated] = await db
         .update(documents)
@@ -438,15 +463,29 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       return c.json(updated, 200);
     }
 
+    // Every doc must have a section. If no sectionSlug was provided (or it
+    // didn't resolve), fall back to the space's `default` section.
+    const finalSectionId =
+      sectionId ?? (await resolveSectionId(db, space.id, undefined));
+    if (!finalSectionId) {
+      return c.json(
+        { error: "Space is missing its default section (data error)" },
+        500,
+      );
+    }
+
+    const finalPath = body.path ?? `${slug}.md`;
+
     const [doc] = await db
       .insert(documents)
       .values({
         spaceId: space.id,
         slug,
+        path: finalPath,
+        sectionId: finalSectionId,
         title: derivedTitle || slug,
         tags: body.tags ?? [],
         position: body.position ?? 0,
-        ...(sectionId ? { sectionId } : {}),
         ...(parentId ? { parentId } : {}),
       })
       .returning();
@@ -708,12 +747,27 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
     const content = latestVersion?.content || "";
 
+    // Duplicate keeps the source doc's section when copying within the same
+    // space; for cross-space copies, lands in the target space's default.
+    const dupSectionId =
+      targetSpaceId === space.id
+        ? doc.sectionId
+        : await resolveSectionId(db, targetSpaceId, undefined);
+    if (!dupSectionId) {
+      return c.json(
+        { error: "Target space is missing its default section (data error)" },
+        500,
+      );
+    }
+
     // Create the duplicate
     const [newDoc] = await db
       .insert(documents)
       .values({
         spaceId: targetSpaceId,
         slug: targetSlug,
+        path: `${targetSlug}.md`,
+        sectionId: dupSectionId,
         title: `${doc.title} (copy)`,
         tags: doc.tags,
         position: doc.position + 1,
