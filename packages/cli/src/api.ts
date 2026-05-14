@@ -237,6 +237,16 @@ export function createClient(baseUrl: string, actorName?: string) {
       });
     },
 
+    /** Idempotent upsert for a section. Server preserves fields not provided
+     *  in the body, so passing just `{ position }` is safe on existing
+     *  sections (won't overwrite a web-UI-set title). */
+    putSection(space: string, slug: string, body: { title?: string; position?: number }) {
+      return request<Section>(`/api/spaces/${space}/sections/${slug}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+    },
+
     getVersions(space: string, slug: string) {
       return request<Array<{ version: number; contentHash: string; createdAt: string; createdBy: string }>>(
         `/api/documents/${space}/${slug}/versions`,

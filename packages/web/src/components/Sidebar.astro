@@ -1,11 +1,6 @@
 ---
-interface NavItem {
-  slug: string;
-  title: string;
-  type: "section" | "doc";
-  children?: NavItem[];
-  active?: boolean;
-}
+import type { NavItem } from "../lib/nav.ts";
+import NavTree from "./NavTree.astro";
 
 interface Props {
   spaceSlug: string;
@@ -15,13 +10,6 @@ interface Props {
 }
 
 const { spaceSlug, spaceName, items, activeSlug } = Astro.props;
-
-/** Check if a nav item or any of its descendants contains the active slug */
-function containsActive(item: NavItem, slug?: string): boolean {
-  if (!slug) return false;
-  if (item.slug === slug) return true;
-  return item.children?.some(c => containsActive(c, slug)) ?? false;
-}
 ---
 
 <nav class="sidebar-nav">
@@ -29,109 +17,10 @@ function containsActive(item: NavItem, slug?: string): boolean {
     <a href={`/s/${spaceSlug}`} class="sidebar-space-name">{spaceName}</a>
   </div>
 
-  <ul class="nav-tree">
-    {items.map((item) => (
-      <li class:list={["nav-item", { active: item.slug === activeSlug, unread: item.unread }]}>
-        {item.type === "section" ? (
-          /* Section: collapsible, not clickable */
-          <details open>
-            <summary class="nav-section">
-              <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-              <span>{item.title}</span>
-            </summary>
-            {item.children && (
-              <ul class="nav-children">
-                {item.children.map((child) => (
-                  <li class:list={["nav-item", { active: child.slug === activeSlug, unread: child.unread }]}>
-                    {child.type === "section" ? (
-                      <details open>
-                        <summary class="nav-section nav-subsection">
-                          <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="9 18 15 12 9 6" />
-                          </svg>
-                          <span>{child.title}</span>
-                        </summary>
-                        {child.children && (
-                          <ul class="nav-children">
-                            {child.children.map((gc) => (
-                              <li class:list={["nav-item", { active: gc.slug === activeSlug, unread: gc.unread }]}>
-                                <a href={`/s/${spaceSlug}/${gc.slug}`} class="nav-link nav-link-deep">{gc.title}</a>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </details>
-                    ) : child.children?.length ? (
-                      /* Doc with children: clickable + collapsible */
-                      <details open={containsActive(child, activeSlug)}>
-                        <summary class="nav-doc-parent">
-                          <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="9 18 15 12 9 6" />
-                          </svg>
-                          <a href={`/s/${spaceSlug}/${child.slug}`} class="nav-link nav-link-inline">{child.title}</a>
-                        </summary>
-                        <ul class="nav-children">
-                          {child.children.map((gc) => (
-                            <li class:list={["nav-item", { active: gc.slug === activeSlug, unread: gc.unread }]}>
-                              {gc.children?.length ? (
-                                <details open={containsActive(gc, activeSlug)}>
-                                  <summary class="nav-doc-parent nav-doc-parent-deep">
-                                    <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                      <polyline points="9 18 15 12 9 6" />
-                                    </svg>
-                                    <a href={`/s/${spaceSlug}/${gc.slug}`} class="nav-link nav-link-inline">{gc.title}</a>
-                                  </summary>
-                                  <ul class="nav-children">
-                                    {gc.children.map((ggc) => (
-                                      <li class:list={["nav-item", { active: ggc.slug === activeSlug, unread: ggc.unread }]}>
-                                        <a href={`/s/${spaceSlug}/${ggc.slug}`} class="nav-link nav-link-deepest">{ggc.title}</a>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </details>
-                              ) : (
-                                <a href={`/s/${spaceSlug}/${gc.slug}`} class="nav-link nav-link-deep">{gc.title}</a>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : (
-                      <a href={`/s/${spaceSlug}/${child.slug}`} class="nav-link">{child.title}</a>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </details>
-        ) : item.children?.length ? (
-          /* Top-level doc with children: clickable + collapsible */
-          <details open={containsActive(item, activeSlug)}>
-            <summary class="nav-doc-parent nav-doc-parent-top">
-              <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-              <a href={`/s/${spaceSlug}/${item.slug}`} class="nav-link nav-link-inline">{item.title}</a>
-            </summary>
-            <ul class="nav-children">
-              {item.children.map((child) => (
-                <li class:list={["nav-item", { active: child.slug === activeSlug, unread: child.unread }]}>
-                  <a href={`/s/${spaceSlug}/${child.slug}`} class="nav-link">{child.title}</a>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : (
-          <a href={`/s/${spaceSlug}/${item.slug}`} class="nav-link nav-link-top">{item.title}</a>
-        )}
-      </li>
-    ))}
-  </ul>
+  <NavTree spaceSlug={spaceSlug} items={items} activeSlug={activeSlug} />
 </nav>
 
-<style>
+<style is:global>
   .sidebar-nav {
     font-size: var(--sw-text-sm);
   }
@@ -150,14 +39,14 @@ function containsActive(item: NavItem, slug?: string): boolean {
     text-decoration: none;
   }
 
-  .sidebar-space-name:hover {
-    color: var(--sw-accent);
-  }
+  .sidebar-space-name:hover { color: var(--sw-accent); }
 
-  .nav-tree {
+  .nav-children {
     list-style: none;
     padding: 0;
+    margin: 0;
   }
+  .nav-tree-root { /* top-level <ul> hook for future use */ }
 
   .nav-item {
     margin: 0;
@@ -165,7 +54,7 @@ function containsActive(item: NavItem, slug?: string): boolean {
   }
 
   .nav-item.unread > .nav-link::after,
-  .nav-item.unread > details > .nav-doc-parent .nav-link-inline::after {
+  .nav-item.unread > details > .nav-directory .nav-link-inline::after {
     content: "●";
     font-size: 6px;
     color: var(--sw-accent);
@@ -188,105 +77,70 @@ function containsActive(item: NavItem, slug?: string): boolean {
     list-style: none;
     user-select: none;
   }
+  .nav-item:first-child > details > .nav-section { margin-top: 0; }
+  .nav-section:hover { color: var(--sw-text-primary); }
+  .nav-section::-webkit-details-marker { display: none; }
 
-  .nav-item:first-child > details > .nav-section {
-    margin-top: 0;
+  .nav-directory {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
   }
-
-  .nav-section:hover {
-    color: var(--sw-text-primary);
-  }
-
-  .nav-section::-webkit-details-marker {
-    display: none;
+  .nav-directory::-webkit-details-marker { display: none; }
+  .nav-directory-label {
+    color: var(--sw-text-secondary);
+    font-weight: 500;
   }
 
   .chevron {
     transition: transform var(--sw-duration) var(--sw-ease);
     flex-shrink: 0;
   }
-
-  details[open] > .nav-section .chevron {
+  details[open] > .nav-section .chevron,
+  details[open] > .nav-directory .chevron {
     transform: rotate(90deg);
-  }
-
-  .nav-children {
-    list-style: none;
-    padding: 0;
   }
 
   .nav-link {
     display: block;
-    padding: 0.35rem 1.25rem 0.35rem 2.6rem;
+    padding: 0.35rem 1.25rem;
     color: var(--sw-text-secondary);
     text-decoration: none;
     border-left: 2px solid transparent;
     transition: all var(--sw-duration-fast) var(--sw-ease);
   }
-
-  .nav-link:hover {
-    color: var(--sw-text-primary);
-    background: var(--sw-ink-light);
-  }
-
-  .nav-subsection {
-    padding-left: 2.6rem;
-    font-size: 0.65rem;
-  }
-
-  .nav-doc-parent {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0 0 0 2.1rem;
-    cursor: pointer;
-    list-style: none;
-  }
-
-  .nav-doc-parent::-webkit-details-marker {
-    display: none;
-  }
-
-  .nav-doc-parent-top {
-    padding-left: 0.85rem;
-  }
-
+  .nav-link:hover { color: var(--sw-text-primary); background: var(--sw-ink-light); }
   .nav-link-inline {
-    display: block;
-    padding: 0.35rem 0.4rem;
+    display: inline-block;
+    padding: 0.1rem 0.25rem;
     color: var(--sw-text-secondary);
     text-decoration: none;
     transition: color var(--sw-duration-fast) var(--sw-ease);
   }
+  .nav-link-inline:hover { color: var(--sw-text-primary); }
 
-  .nav-link-inline:hover {
-    color: var(--sw-text-primary);
-  }
+  /* Indentation: each depth adds ~1.25rem. Capped at 4 levels of explicit
+     styling; deeper still works, just stops getting more indented. */
+  .nav-depth-0 { padding-left: 1.25rem; }
+  .nav-depth-1 { padding-left: 2.5rem; }
+  .nav-depth-2 { padding-left: 3.75rem; }
+  .nav-depth-3 { padding-left: 5rem; }
+  .nav-depth-4 { padding-left: 6.25rem; }
 
-  .nav-link-top {
-    padding-left: 1.25rem;
-  }
-
-  .nav-link-deep {
-    padding-left: 3.75rem;
-  }
-
-  .nav-doc-parent-deep {
-    padding-left: 3.25rem;
-  }
-
-  .nav-link-deepest {
-    padding-left: 4.75rem;
-  }
+  /* Directory header padding follows the same scale, slightly tighter. */
+  .nav-directory.nav-depth-1 { padding-left: 1.25rem; }
+  .nav-directory.nav-depth-2 { padding-left: 2.5rem; }
+  .nav-directory.nav-depth-3 { padding-left: 3.75rem; }
+  .nav-directory.nav-depth-4 { padding-left: 5rem; }
 
   .nav-item.active > .nav-link,
-  .nav-item.active > details > .nav-children > .nav-item.active > .nav-link {
+  .nav-item.active > details > .nav-directory .nav-link-inline {
     color: var(--sw-accent);
     border-left-color: var(--sw-accent);
     background: var(--sw-accent-glow);
-  }
-
-  .nav-item.active > details > .nav-doc-parent .nav-link-inline {
-    color: var(--sw-accent);
   }
 </style>

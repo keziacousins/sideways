@@ -442,11 +442,15 @@ program
         }
       }
 
-      // Create sections for all first-level directories
-      const sectionSlugs = new Set(files.map(f => f.sectionSlug).filter(Boolean) as string[]);
+      // Reconcile sections to match the order of `.sideways.yml`'s `sections:` map.
+      // YAML preserves insertion order on parse, so Object.keys gives us the
+      // user-intended display order. We upsert each non-`default` section
+      // with its index as `position`; `default` is server-managed and reserved.
       if (!opts.dryRun) {
-        for (const section of sectionSlugs) {
-          await client.createSection(space, section).catch(() => {});
+        const yamlSections = Object.keys(config.sections);
+        for (const [index, sectionSlug] of yamlSections.entries()) {
+          if (sectionSlug === "default") continue;
+          await client.putSection(space, sectionSlug, { position: index }).catch(() => {});
         }
       }
 
@@ -491,6 +495,17 @@ program
           else status = "unchanged";
         } else status = "unchanged";
 
+        // Drift detection: server has this slug at a stale path or in a
+        // different section than the local config places it. Content might
+        // be byte-identical, but we still need a PUT to align metadata.
+        if (status === "unchanged" && remote) {
+          const pathDrift = remote.path !== file.path;
+          const sectionDrift = remote.sectionSlug !== file.sectionSlug;
+          if (pathDrift || sectionDrift) {
+            status = "local-modified";
+          }
+        }
+
         if (status === "unchanged" || status === "remote-modified") continue;
         if (status === "conflict" && !opts.force) {
           console.log(`  conflict: ${file.relPath} (use --force to overwrite)`);
@@ -506,7 +521,7 @@ program
         const { clean } = extractComments(raw);
         const { frontmatter, content } = parseFrontmatter(clean);
         const tags = frontmatter.tags || [];
-        const body: Record<string, any> = { content, tags };
+        const body: Record<string, any> = { content, tags, path: file.path };
         if (frontmatter.title) body.title = frontmatter.title;
         if (file.sectionSlug) body.sectionSlug = file.sectionSlug;
         if (file.parentSlug) body.parentSlug = file.parentSlug;
@@ -646,6 +661,12 @@ program
         else status = "unchanged";
       } else status = "unchanged";
 
+      // Drift detection: surface stale server-side path/section as
+      // "local-modified" so the user sees it and a push will fix it.
+      if (status === "unchanged" && remote && (remote.path !== file.path || remote.sectionSlug !== file.sectionSlug)) {
+        status = "local-modified";
+      }
+
       if (status !== "unchanged") {
         show(status, file);
         hasChanges = true;
@@ -757,6 +778,11 @@ program
         else status = "unchanged";
       } else status = "unchanged";
 
+      // Drift detection: path or section on server doesn't match local config.
+      if (status === "unchanged" && remote && (remote.path !== file.path || remote.sectionSlug !== file.sectionSlug)) {
+        status = "local-modified";
+      }
+
       // Reconcile: if hashes differ but actual content matches, treat as unchanged
       if (opts.reconcile && remote && (status === "conflict" || status === "remote-modified" || status === "local-modified")) {
         const remoteDoc = await client.getDocument(space, file.slug);
@@ -841,11 +867,12 @@ program
 
     // Push local changes
     if (toPush.length > 0) {
-      // Create sections
+      // Reconcile section order from `.sideways.yml`. Same logic as `push`.
       if (!opts.dryRun) {
-        const sectionSlugs = new Set(toPush.map(p => p.file.sectionSlug).filter(Boolean) as string[]);
-        for (const section of sectionSlugs) {
-          await client.createSection(space, section).catch(() => {});
+        const yamlSections = Object.keys(config.sections);
+        for (const [index, sectionSlug] of yamlSections.entries()) {
+          if (sectionSlug === "default") continue;
+          await client.putSection(space, sectionSlug, { position: index }).catch(() => {});
         }
       }
 
@@ -860,7 +887,7 @@ program
         const { clean } = extractComments(raw);
         const { frontmatter, content } = parseFrontmatter(clean);
         const tags = frontmatter.tags || [];
-        const body: Record<string, any> = { content, tags };
+        const body: Record<string, any> = { content, tags, path: file.path };
         if (frontmatter.title) body.title = frontmatter.title;
         if (file.sectionSlug) body.sectionSlug = file.sectionSlug;
         if (file.parentSlug) body.parentSlug = file.parentSlug;

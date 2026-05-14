@@ -407,6 +407,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       };
       if (sectionId !== undefined) updates.sectionId = sectionId;
       if (parentId !== undefined) updates.parentId = parentId;
+      if (body.path !== undefined) updates.path = body.path;
 
       const [updated] = await db
         .update(documents)
