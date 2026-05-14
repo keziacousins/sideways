@@ -54,6 +54,40 @@ function buildDocItems(docs: Doc[], docsByParent: Map<string | null, Doc[]>): Na
   });
 }
 
+/**
+ * Apply sidebar visibility rules from the path-and-sections proposal:
+ *
+ *   1. If `default` is empty and other sections exist, hide `default`.
+ *      (The default section is a server-side invariant, not a user-visible
+ *      concept when there's somewhere else to put things.)
+ *   2. If only one section remains (after rule 1) and there are no other
+ *      top-level items, render its docs flat — no section header.
+ *
+ * Top-level docs (legacy rows without a sectionId — shouldn't exist after
+ * the path-and-sections migration, but handled defensively) always render
+ * above any section headers, unaffected by these rules.
+ */
+function applyVisibilityRules(items: NavItem[]): NavItem[] {
+  const sectionItems = items.filter(i => i.type === "section");
+  const topLevelDocs = items.filter(i => i.type !== "section");
+
+  let visibleSections = sectionItems;
+
+  // Rule 1
+  if (sectionItems.length > 1) {
+    visibleSections = sectionItems.filter(
+      s => !(s.slug === "default" && (!s.children || s.children.length === 0)),
+    );
+  }
+
+  // Rule 2
+  if (topLevelDocs.length === 0 && visibleSections.length === 1) {
+    return visibleSections[0].children ?? [];
+  }
+
+  return [...topLevelDocs, ...visibleSections];
+}
+
 export function buildNavTree(sections: Section[], documents: Doc[]): NavItem[] {
   const items: NavItem[] = [];
 
@@ -102,5 +136,5 @@ export function buildNavTree(sections: Section[], documents: Doc[]): NavItem[] {
     items.push({ slug: s.slug, title: s.title, type: "section", children });
   }
 
-  return items;
+  return applyVisibilityRules(items);
 }

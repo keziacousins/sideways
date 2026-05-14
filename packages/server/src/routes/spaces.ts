@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { eq, and, desc } from "drizzle-orm";
-import { type Database, spaces, sections, spaceMembers, spaceWatches, themes, users } from "@sideways/db";
+import { eq, and, desc, sql } from "drizzle-orm";
+import { type Database, spaces, sections, documents, spaceMembers, spaceWatches, themes, users } from "@sideways/db";
 import type { AuthUser } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { autoWatchSpace } from "../lib/notify.js";
@@ -234,6 +234,91 @@ export function createSpaceRoutes(db: Database) {
       })
       .returning();
     return c.json(section, 201);
+  });
+
+  /**
+   * Delete a section. Refuses if the section still has documents — caller
+   * must `/empty` it first. The `default` section is permanent and cannot
+   * be deleted under any circumstance.
+   */
+  router.delete("/:spaceSlug/sections/:sectionSlug", async (c) => {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("spaceSlug")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
+    const user = c.get("user") as AuthUser | null;
+    if (!await canWriteSpace(db, space.id, space.ownerId, user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const sectionSlug = c.req.param("sectionSlug");
+    if (sectionSlug === "default") {
+      return c.json({ error: "The `default` section is permanent" }, 400);
+    }
+
+    const section = await db.query.sections.findFirst({
+      where: and(eq(sections.spaceId, space.id), eq(sections.slug, sectionSlug)),
+    });
+    if (!section) return c.json({ error: "Section not found" }, 404);
+
+    const [{ count: docCount }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(documents)
+      .where(eq(documents.sectionId, section.id));
+
+    if (docCount > 0) {
+      return c.json(
+        {
+          error: `Section is not empty (${docCount} document${docCount === 1 ? "" : "s"}). POST .../empty first to move them to the default section.`,
+        },
+        409,
+      );
+    }
+
+    await db.delete(sections).where(eq(sections.id, section.id));
+    return c.json({ deleted: true });
+  });
+
+  /**
+   * Move every document in a section into the space's `default` section.
+   * Separate from delete: emptying is a content move; delete is metadata.
+   */
+  router.post("/:spaceSlug/sections/:sectionSlug/empty", async (c) => {
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("spaceSlug")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
+    const user = c.get("user") as AuthUser | null;
+    if (!await canWriteSpace(db, space.id, space.ownerId, user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const sectionSlug = c.req.param("sectionSlug");
+    if (sectionSlug === "default") {
+      return c.json({ error: "Cannot empty the `default` section into itself" }, 400);
+    }
+
+    const section = await db.query.sections.findFirst({
+      where: and(eq(sections.spaceId, space.id), eq(sections.slug, sectionSlug)),
+    });
+    if (!section) return c.json({ error: "Section not found" }, 404);
+
+    const defaultSection = await db.query.sections.findFirst({
+      where: and(eq(sections.spaceId, space.id), eq(sections.slug, "default")),
+    });
+    if (!defaultSection) {
+      return c.json({ error: "Space is missing its default section (data error)" }, 500);
+    }
+
+    const moved = await db
+      .update(documents)
+      .set({ sectionId: defaultSection.id, updatedAt: new Date() })
+      .where(eq(documents.sectionId, section.id))
+      .returning({ id: documents.id });
+
+    return c.json({ moved: moved.length });
   });
 
   /** List members of a space */
