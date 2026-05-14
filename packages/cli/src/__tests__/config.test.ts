@@ -6,6 +6,7 @@ import { findConfig, createConfig } from "../config.js";
 
 describe("config", () => {
   const dirs: string[] = [];
+  const exits: Array<() => void> = [];
 
   function makeTempDir() {
     const dir = mkdtempSync(join(tmpdir(), "sideways-test-"));
@@ -13,24 +14,44 @@ describe("config", () => {
     return dir;
   }
 
-  afterEach(() => {
-    for (const dir of dirs) {
-      rmSync(dir, { recursive: true, force: true });
+  /** Capture process.exit + stderr so we can assert on validation failures. */
+  function expectFail(fn: () => void) {
+    const origExit = process.exit;
+    const origError = console.error;
+    const captured: string[] = [];
+    let exitCode: number | undefined;
+    (process as any).exit = (code: number) => {
+      exitCode = code;
+      throw new Error("__exit__");
+    };
+    console.error = (...args: any[]) => { captured.push(args.join(" ")); };
+    exits.push(() => { process.exit = origExit; console.error = origError; });
+    try {
+      fn();
+    } catch (e: any) {
+      if (e.message !== "__exit__") throw e;
     }
+    return { exitCode, stderr: captured.join("\n") };
+  }
+
+  afterEach(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+    for (const r of exits) r();
     dirs.length = 0;
+    exits.length = 0;
   });
 
   describe("findConfig", () => {
-    it("finds config in the given directory", () => {
+    it("parses a valid path-and-sections config", () => {
       const dir = makeTempDir();
       writeFileSync(
         join(dir, ".sideways.yml"),
-        "space: myproject\napi: http://example.com\n",
+        "space: myproject\napi: http://example.com\nsections:\n  default: .\n",
       );
       const config = findConfig(dir);
       expect(config?.space).toBe("myproject");
       expect(config?.api).toBe("http://example.com");
-      expect(config?.mappings).toEqual([]);
+      expect(config?.sections).toEqual({ default: "." });
       expect(config?.rootDir).toBe(dir);
     });
 
@@ -40,43 +61,59 @@ describe("config", () => {
       mkdirSync(child);
       writeFileSync(
         join(parent, ".sideways.yml"),
-        "space: parent-space\n",
+        "space: parent\napi: http://x\nsections:\n  default: .\n",
       );
       const config = findConfig(child);
-      expect(config?.space).toBe("parent-space");
+      expect(config?.space).toBe("parent");
     });
 
     it("returns null when no config found", () => {
       const dir = makeTempDir();
-      const config = findConfig(dir);
-      expect(config).toBeNull();
+      expect(findConfig(dir)).toBeNull();
     });
 
-    it("uses defaults for missing fields", () => {
+    it("rejects legacy `mappings:` config", () => {
       const dir = makeTempDir();
-      writeFileSync(join(dir, ".sideways.yml"), "space: minimal\n");
-      const config = findConfig(dir);
-      expect(config?.space).toBe("minimal");
-      expect(config?.api).toBe("http://localhost:4100");
-      expect(config?.mappings).toEqual([]);
+      writeFileSync(
+        join(dir, ".sideways.yml"),
+        "space: old\napi: http://x\nmappings:\n  - {local: docs, section: docs}\n",
+      );
+      const { stderr } = expectFail(() => findConfig(dir));
+      expect(stderr).toMatch(/Legacy config/);
+      expect(stderr).toMatch(/migrate-config/);
+    });
+
+    it("rejects config without sections block", () => {
+      const dir = makeTempDir();
+      writeFileSync(join(dir, ".sideways.yml"), "space: x\napi: http://x\n");
+      const { stderr } = expectFail(() => findConfig(dir));
+      expect(stderr).toMatch(/Missing required `sections:` block/);
+    });
+
+    it("rejects absolute mount paths", () => {
+      const dir = makeTempDir();
+      writeFileSync(
+        join(dir, ".sideways.yml"),
+        "space: x\napi: http://x\nsections:\n  default: /etc/passwd\n",
+      );
+      const { stderr } = expectFail(() => findConfig(dir));
+      expect(stderr).toMatch(/must be relative/);
     });
   });
 
   describe("createConfig", () => {
-    it("creates a .sideways.yml file", () => {
+    it("creates a starter config with default section mapped to root", () => {
       const dir = makeTempDir();
-      const path = createConfig(dir, "test-space");
+      const path = createConfig(dir, "test-space", "http://x");
       expect(path).toContain(".sideways.yml");
-
       const config = findConfig(dir);
       expect(config?.space).toBe("test-space");
-      expect(config?.api).toBe("http://localhost:4100");
+      expect(config?.sections).toEqual({ default: "." });
     });
 
-    it("creates config with custom API URL", () => {
+    it("preserves a custom API URL", () => {
       const dir = makeTempDir();
       createConfig(dir, "prod", "https://api.example.com");
-
       const config = findConfig(dir);
       expect(config?.api).toBe("https://api.example.com");
     });

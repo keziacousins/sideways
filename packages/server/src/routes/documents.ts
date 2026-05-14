@@ -164,6 +164,14 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       orderBy: [documents.position, documents.title],
     });
 
+    // Pre-fetch all sections in the space so we can resolve sectionId → slug
+    // without an N+1 round trip.
+    const allSections = await db.query.sections.findMany({
+      where: eq(sections.spaceId, space.id),
+      columns: { id: true, slug: true },
+    });
+    const sectionSlugById = new Map(allSections.map(s => [s.id, s.slug]));
+
     const syncInfo = await Promise.all(
       docs.map(async (doc) => {
         const latest = await db.query.documentVersions.findFirst({
@@ -174,6 +182,8 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         return {
           slug: doc.slug,
           title: doc.title,
+          sectionSlug: sectionSlugById.get(doc.sectionId) ?? "default",
+          path: doc.path,
           version: latest?.version ?? 0,
           contentHash: latest?.contentHash ?? "",
           updatedAt: doc.updatedAt.toISOString(),

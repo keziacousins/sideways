@@ -9,6 +9,8 @@ import { getStoredCredentials } from "./auth.js";
 export interface SyncInfo {
   slug: string;
   title: string;
+  sectionSlug: string;
+  path: string;
   version: number;
   contentHash: string;
   updatedAt: string;
@@ -140,7 +142,7 @@ export function createClient(baseUrl: string, actorName?: string) {
     putDocument(
       space: string,
       slug: string,
-      body: { title?: string; content?: string; tags?: string[]; sectionSlug?: string; parentSlug?: string; updatedAt?: string },
+      body: { title?: string; content?: string; tags?: string[]; sectionSlug?: string; parentSlug?: string; path?: string; updatedAt?: string },
     ) {
       return request<DocumentWithContent>(`/api/documents/${space}/${slug}`, {
         method: "PUT",

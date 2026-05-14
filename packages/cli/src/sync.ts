@@ -1,6 +1,10 @@
 /**
- * Sync metadata — tracks local ↔ remote state for change detection.
- * Stored in .sideways/sync.json alongside synced markdown files.
+ * Sync state — local cache of what we last synced from the server.
+ *
+ * Under the path-and-sections model the server owns the canonical
+ * `(sectionSlug, path)` identity of every doc; sync.json is purely a
+ * change-detection cache. Each entry records the slug it resolves to plus
+ * the local + remote content hashes from the last reconcile.
  */
 
 import {
@@ -11,105 +15,126 @@ import {
   readdirSync,
   statSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { extractComments } from "@sideways/markdown";
+import type { Mount } from "./resolve.js";
 
+/** A single tracked doc in the local sync cache. */
 export interface SyncFileEntry {
+  sectionSlug: string;
+  /** Doc path within its section (POSIX-style). */
+  path: string;
+  /** Doc slug on the server (cached, not authoritative). */
   slug: string;
+  /** Remote version we last reconciled against. */
   remoteVersion: number;
+  /** Hash of the local file at last reconcile. */
   localHash: string;
+  /** Server-reported content hash at last reconcile. */
   remoteHash: string;
 }
 
 export interface SyncState {
+  /** Space slug — sanity-check against config to detect stale cache. */
   space: string;
-  section: string | null;
+  /** ISO timestamp of the last sync run. */
   lastSync: string;
+  /** Cache entries keyed by "<sectionSlug>:<path>" for fast lookup. */
   files: Record<string, SyncFileEntry>;
+  /** Schema version — bumped when the file shape changes. */
+  schema: number;
 }
 
 const SYNC_DIR = ".sideways";
 const SYNC_FILE = "sync.json";
 const TRACKED_FILE = "tracked.json";
+const CURRENT_SCHEMA = 2;
 
-/** Read the tracked files list. Returns null if no tracked.json exists (needs initial add). */
-export function readTracked(dir: string): string[] | null {
-  const trackPath = join(dir, SYNC_DIR, TRACKED_FILE);
-  if (existsSync(trackPath)) {
-    try {
-      const data = JSON.parse(readFileSync(trackPath, "utf-8"));
-      return Array.isArray(data) ? data : [];
-    } catch {}
-  }
-  return null;
+export function syncKey(sectionSlug: string, path: string): string {
+  return `${sectionSlug}:${path}`;
 }
 
-/** Check if tracking has been initialised (tracked.json exists). */
+/** Read the tracked-files list. Returns null if not initialised. */
+export function readTracked(dir: string): string[] | null {
+  const trackPath = join(dir, SYNC_DIR, TRACKED_FILE);
+  if (!existsSync(trackPath)) return null;
+  try {
+    const data = JSON.parse(readFileSync(trackPath, "utf-8"));
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return null;
+  }
+}
+
 export function hasTracking(dir: string): boolean {
   return existsSync(join(dir, SYNC_DIR, TRACKED_FILE));
 }
 
-/** Write the tracked files list. */
 export function writeTracked(dir: string, tracked: string[]): void {
   const syncDir = join(dir, SYNC_DIR);
   mkdirSync(syncDir, { recursive: true });
-  writeFileSync(join(syncDir, TRACKED_FILE), JSON.stringify([...new Set(tracked)].sort(), null, 2));
+  writeFileSync(
+    join(syncDir, TRACKED_FILE),
+    JSON.stringify([...new Set(tracked)].sort(), null, 2),
+  );
 }
 
-/** Check if a relative path is tracked. Null or empty array = everything is tracked. */
 export function isTracked(tracked: string[] | null, relativePath: string): boolean {
   if (!tracked || tracked.length === 0) return true;
   return tracked.some(pattern => {
-    // Exact match
     if (relativePath === pattern) return true;
-    // Directory match (pattern "docs/" or "docs" matches "docs/anything.md")
     const dir = pattern.endsWith("/") ? pattern : pattern + "/";
     if (relativePath.startsWith(dir)) return true;
-    // Slug match (pattern without .md matches file)
     if (!pattern.includes("/") && !pattern.endsWith(".md")) {
       const slug = pattern.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-      const fileSlug = relativePath.replace(/\.md$/, "").split("/").pop()?.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+      const fileSlug = relativePath
+        .replace(/\.md$/, "")
+        .split("/")
+        .pop()
+        ?.toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-");
       if (slug === fileSlug) return true;
     }
     return false;
   });
 }
 
-/** Hash file contents for change detection. Normalizes whitespace for stable comparison. */
 export function hashContent(content: string): string {
   return createHash("sha256").update(content.trim()).digest("hex").slice(0, 16);
 }
 
-/** Extract canonical content from a file on disk (strip comments + frontmatter) and hash it */
 export function hashLocalFile(fileContent: string): string {
   const { clean } = extractComments(fileContent);
   const { content } = parseFrontmatter(clean);
   return hashContent(content);
 }
 
-/** Read sync state for a directory, or return empty state.
- *  Returns empty state if the stored space doesn't match (stale config). */
-export function readSyncState(dir: string, space: string, section: string | null = null): SyncState {
+/**
+ * Read the sync state for a repo root. Resets to an empty state if the
+ * file is missing, malformed, from a different space, or from a previous
+ * schema version (the path-and-sections refactor bumped to schema 2).
+ */
+export function readSyncState(dir: string, space: string): SyncState {
   const syncPath = join(dir, SYNC_DIR, SYNC_FILE);
   if (existsSync(syncPath)) {
     try {
       const state = JSON.parse(readFileSync(syncPath, "utf-8"));
-      if (state.space === space) return state;
-      // Space mismatch — stale sync state, start fresh
+      if (state.space === space && state.schema === CURRENT_SCHEMA) return state;
     } catch {}
   }
-  return { space, section, lastSync: "", files: {} };
+  return { space, lastSync: "", files: {}, schema: CURRENT_SCHEMA };
 }
 
-/** Write sync state to a directory */
 export function writeSyncState(dir: string, state: SyncState): void {
   const syncDir = join(dir, SYNC_DIR);
   mkdirSync(syncDir, { recursive: true });
-  writeFileSync(join(syncDir, SYNC_FILE), JSON.stringify(state, null, 2));
+  writeFileSync(
+    join(syncDir, SYNC_FILE),
+    JSON.stringify({ ...state, schema: CURRENT_SCHEMA }, null, 2),
+  );
 }
 
-/** Derive a document slug from a filename */
 export function slugFromFilename(filename: string): string {
   return filename
     .replace(/\.md$/, "")
@@ -119,7 +144,6 @@ export function slugFromFilename(filename: string): string {
     .toLowerCase();
 }
 
-/** Derive a title from a slug */
 export function titleFromSlug(slug: string): string {
   return slug
     .split("-")
@@ -127,10 +151,7 @@ export function titleFromSlug(slug: string): string {
     .join(" ");
 }
 
-/**
- * Parse YAML frontmatter from markdown content.
- * Returns { frontmatter, content } where content has frontmatter stripped.
- */
+/** Parse YAML frontmatter from markdown. */
 export function parseFrontmatter(
   markdown: string,
 ): { frontmatter: Record<string, any>; content: string } {
@@ -143,7 +164,6 @@ export function parseFrontmatter(
     if (colonIdx > 0) {
       const key = line.slice(0, colonIdx).trim();
       let value: any = line.slice(colonIdx + 1).trim();
-      // Parse arrays like [tag1, tag2]
       if (value.startsWith("[") && value.endsWith("]")) {
         value = value
           .slice(1, -1)
@@ -153,13 +173,9 @@ export function parseFrontmatter(
       frontmatter[key] = value;
     }
   }
-
   return { frontmatter, content: match[2] };
 }
 
-/**
- * Serialize frontmatter + content back to markdown.
- */
 export function serializeFrontmatter(
   frontmatter: Record<string, any>,
   content: string,
@@ -170,18 +186,12 @@ export function serializeFrontmatter(
   if (entries.length === 0) return content;
 
   const lines = entries.map(([key, value]) => {
-    if (Array.isArray(value)) {
-      return `${key}: [${value.join(", ")}]`;
-    }
+    if (Array.isArray(value)) return `${key}: [${value.join(", ")}]`;
     return `${key}: ${value}`;
   });
-
   return `---\n${lines.join("\n")}\n---\n${content}`;
 }
 
-/**
- * Find all .md files in a directory (non-recursive).
- */
 export function findMarkdownFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
@@ -190,27 +200,26 @@ export function findMarkdownFiles(dir: string): string[] {
 }
 
 /**
- * Recursively find all .md files, returning relative paths from the root dir.
- * Also maps directory structure to section/parent relationships.
+ * A discovered local file, fully resolved against the configured mounts.
  *
- * Convention:
- * - First-level subdirectories = sections
- * - Deeper directories = doc nesting (parent is index.md or directory name)
- * - index.md in a directory = the parent page for that directory's other files
+ * Section comes from the owning mount; path is relative to that mount;
+ * parentSlug is derived from `index.md` nesting (a directory's `index.md`
+ * is the parent doc for its siblings, recursively).
  */
 export interface DiscoveredFile {
-  /** Relative path from sync root, e.g. "getting-started/installation.md" */
-  relativePath: string;
-  /** Filename only, e.g. "installation.md" */
+  sectionSlug: string;
+  /** Path within the section (POSIX). */
+  path: string;
+  /** Absolute filesystem path. */
+  absPath: string;
+  /** Path relative to repo rootDir (POSIX). For display + tracked filter. */
+  relPath: string;
+  /** Filename only. */
   filename: string;
-  /** Document slug derived from filename */
+  /** Slug derived from filename (or directory name for index.md). */
   slug: string;
-  /** Section slug (first-level directory) or null for root files */
-  section: string | null;
-  /** Parent doc slug (from parent directory's index.md or dir name) or null */
+  /** Parent slug if this file nests under a directory's index.md. */
   parentSlug: string | null;
-  /** Nesting depth: 0 = root, 1 = in section, 2+ = nested under parent */
-  depth: number;
 }
 
 const DEFAULT_IGNORE = [
@@ -219,257 +228,205 @@ const DEFAULT_IGNORE = [
   "vendor", "target", ".tox", "env",
 ];
 
-function shouldIgnore(name: string, extraIgnore: string[] = []): boolean {
+function shouldIgnore(name: string, extra: string[] = []): boolean {
   if (name.startsWith(".")) return true;
-  const all = [...DEFAULT_IGNORE, ...extraIgnore];
-  return all.includes(name);
+  return [...DEFAULT_IGNORE, ...extra].includes(name);
 }
 
-export interface SectionMappingInput {
-  path: string;
-  name?: string;
-  slug?: string;
+const POSIX = (p: string) => p.split(sep).join("/");
+
+/**
+ * Walk every declared section mount and produce a flat list of all owned
+ * markdown files. Section comes from the mount, not from directory naming.
+ *
+ * `index.md` semantics: a directory's `index.md` becomes a parent doc for
+ * its siblings (and recursively for nested dirs). The mount root itself
+ * may have an `index.md` whose slug defaults to the section slug.
+ */
+export function discoverFiles(
+  rootDir: string,
+  mounts: Mount[],
+  ignore: string[] = [],
+): DiscoveredFile[] {
+  const out: DiscoveredFile[] = [];
+
+  for (const mount of mounts) {
+    if (!existsSync(mount.dir)) continue;
+    walkMount(mount, mount.dir, "", null, out, rootDir, ignore, /*atMountRoot=*/ true);
+  }
+  return out;
 }
 
-export function discoverFiles(rootDir: string, ignore: string[] = [], sectionMappings?: SectionMappingInput[]): DiscoveredFile[] {
-  const results: DiscoveredFile[] = [];
-
-  function walk(dir: string, relPath: string, depth: number, section: string | null, parentSlug: string | null) {
-    if (!existsSync(dir)) return;
-    const entries = readdirSync(dir).sort();
-    const dirSlug = relPath ? slugFromFilename(relPath.split("/").pop()!) : null;
-
-    // index.md in a directory = the page for that directory
-    // It becomes the parent for all other files in this directory
-    const hasIndex = entries.includes("index.md") && statSync(join(dir, "index.md")).isFile();
-    let effectiveParent = parentSlug;
-
-    if (hasIndex && depth >= 1) {
-      const indexSlug = dirSlug || slugFromFilename("index");
-      results.push({
-        relativePath: relPath ? `${relPath}/index.md` : "index.md",
-        filename: "index.md",
-        slug: indexSlug,
-        section: depth === 1 ? dirSlug : section,
-        parentSlug: parentSlug,
-        depth,
-      });
-      effectiveParent = indexSlug;
-    }
-
-    // Process .md files (except index.md)
-    for (const entry of entries) {
-      if (entry === "index.md") continue;
-      const fullPath = join(dir, entry);
-      const stat = statSync(fullPath);
-
-      if (stat.isFile() && entry.endsWith(".md")) {
-        const fileSlug = slugFromFilename(entry);
-        results.push({
-          relativePath: relPath ? `${relPath}/${entry}` : entry,
-          filename: entry,
-          slug: fileSlug,
-          section: depth >= 1 ? (section || dirSlug) : null,
-          parentSlug: hasIndex ? effectiveParent : parentSlug,
-          depth,
-        });
-      }
-    }
-
-    // Recurse into subdirectories
-    for (const entry of entries) {
-      const fullPath = join(dir, entry);
-      if (shouldIgnore(entry, ignore)) continue;
-      const stat = statSync(fullPath);
-      if (stat.isDirectory()) {
-        const childRel = relPath ? `${relPath}/${entry}` : entry;
-        const childSection = depth === 0 ? slugFromFilename(entry) : section;
-        // Parent for files in subdirectory = this directory's index.md (if it exists)
-        const childParent = hasIndex ? effectiveParent : parentSlug;
-        walk(fullPath, childRel, depth + 1, childSection, childParent);
-      }
-    }
+function walkMount(
+  mount: Mount,
+  dir: string,
+  inMount: string,
+  parentSlug: string | null,
+  out: DiscoveredFile[],
+  rootDir: string,
+  ignore: string[],
+  atMountRoot: boolean,
+): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir).sort();
+  } catch {
+    return;
   }
 
-  // If section mappings are provided, only discover from those paths
-  if (sectionMappings && sectionMappings.length > 0) {
-    for (const mapping of sectionMappings) {
-      const mappedDir = join(rootDir, mapping.path);
-      const sectionSlug = mapping.slug || slugFromFilename(mapping.name || mapping.path.split("/").pop() || "docs");
+  // index.md becomes the parent doc for its directory.
+  const hasIndex =
+    entries.includes("index.md") && statSync(join(dir, "index.md")).isFile();
+  let effectiveParent = parentSlug;
 
-      // Discover files within this mapped directory as if it's a section
-      // depth=1 because these are section-level (first-level dirs)
-      if (!existsSync(mappedDir)) continue;
-      const entries = readdirSync(mappedDir).sort();
-      const hasIndex = entries.includes("index.md") && statSync(join(mappedDir, "index.md")).isFile();
-      let parentSlug: string | null = null;
-
-      if (hasIndex) {
-        results.push({
-          relativePath: join(mapping.path, "index.md"),
-          filename: "index.md",
-          slug: sectionSlug,
-          section: sectionSlug,
-          parentSlug: null,
-          depth: 1,
-        });
-        parentSlug = sectionSlug;
-      }
-
-      // Walk the contents with the section already set
-      function walkMapped(dir: string, relPath: string, depth: number, parent: string | null) {
-        if (!existsSync(dir)) return;
-        const ents = readdirSync(dir).sort();
-        const hasIdx = ents.includes("index.md") && statSync(join(dir, "index.md")).isFile();
-        const dSlug = relPath ? slugFromFilename(relPath.split("/").pop()!) : null;
-        let effectiveParent = parent;
-
-        // index.md at deeper levels
-        if (hasIdx && depth > 1) {
-          const indexSlug = dSlug || "index";
-          results.push({
-            relativePath: join(mapping.path, relPath, "index.md"),
-            filename: "index.md",
-            slug: indexSlug,
-            section: sectionSlug,
-            parentSlug: parent,
-            depth,
-          });
-          effectiveParent = indexSlug;
-        }
-
-        for (const entry of ents) {
-          if (entry === "index.md") continue;
-          const fullPath = join(dir, entry);
-          const stat = statSync(fullPath);
-          if (stat.isFile() && entry.endsWith(".md")) {
-            results.push({
-              relativePath: join(mapping.path, relPath ? `${relPath}/${entry}` : entry),
-              filename: entry,
-              slug: slugFromFilename(entry),
-              section: sectionSlug,
-              parentSlug: hasIdx ? effectiveParent : parent,
-              depth,
-            });
-          }
-        }
-
-        for (const entry of ents) {
-          const fullPath = join(dir, entry);
-          if (shouldIgnore(entry, ignore)) continue;
-          const stat = statSync(fullPath);
-          if (stat.isDirectory()) {
-            const childRel = relPath ? `${relPath}/${entry}` : entry;
-            walkMapped(fullPath, childRel, depth + 1, hasIdx ? effectiveParent : parent);
-          }
-        }
-      }
-
-      // Walk non-index files and subdirectories
-      for (const entry of entries) {
-        if (entry === "index.md") continue;
-        const fullPath = join(mappedDir, entry);
-        const stat = statSync(fullPath);
-        if (stat.isFile() && entry.endsWith(".md")) {
-          results.push({
-            relativePath: join(mapping.path, entry),
-            filename: entry,
-            slug: slugFromFilename(entry),
-            section: sectionSlug,
-            parentSlug: hasIndex ? parentSlug : null,
-            depth: 1,
-          });
-        }
-      }
-      for (const entry of entries) {
-        if (entry === "index.md") continue;
-        const fullPath = join(mappedDir, entry);
-        if (shouldIgnore(entry, ignore)) continue;
-        const stat = statSync(fullPath);
-        if (stat.isDirectory()) {
-          walkMapped(fullPath, entry, 2, hasIndex ? parentSlug : null);
-        }
-      }
-    }
-    return results;
+  if (hasIndex) {
+    const dirName = inMount ? inMount.split("/").pop()! : mount.sectionSlug;
+    const indexSlug = slugFromFilename(dirName);
+    const indexPath = inMount ? `${inMount}/index.md` : "index.md";
+    const indexAbs = join(dir, "index.md");
+    out.push({
+      sectionSlug: mount.sectionSlug,
+      path: indexPath,
+      absPath: indexAbs,
+      relPath: POSIX(relative(rootDir, indexAbs)),
+      filename: "index.md",
+      slug: indexSlug,
+      parentSlug,
+    });
+    // Mount-root index.md doesn't get a parent of itself; nested ones do.
+    if (!atMountRoot) effectiveParent = indexSlug;
+    else effectiveParent = indexSlug; // also parents siblings at mount root
   }
 
-  // Default: auto-discover from root (first-level dirs = sections)
-  walk(rootDir, "", 0, null, null);
-  return results;
+  for (const entry of entries) {
+    if (entry === "index.md") continue;
+    if (!entry.endsWith(".md")) continue;
+    const abs = join(dir, entry);
+    if (!statSync(abs).isFile()) continue;
+    const pathInMount = inMount ? `${inMount}/${entry}` : entry;
+    out.push({
+      sectionSlug: mount.sectionSlug,
+      path: pathInMount,
+      absPath: abs,
+      relPath: POSIX(relative(rootDir, abs)),
+      filename: entry,
+      slug: slugFromFilename(entry),
+      parentSlug: hasIndex ? effectiveParent : parentSlug,
+    });
+  }
+
+  for (const entry of entries) {
+    if (shouldIgnore(entry, ignore)) continue;
+    const abs = join(dir, entry);
+    try {
+      if (!statSync(abs).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    const childInMount = inMount ? `${inMount}/${entry}` : entry;
+    walkMount(
+      mount,
+      abs,
+      childInMount,
+      hasIndex ? effectiveParent : parentSlug,
+      out,
+      rootDir,
+      ignore,
+      false,
+    );
+  }
 }
 
 /**
- * Compare local and remote state to determine sync status for each file.
+ * Compute a per-section diff between the local sync cache, the on-disk
+ * files in declared mounts, and the server's sync info.
  */
-export type FileStatus = "unchanged" | "local-modified" | "remote-modified" | "new-local" | "new-remote" | "deleted" | "conflict";
+export type FileStatus =
+  | "unchanged"
+  | "local-modified"
+  | "remote-modified"
+  | "new-local"
+  | "new-remote"
+  | "deleted"
+  | "conflict";
 
 export interface SyncDiff {
-  filename: string;
+  sectionSlug: string;
+  path: string;
   slug: string;
+  relPath: string;
   status: FileStatus;
 }
 
+export interface RemoteEntry {
+  sectionSlug: string;
+  path: string;
+  slug: string;
+  contentHash: string;
+  version: number;
+}
+
 export function computeDiff(
-  dir: string,
+  rootDir: string,
+  mounts: Mount[],
+  ignore: string[],
   syncState: SyncState,
-  remoteFiles: { slug: string; contentHash: string; version: number }[],
+  remote: RemoteEntry[],
 ): SyncDiff[] {
   const diffs: SyncDiff[] = [];
-  const localFiles = findMarkdownFiles(dir);
-  const remoteMap = new Map(remoteFiles.map((f) => [f.slug, f]));
-  const seenSlugs = new Set<string>();
+  const local = discoverFiles(rootDir, mounts, ignore);
 
-  // Check each local file
-  for (const filename of localFiles) {
-    const slug = slugFromFilename(filename);
-    seenSlugs.add(slug);
-    const raw = readFileSync(join(dir, filename), "utf-8");
+  const localMap = new Map(local.map(f => [syncKey(f.sectionSlug, f.path), f]));
+  const remoteMap = new Map(remote.map(r => [syncKey(r.sectionSlug, r.path), r]));
+  const seen = new Set<string>();
+
+  for (const [key, f] of localMap) {
+    seen.add(key);
+    const raw = readFileSync(f.absPath, "utf-8");
     const localHash = hashLocalFile(raw);
-    const tracked = syncState.files[filename];
-    const remote = remoteMap.get(slug);
+    const tracked = syncState.files[key];
+    const r = remoteMap.get(key);
 
-    if (!tracked && !remote) {
-      // New local file, not on remote
-      diffs.push({ filename, slug, status: "new-local" });
-    } else if (!tracked && remote) {
-      // File exists locally and remotely but never synced
-      diffs.push({ filename, slug, status: "conflict" });
+    if (!tracked && !r) {
+      diffs.push({ ...common(f), status: "new-local" });
+    } else if (!tracked && r) {
+      diffs.push({ ...common(f), status: "conflict" });
     } else if (tracked) {
-      if (!remote) {
-        // Tracked locally but not on remote — needs push
-        diffs.push({ filename, slug, status: "new-local" });
+      if (!r) {
+        diffs.push({ ...common(f), status: "new-local" });
       } else {
         const localChanged = localHash !== tracked.localHash;
-        const remoteChanged = remote.contentHash !== tracked.remoteHash;
-
+        const remoteChanged = r.contentHash !== tracked.remoteHash;
         if (localChanged && remoteChanged) {
-          diffs.push({ filename, slug, status: "conflict" });
+          diffs.push({ ...common(f), status: "conflict" });
         } else if (localChanged) {
-          diffs.push({ filename, slug, status: "local-modified" });
+          diffs.push({ ...common(f), status: "local-modified" });
         } else if (remoteChanged) {
-          diffs.push({ filename, slug, status: "remote-modified" });
+          diffs.push({ ...common(f), status: "remote-modified" });
         } else {
-          diffs.push({ filename, slug, status: "unchanged" });
+          diffs.push({ ...common(f), status: "unchanged" });
         }
       }
     }
   }
 
-  // Check for remote files not present locally
-  for (const remote of remoteFiles) {
-    if (!seenSlugs.has(remote.slug)) {
-      const filename = `${remote.slug}.md`;
-      const tracked = syncState.files[filename];
-      if (tracked) {
-        // Was tracked but file deleted locally
-        diffs.push({ filename, slug: remote.slug, status: "deleted" });
-      } else {
-        // New remote file
-        diffs.push({ filename, slug: remote.slug, status: "new-remote" });
-      }
+  for (const [key, r] of remoteMap) {
+    if (seen.has(key)) continue;
+    const tracked = syncState.files[key];
+    const mount = mounts.find(m => m.sectionSlug === r.sectionSlug);
+    const relPath = mount
+      ? POSIX(join(mount.relDir, r.path))
+      : `${r.sectionSlug}/${r.path}`;
+    if (tracked) {
+      diffs.push({ sectionSlug: r.sectionSlug, path: r.path, slug: r.slug, relPath, status: "deleted" });
+    } else {
+      diffs.push({ sectionSlug: r.sectionSlug, path: r.path, slug: r.slug, relPath, status: "new-remote" });
     }
   }
 
   return diffs;
+}
+
+function common(f: DiscoveredFile) {
+  return { sectionSlug: f.sectionSlug, path: f.path, slug: f.slug, relPath: f.relPath };
 }

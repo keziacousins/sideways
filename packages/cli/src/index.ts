@@ -2,8 +2,8 @@
 
 import { Command } from "commander";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "node:fs";
-import { basename, resolve, join, relative } from "node:path";
-import { findConfig, createConfig, requireConfig } from "./config.js";
+import { basename, resolve, join, relative, dirname } from "node:path";
+import { findConfig, createConfig, requireConfig, type ProjectConfig } from "./config.js";
 import { createClient } from "./api.js";
 import { login, clearCredentials, getStoredCredentials } from "./auth.js";
 import { requireSpace, ensureSpace } from "./preflight.js";
@@ -11,16 +11,25 @@ import { embedComments, extractComments, type SerializedComment } from "@sideway
 import {
   readSyncState,
   writeSyncState,
+  syncKey,
   hashLocalFile,
   slugFromFilename,
   titleFromSlug,
   parseFrontmatter,
   serializeFrontmatter,
   discoverFiles,
+  type DiscoveredFile,
   readTracked,
   writeTracked,
   isTracked,
 } from "./sync.js";
+import {
+  mounts as buildMounts,
+  resolveArg,
+  suggestPaths,
+  normalise,
+} from "./resolve.js";
+import type { SyncInfo } from "./api.js";
 
 const program = new Command();
 
@@ -54,24 +63,46 @@ program
 
 // ── Shared helpers ────────────────────────────────────────────────────
 
-function getSyncRoot(config: ReturnType<typeof requireConfig>): string {
-  return resolve(config.rootDir, config.root || ".");
-}
-
 function getClient(apiUrl: string) {
   const actorName = program.opts().as;
   return createClient(apiUrl, actorName);
 }
 
-/** Resolve a user-provided identifier (slug, filename, or path) to a discovered file */
-function resolveFile(files: ReturnType<typeof discoverFiles>, input: string) {
-  const normalized = slugFromFilename(basename(input));
-  return files.find(f => f.slug === input || f.slug === normalized || f.relativePath === input || f.filename === input);
+/** Resolve a path or filename argument to one of the discovered files.
+ *  Matches first by exact (sectionSlug, path) (computed via mounts), then
+ *  by relPath, then by filename, then by slug. */
+function resolveFile(
+  files: DiscoveredFile[],
+  config: ProjectConfig,
+  input: string,
+): DiscoveredFile | undefined {
+  const resolved = resolveArg(config, input);
+  if (resolved) {
+    const k = syncKey(resolved.sectionSlug, resolved.path);
+    const hit = files.find(f => syncKey(f.sectionSlug, f.path) === k);
+    if (hit) return hit;
+  }
+  return files.find(f =>
+    f.relPath === input ||
+    f.filename === input ||
+    f.slug === input ||
+    f.slug === slugFromFilename(basename(input)),
+  );
 }
 
-/** Normalize user input to a slug — accepts filenames, paths, or slugs */
+/** Normalize user input to a slug — accepts filenames, paths, or slugs. */
 function toSlug(input: string): string {
   return slugFromFilename(basename(input));
+}
+
+/** Print a "did you mean?" hint when a path argument doesn't resolve. */
+function printPathHint(config: ProjectConfig, arg: string): void {
+  const matches = suggestPaths(config, arg);
+  if (matches.length === 0) return;
+  console.error("  Did you mean:");
+  for (const m of matches.slice(0, 3)) {
+    console.error(`    ${m.sectionSlug}/${m.path}`);
+  }
 }
 
 /** Prepare a file's content for writing to disk (frontmatter + comments) */
@@ -126,9 +157,10 @@ program
   .description("Track files or directories for sync (use '.' for everything)")
   .action((paths: string[]) => {
     const config = requireConfig();
-    const syncRoot = getSyncRoot(config);
+    const syncRoot = config.rootDir;
+    const mountList = buildMounts(config);
     const tracked = readTracked(syncRoot) || [];
-    const allFiles = discoverFiles(syncRoot, config.ignore, config.sections);
+    const allFiles = discoverFiles(config.rootDir, mountList, config.ignore);
 
     let added = 0;
     for (const p of paths) {
@@ -148,7 +180,7 @@ program
         const dirRel = rel.endsWith("/") ? rel : rel + "/";
         if (!tracked.includes(rel) && !tracked.includes(dirRel)) {
           tracked.push(rel);
-          const matching = allFiles.filter(f => f.relativePath.startsWith(dirRel) || f.relativePath.startsWith(rel + "/"));
+          const matching = allFiles.filter(f => f.relPath.startsWith(dirRel) || f.relPath.startsWith(rel + "/"));
           console.log(`  added: ${rel}/ (${matching.length} files)`);
           added++;
         }
@@ -156,11 +188,11 @@ program
       }
 
       // Single file
-      const file = allFiles.find(f => f.relativePath === rel || f.filename === basename(p) || f.slug === slugFromFilename(basename(p)));
+      const file = allFiles.find(f => f.relPath === rel || f.filename === basename(p) || f.slug === slugFromFilename(basename(p)));
       if (file) {
-        if (!tracked.includes(file.relativePath)) {
-          tracked.push(file.relativePath);
-          console.log(`  added: ${file.relativePath}`);
+        if (!tracked.includes(file.relPath)) {
+          tracked.push(file.relPath);
+          console.log(`  added: ${file.relPath}`);
           added++;
         }
       } else {
@@ -190,7 +222,7 @@ program
   .description("Stop tracking files or directories for sync")
   .action((paths: string[]) => {
     const config = requireConfig();
-    const syncRoot = getSyncRoot(config);
+    const syncRoot = config.rootDir;
     let tracked = readTracked(syncRoot);
 
     if (!tracked || tracked.length === 0) {
@@ -235,7 +267,7 @@ program
       const config = requireConfig();
       const space = opts.space ?? config.space;
       const client = getClient(config.api);
-      const syncRoot = getSyncRoot(config);
+      const syncRoot = config.rootDir;
 
       await requireSpace(client, space, { createHint: true });
 
@@ -257,11 +289,14 @@ program
           writeTracked(syncRoot, tracked);
         }
 
-        const syncInfo = await client.getSyncInfo(space).catch(() => []);
-        const remote = syncInfo.find((r: any) => r.slug === slug);
-        if (remote) {
+        const syncInfo = await client.getSyncInfo(space).catch(() => [] as SyncInfo[]);
+        const remote = syncInfo.find((r: SyncInfo) => r.slug === slug);
+        const resolved = resolveArg(config, filePath);
+        if (remote && resolved) {
           const syncState = readSyncState(syncRoot, space);
-          syncState.files[relPath] = {
+          syncState.files[syncKey(resolved.sectionSlug, resolved.path)] = {
+            sectionSlug: resolved.sectionSlug,
+            path: resolved.path,
             slug,
             remoteVersion: remote.version,
             localHash: hashLocalFile(output),
@@ -275,94 +310,35 @@ program
         return;
       }
 
-      // Full pull — fetch all docs, recreate directory structure
+      // Full pull — fetch sync metadata, place each doc at
+      // <mountDir>/<doc.path> inside its owned section. Sections not
+      // declared in `.sideways.yml` are skipped.
       mkdirSync(syncRoot, { recursive: true });
 
-      const [allDocs, syncInfo] = await Promise.all([
-        client.listDocuments(space),
-        client.getSyncInfo(space),
-      ]);
-
-      let sections: { id: string; slug: string }[] = [];
-      try { sections = await client.listSections(space); } catch {}
-
-      const sectionSlugById = new Map(sections.map((s: any) => [s.id, s.slug]));
-      const docSlugById = new Map(allDocs.map((d: any) => [d.id, d.slug]));
-      const remoteHashMap = new Map(syncInfo.map((r: any) => [r.slug, r]));
-      const hasChildrenSet = new Set(allDocs.filter((d: any) => d.parentId).map((d: any) => d.parentId));
-
+      const syncInfo = await client.getSyncInfo(space);
       const syncState = readSyncState(syncRoot, space);
+      const sectionPathMap = new Map<string, string>(Object.entries(config.sections));
+
       let totalPulled = 0;
       let totalSkipped = 0;
 
-      // Build reverse map: section slug → mapped path (if section mappings configured)
-      const sectionPathMap = new Map<string, string>();
-      for (const mapping of config.sections) {
-        const slug = mapping.slug || slugFromFilename(mapping.name || mapping.path.split("/").pop() || "docs");
-        sectionPathMap.set(slug, mapping.path);
-      }
-
-      /** Build filesystem path for a doc based on its section + parent hierarchy.
-       *  Convention: index.md in a directory = that directory's page.
-       *  A doc with children always becomes dir/index.md. */
-      function buildDocPath(doc: any): string {
-        const parts: string[] = [];
-
-        // Walk parent chain to build directory nesting
-        const parentChain: string[] = [];
-        let currentParentId = doc.parentId;
-        const visited = new Set<string>();
-        while (currentParentId && !visited.has(currentParentId)) {
-          visited.add(currentParentId);
-          const parentSlug = docSlugById.get(currentParentId);
-          if (parentSlug) parentChain.unshift(parentSlug);
-          const parentDoc = allDocs.find((d: any) => d.id === currentParentId);
-          currentParentId = parentDoc?.parentId ?? null;
+      for (const r of syncInfo) {
+        const mountRel = sectionPathMap.get(r.sectionSlug);
+        if (!mountRel) {
+          totalSkipped++;
+          continue;
         }
-
-        // Section = first directory level (use mapped path if available)
-        const sectionSlug = doc.sectionId ? sectionSlugById.get(doc.sectionId) : null;
-        const mappedPath = sectionSlug ? sectionPathMap.get(sectionSlug) : undefined;
-        if (mappedPath) {
-          // Use the full mapped path (e.g. "src/packages/api/docs") instead of slug
-          parts.push(mappedPath);
-        } else if (sectionSlug) {
-          parts.push(sectionSlug);
-        }
-
-        // Parent chain = nested directories (skip section slug if it's already first)
-        for (const p of parentChain) {
-          if (parts.length === 0 || p !== parts[parts.length - 1]) {
-            parts.push(p);
-          }
-        }
-
-        const hasChildren = hasChildrenSet.has(doc.id);
-        const isSectionIndex = sectionSlug && doc.slug === sectionSlug && !doc.parentId;
-
-        if (isSectionIndex) {
-          return parts.length > 0 ? join(...parts, "index.md") : "index.md";
-        }
-        if (hasChildren) {
-          parts.push(doc.slug);
-          return parts.length > 0 ? join(...parts, "index.md") : "index.md";
-        }
-
-        return parts.length > 0 ? join(...parts, `${doc.slug}.md`) : `${doc.slug}.md`;
-      }
-
-      for (const doc of allDocs) {
-        const relativePath = buildDocPath(doc);
+        const relativePath = normalise(join(mountRel, r.path));
         const filePath = join(syncRoot, relativePath);
-        const tracked = syncState.files[relativePath];
-        const remote = remoteHashMap.get(doc.slug);
+        const key = syncKey(r.sectionSlug, r.path);
+        const tracked = syncState.files[key];
 
         // Conflict check
         if (tracked && !opts.force) {
           try {
             const localContent = readFileSync(filePath, "utf-8");
             const localHash = hashLocalFile(localContent);
-            if (localHash !== tracked.localHash && remote && remote.contentHash !== tracked.remoteHash) {
+            if (localHash !== tracked.localHash && r.contentHash !== tracked.remoteHash) {
               console.log(`  conflict: ${relativePath} (use --force to overwrite)`);
               totalSkipped++;
               continue;
@@ -370,17 +346,19 @@ program
           } catch {}
         }
 
-        const fullDoc = await client.getDocument(space, doc.slug);
+        const fullDoc = await client.getDocument(space, r.slug);
         const output = await prepareFileForDisk(client, space, fullDoc, opts);
 
-        mkdirSync(join(filePath, ".."), { recursive: true });
+        mkdirSync(dirname(filePath), { recursive: true });
         writeFileSync(filePath, output);
 
-        syncState.files[relativePath] = {
-          slug: doc.slug,
-          remoteVersion: remote?.version ?? 1,
+        syncState.files[key] = {
+          sectionSlug: r.sectionSlug,
+          path: r.path,
+          slug: r.slug,
+          remoteVersion: r.version,
           localHash: hashLocalFile(output),
-          remoteHash: remote?.contentHash ?? hashLocalFile(output),
+          remoteHash: r.contentHash,
         };
 
         const isNew = !tracked;
@@ -415,7 +393,8 @@ program
       const config = requireConfig();
       const space = opts.space ?? config.space;
       const client = getClient(config.api);
-      const syncRoot = getSyncRoot(config);
+      const syncRoot = config.rootDir;
+    const mountList = buildMounts(config);
 
       if (!opts.dryRun) {
         await ensureSpace(client, space, config.spaceName || undefined);
@@ -427,14 +406,14 @@ program
         console.error("No files tracked. Run 'sideways add <path>' or 'sideways add .' first.");
         process.exit(1);
       }
-      const allFiles = discoverFiles(syncRoot, config.ignore, config.sections).filter(f => isTracked(tracked, f.relativePath));
+      const allFiles = discoverFiles(config.rootDir, mountList, config.ignore).filter(f => isTracked(tracked, f.relPath));
 
       // If path targets a single file, filter to just that
       let files = allFiles;
       if (path && path.endsWith(".md")) {
         const absPath = resolve(path);
         const relPath = relative(syncRoot, absPath);
-        files = allFiles.filter(f => f.relativePath === relPath);
+        files = allFiles.filter(f => f.relPath === relPath);
         if (files.length === 0) {
           // File not in sync root — push as standalone
           const { slug, content, tags, title } = prepareFileForPush(absPath);
@@ -464,7 +443,7 @@ program
       }
 
       // Create sections for all first-level directories
-      const sectionSlugs = new Set(files.map(f => f.section).filter(Boolean) as string[]);
+      const sectionSlugs = new Set(files.map(f => f.sectionSlug).filter(Boolean) as string[]);
       if (!opts.dryRun) {
         for (const section of sectionSlugs) {
           await client.createSection(space, section).catch(() => {});
@@ -478,14 +457,15 @@ program
 
       let totalPushed = 0;
 
-      // Push parents before children
-      const sorted = [...files].sort((a, b) => a.depth - b.depth);
+      // Push parents before children (shallower path = ancestor first).
+      const depth = (p: string) => p.split("/").length;
+      const sorted = [...files].sort((a, b) => depth(a.path) - depth(b.path));
 
       for (const file of sorted) {
-        const filePath = join(syncRoot, file.relativePath);
+        const filePath = join(syncRoot, file.relPath);
         const raw = readFileSync(filePath, "utf-8");
         const localHash = hashLocalFile(raw);
-        const tracked = syncState.files[file.relativePath];
+        const tracked = syncState.files[syncKey(file.sectionSlug, file.path)];
         const remote = remoteMap.get(file.slug);
 
         // Compute status
@@ -513,12 +493,12 @@ program
 
         if (status === "unchanged" || status === "remote-modified") continue;
         if (status === "conflict" && !opts.force) {
-          console.log(`  conflict: ${file.relativePath} (use --force to overwrite)`);
+          console.log(`  conflict: ${file.relPath} (use --force to overwrite)`);
           continue;
         }
 
         if (opts.dryRun) {
-          console.log(`  would push: ${file.relativePath} → ${file.slug} (${status})`);
+          console.log(`  would push: ${file.relPath} → ${file.slug} (${status})`);
           totalPushed++;
           continue;
         }
@@ -528,21 +508,23 @@ program
         const tags = frontmatter.tags || [];
         const body: Record<string, any> = { content, tags };
         if (frontmatter.title) body.title = frontmatter.title;
-        if (file.section) body.sectionSlug = file.section;
+        if (file.sectionSlug) body.sectionSlug = file.sectionSlug;
         if (file.parentSlug) body.parentSlug = file.parentSlug;
         // Preserve local file timestamp so mtime-based fallback works
         body.updatedAt = statSync(filePath).mtime.toISOString();
 
         await client.putDocument(space, file.slug, body);
 
-        syncState.files[file.relativePath] = {
+        syncState.files[syncKey(file.sectionSlug, file.path)] = {
+          sectionSlug: file.sectionSlug,
+          path: file.path,
           slug: file.slug,
           remoteVersion: (tracked?.remoteVersion ?? 0) + 1,
           localHash,
           remoteHash: localHash,
         };
 
-        console.log(`  pushed: ${file.relativePath} → ${file.slug} (${status})`);
+        console.log(`  pushed: ${file.relPath} → ${file.slug} (${status})`);
         totalPushed++;
       }
 
@@ -555,15 +537,17 @@ program
           const remote = remoteHashMap.get(file.slug);
           if (!remote) continue;
 
-          if (syncState.files[file.relativePath]) {
+          if (syncState.files[syncKey(file.sectionSlug, file.path)]) {
             // Already tracked — update remote hash/version
-            syncState.files[file.relativePath].remoteHash = remote.contentHash;
-            syncState.files[file.relativePath].remoteVersion = remote.version;
+            syncState.files[syncKey(file.sectionSlug, file.path)].remoteHash = remote.contentHash;
+            syncState.files[syncKey(file.sectionSlug, file.path)].remoteVersion = remote.version;
           } else {
             // Not tracked yet — record it now
-            const filePath = join(syncRoot, file.relativePath);
+            const filePath = join(syncRoot, file.relPath);
             const raw = readFileSync(filePath, "utf-8");
-            syncState.files[file.relativePath] = {
+            syncState.files[syncKey(file.sectionSlug, file.path)] = {
+              sectionSlug: file.sectionSlug,
+              path: file.path,
               slug: file.slug,
               remoteVersion: remote.version,
               localHash: hashLocalFile(raw),
@@ -594,7 +578,8 @@ program
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const syncRoot = getSyncRoot(config);
+    const syncRoot = config.rootDir;
+    const mountList = buildMounts(config);
 
     await requireSpace(client, space);
 
@@ -602,7 +587,7 @@ program
     if (tracked === null) {
       console.log("\x1b[33mNo files tracked yet. Run 'sideways add <path>' or 'sideways add .' to start.\x1b[0m\n");
     }
-    const files = discoverFiles(syncRoot, config.ignore, config.sections).filter(f => isTracked(tracked, f.relativePath));
+    const files = discoverFiles(config.rootDir, mountList, config.ignore).filter(f => isTracked(tracked, f.relPath));
     const remoteFiles = await client.getSyncInfo(space);
     const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
     const syncState = readSyncState(syncRoot, space);
@@ -614,9 +599,9 @@ program
       commentCounts = new Map(counts.map((r: any) => [r.slug, r.count]));
     } catch {}
 
-    const sorted = [...files].sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+    const sorted = [...files].sort((a, b) => a.relPath.localeCompare(b.relPath));
 
-    function show(label: string, file: { relativePath: string; slug: string }) {
+    function show(label: string, file: { relPath: string; slug: string }) {
       const colors: Record<string, string> = {
         "new-local": "\x1b[32m",
         "local-modified": "\x1b[33m",
@@ -629,15 +614,15 @@ program
       const reset = color ? "\x1b[0m" : "";
       const cc = commentCounts.get(file.slug);
       const commentInfo = cc ? ` \x1b[35m[${cc} comment${cc !== 1 ? "s" : ""}]\x1b[0m` : "";
-      console.log(`  ${color}${label.padEnd(16)}${reset} ${file.relativePath}${commentInfo}`);
+      console.log(`  ${color}${label.padEnd(16)}${reset} ${file.relPath}${commentInfo}`);
     }
 
     let hasChanges = false;
     for (const file of sorted) {
-      const filePath = join(syncRoot, file.relativePath);
+      const filePath = join(syncRoot, file.relPath);
       const raw = readFileSync(filePath, "utf-8");
       const localHash = hashLocalFile(raw);
-      const tracked = syncState.files[file.relativePath];
+      const tracked = syncState.files[syncKey(file.sectionSlug, file.path)];
       const remote = remoteMap.get(file.slug);
 
       let status: string;
@@ -671,7 +656,7 @@ program
     const localSlugs = new Set(files.map(f => f.slug));
     for (const remote of remoteFiles) {
       if (!localSlugs.has(remote.slug)) {
-        show("new-remote", { relativePath: `${remote.slug}.md`, slug: remote.slug });
+        show("new-remote", { relPath: `${remote.slug}.md`, slug: remote.slug });
         hasChanges = true;
       }
     }
@@ -681,22 +666,22 @@ program
       const cc = commentCounts.get(file.slug);
       if (cc) {
         // Check if this file was already shown (had changes)
-        const filePath = join(syncRoot, file.relativePath);
+        const filePath = join(syncRoot, file.relPath);
         const raw = readFileSync(filePath, "utf-8");
         const localHash = hashLocalFile(raw);
-        const trackedEntry = syncState.files[file.relativePath];
+        const trackedEntry = syncState.files[syncKey(file.sectionSlug, file.path)];
         const remote = remoteMap.get(file.slug);
         const isUnchanged = trackedEntry && remote && localHash === trackedEntry.localHash && remote.contentHash === trackedEntry.remoteHash;
         if (isUnchanged) {
-          console.log(`  ${"".padEnd(16)} ${file.relativePath} \x1b[35m[${cc} comment${cc !== 1 ? "s" : ""}]\x1b[0m`);
+          console.log(`  ${"".padEnd(16)} ${file.relPath} \x1b[35m[${cc} comment${cc !== 1 ? "s" : ""}]\x1b[0m`);
         }
       }
     }
 
     // Show untracked files when selective tracking is active
     if (tracked && tracked.length > 0) {
-      const allDiscovered = discoverFiles(syncRoot, config.ignore, config.sections);
-      const untracked = allDiscovered.filter(f => !isTracked(tracked, f.relativePath));
+      const allDiscovered = discoverFiles(config.rootDir, mountList, config.ignore);
+      const untracked = allDiscovered.filter(f => !isTracked(tracked, f.relPath));
       if (untracked.length > 0) {
         console.log(`\n  ${untracked.length} untracked file(s) — use 'sideways add <path>' to track`);
       }
@@ -720,7 +705,8 @@ program
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const syncRoot = getSyncRoot(config);
+    const syncRoot = config.rootDir;
+    const mountList = buildMounts(config);
 
     if (!opts.dryRun) {
       await ensureSpace(client, space, config.spaceName || undefined);
@@ -731,7 +717,7 @@ program
       console.error("No files tracked. Run 'sideways add <path>' or 'sideways add .' first.");
       process.exit(1);
     }
-    const allFiles = discoverFiles(syncRoot, config.ignore, config.sections).filter(f => isTracked(tracked, f.relativePath));
+    const allFiles = discoverFiles(config.rootDir, mountList, config.ignore).filter(f => isTracked(tracked, f.relPath));
     const remoteFiles = await client.getSyncInfo(space);
     const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
     const syncState = readSyncState(syncRoot, space);
@@ -744,10 +730,10 @@ program
 
     for (const file of allFiles) {
       localSlugs.add(file.slug);
-      const filePath = join(syncRoot, file.relativePath);
+      const filePath = join(syncRoot, file.relPath);
       const raw = readFileSync(filePath, "utf-8");
       const localHash = hashLocalFile(raw);
-      const tracked = syncState.files[file.relativePath];
+      const tracked = syncState.files[syncKey(file.sectionSlug, file.path)];
       const remote = remoteMap.get(file.slug);
 
       let status: string;
@@ -777,8 +763,10 @@ program
         const { clean: localClean } = extractComments(raw);
         const { content: localContent } = parseFrontmatter(localClean);
         if (localContent.trim() === remoteDoc.content.trim()) {
-          console.log(`  \x1b[2mreconciled\x1b[0m  ${file.relativePath}`);
-          syncState.files[file.relativePath] = {
+          console.log(`  \x1b[2mreconciled\x1b[0m  ${file.relPath}`);
+          syncState.files[syncKey(file.sectionSlug, file.path)] = {
+            sectionSlug: file.sectionSlug,
+            path: file.path,
             slug: file.slug,
             remoteVersion: remote.version,
             localHash,
@@ -794,7 +782,9 @@ program
       if (status === "unchanged") {
         // Ensure sync state is recorded even for unchanged files
         if (!tracked && remote) {
-          syncState.files[file.relativePath] = {
+          syncState.files[syncKey(file.sectionSlug, file.path)] = {
+            sectionSlug: file.sectionSlug,
+            path: file.path,
             slug: file.slug,
             remoteVersion: remote.version,
             localHash,
@@ -803,8 +793,8 @@ program
         }
         continue;
       }
-      if (status === "conflict") { conflicts.push(file.relativePath); continue; }
-      if (status === "remote-modified") { toPull.push({ slug: file.slug, relativePath: file.relativePath }); continue; }
+      if (status === "conflict") { conflicts.push(file.relPath); continue; }
+      if (status === "remote-modified") { toPull.push({ slug: file.slug, relativePath: file.relPath }); continue; }
       if (status === "new-local" || status === "local-modified") { toPush.push({ file, raw }); }
     }
 
@@ -835,12 +825,16 @@ program
         writeFileSync(filePath, output);
 
         const remoteInfo = remoteMap.get(slug);
-        syncState.files[relativePath] = {
-          slug,
-          remoteVersion: remoteInfo?.version ?? 1,
-          localHash: hashLocalFile(output),
-          remoteHash: remoteInfo?.contentHash ?? hashLocalFile(output),
-        };
+        if (remoteInfo) {
+          syncState.files[syncKey(remoteInfo.sectionSlug, remoteInfo.path)] = {
+            sectionSlug: remoteInfo.sectionSlug,
+            path: remoteInfo.path,
+            slug,
+            remoteVersion: remoteInfo.version ?? 1,
+            localHash: hashLocalFile(output),
+            remoteHash: remoteInfo.contentHash ?? hashLocalFile(output),
+          };
+        }
         console.log(`  pulled: ${relativePath}`);
       }
     }
@@ -849,17 +843,18 @@ program
     if (toPush.length > 0) {
       // Create sections
       if (!opts.dryRun) {
-        const sectionSlugs = new Set(toPush.map(p => p.file.section).filter(Boolean) as string[]);
+        const sectionSlugs = new Set(toPush.map(p => p.file.sectionSlug).filter(Boolean) as string[]);
         for (const section of sectionSlugs) {
           await client.createSection(space, section).catch(() => {});
         }
       }
 
       console.log(`\nPushing ${toPush.length} file(s):`);
-      const sorted = [...toPush].sort((a, b) => a.file.depth - b.file.depth);
+      const pushDepth = (p: string) => p.split("/").length;
+      const sorted = [...toPush].sort((a, b) => pushDepth(a.file.path) - pushDepth(b.file.path));
       for (const { file, raw } of sorted) {
         if (opts.dryRun) {
-          console.log(`  would push: ${file.relativePath}`);
+          console.log(`  would push: ${file.relPath}`);
           continue;
         }
         const { clean } = extractComments(raw);
@@ -867,20 +862,22 @@ program
         const tags = frontmatter.tags || [];
         const body: Record<string, any> = { content, tags };
         if (frontmatter.title) body.title = frontmatter.title;
-        if (file.section) body.sectionSlug = file.section;
+        if (file.sectionSlug) body.sectionSlug = file.sectionSlug;
         if (file.parentSlug) body.parentSlug = file.parentSlug;
-        body.updatedAt = statSync(join(syncRoot, file.relativePath)).mtime.toISOString();
+        body.updatedAt = statSync(join(syncRoot, file.relPath)).mtime.toISOString();
 
         await client.putDocument(space, file.slug, body);
 
         const localHash = hashLocalFile(raw);
-        syncState.files[file.relativePath] = {
+        syncState.files[syncKey(file.sectionSlug, file.path)] = {
+          sectionSlug: file.sectionSlug,
+          path: file.path,
           slug: file.slug,
-          remoteVersion: (syncState.files[file.relativePath]?.remoteVersion ?? 0) + 1,
+          remoteVersion: (syncState.files[syncKey(file.sectionSlug, file.path)]?.remoteVersion ?? 0) + 1,
           localHash,
           remoteHash: localHash,
         };
-        console.log(`  pushed: ${file.relativePath}`);
+        console.log(`  pushed: ${file.relPath}`);
       }
     }
 
@@ -921,21 +918,23 @@ program
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const syncRoot = getSyncRoot(config);
+    const syncRoot = config.rootDir;
+    const mountList = buildMounts(config);
 
     if (!slug) {
       console.error("Usage: sideways diff <slug>");
       process.exit(1);
     }
 
-    const files = discoverFiles(syncRoot, config.ignore, config.sections);
-    const file = resolveFile(files, slug);
+    const files = discoverFiles(config.rootDir, mountList, config.ignore);
+    const file = resolveFile(files, config, slug);
     if (!file) {
       console.error(`No local file found for "${slug}"`);
+      printPathHint(config, slug);
       process.exit(1);
     }
 
-    const filePath = join(syncRoot, file.relativePath);
+    const filePath = join(syncRoot, file.relPath);
     const raw = readFileSync(filePath, "utf-8");
     const { clean } = extractComments(raw);
     const { content: localContent } = parseFrontmatter(clean);
@@ -953,7 +952,7 @@ program
       const remoteLines = remoteContent.split("\n");
 
       console.log(`--- remote: ${space}/${slug}`);
-      console.log(`+++ local: ${file.relativePath}`);
+      console.log(`+++ local: ${file.relPath}`);
 
       // Simple line diff
       const maxLines = Math.max(localLines.length, remoteLines.length);
@@ -1325,6 +1324,86 @@ program
       console.log(`API key: ${creds.api_key.slice(0, 8)}...`);
       if (creds.api_url) console.log(`Server: ${creds.api_url}`);
     }
+  });
+
+// ── migrate-config ────────────────────────────────────────────────────
+
+program
+  .command("migrate-config")
+  .description("Rewrite a legacy .sideways.yml to the path-and-sections schema")
+  .action(async () => {
+    const { parse: parseYaml, stringify: stringifyYaml } = await import("yaml");
+    const cwd = process.cwd();
+
+    // Walk up to find an unvalidated .sideways.yml — findConfig() validates
+    // strictly and would error on legacy shape.
+    let dir = cwd;
+    let configPath: string | null = null;
+    while (true) {
+      const p = join(dir, ".sideways.yml");
+      if (existsSync(p)) { configPath = p; break; }
+      const parent = resolve(dir, "..");
+      if (parent === dir) break;
+      dir = parent;
+    }
+    if (!configPath) {
+      console.error("No .sideways.yml found in this directory or any parent.");
+      process.exit(1);
+    }
+
+    const raw = readFileSync(configPath, "utf-8");
+    const parsed = parseYaml(raw) as any;
+    if (!parsed || typeof parsed !== "object") {
+      console.error(`Could not parse ${configPath}.`);
+      process.exit(1);
+    }
+
+    // Derive sections in priority order:
+    //   1. Map form already → no change needed (already migrated)
+    //   2. Old array `sections: [{path, name, slug}, ...]` → flatten to map
+    //   3. Legacy `mappings: [{local, section}, ...]` → use section as slug
+    //   4. Bare `root: .` (or nothing) → `default: .`
+    const sections: Record<string, string> = {};
+
+    if (parsed.sections && typeof parsed.sections === "object" && !Array.isArray(parsed.sections)) {
+      console.log(`${configPath} already uses the path-and-sections schema. Nothing to do.`);
+      return;
+    }
+
+    if (Array.isArray(parsed.sections)) {
+      for (const s of parsed.sections) {
+        if (!s || typeof s !== "object") continue;
+        const slug = (s.slug || slugFromFilename(s.name || s.path?.split("/").pop() || "section"));
+        if (slug && s.path) sections[slug] = s.path;
+      }
+    }
+
+    if (Object.keys(sections).length === 0 && Array.isArray(parsed.mappings)) {
+      for (const m of parsed.mappings) {
+        if (!m?.local) continue;
+        const slug = m.section || slugFromFilename(m.local.split("/").pop() || "default") || "default";
+        sections[slug] = m.local;
+      }
+    }
+
+    if (Object.keys(sections).length === 0) {
+      sections.default = parsed.root && typeof parsed.root === "string" ? parsed.root : ".";
+    }
+
+    const next: Record<string, any> = {
+      space: parsed.space,
+      api: parsed.api,
+    };
+    if (parsed.name) next.name = parsed.name;
+    next.sections = sections;
+    if (Array.isArray(parsed.ignore) && parsed.ignore.length > 0) next.ignore = parsed.ignore;
+
+    const newYaml = stringifyYaml(next);
+    console.log(`Rewriting ${configPath} to:\n`);
+    console.log(newYaml.split("\n").map(l => `  ${l}`).join("\n"));
+
+    writeFileSync(configPath, newYaml);
+    console.log("\nDone. Sync state in .sideways/sync.json may need to be repopulated on next pull.");
   });
 
 program
