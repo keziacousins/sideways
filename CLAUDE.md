@@ -88,6 +88,29 @@ ssh "$DEPLOY_HOST" "sudo journalctl -u sideways-web -n 50"
 
 App code lives at `/opt/sideways` on the host. Env vars in `/opt/sideways/.env`.
 
+## Releasing
+
+Versioning is **manual** — not bumped on every commit. The number in `package.json` is a signal to CLI users, not a commit counter. Bump when you intend to publish a new CLI bundle or surface a noticeable change to users.
+
+```bash
+./scripts/bump-version.sh patch        # bugfix: 1.0.3 → 1.0.4
+./scripts/bump-version.sh minor        # feature: 1.0.3 → 1.1.0
+./scripts/bump-version.sh major        # breaking: 1.0.3 → 2.0.0
+./scripts/bump-version.sh set 2.0.0-rc.1   # explicit override
+```
+
+The script updates the root and every workspace package.json. After it runs:
+
+```bash
+git add package.json packages/*/package.json
+git commit -m "Release X.Y.Z"
+git tag vX.Y.Z
+git push origin main --tags
+./scripts/deploy.sh
+```
+
+Internal commits between releases should not touch `package.json` versions. If you find a per-commit auto-bump hook in `.git/hooks/pre-commit`, delete it — it predates the manual workflow.
+
 ## Notes
 
 - Astro is v5 with `@astrojs/node@9` — the v10 adapter requires Astro v6.
