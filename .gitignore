@@ -23,6 +23,7 @@ dist/
 # Local-only working files
 references/
 for-pf-theme/
+backups/
 
 # Internal planning / scratch docs (kept out of public repo)
 PLAN.md

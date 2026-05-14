@@ -66,9 +66,12 @@ export const sections = pgTable("sections", {
 export const documents = pgTable("documents", {
   id: uuid("id").primaryKey().defaultRandom(),
   spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
-  sectionId: uuid("section_id").references(() => sections.id, { onDelete: "set null" }),
+  sectionId: uuid("section_id").notNull().references(() => sections.id, { onDelete: "restrict" }),
   parentId: uuid("parent_id").references((): any => documents.id, { onDelete: "set null" }),
   slug: text("slug").notNull(),
+  /** Leaf path of the doc within its section's local mount root, e.g.
+   *  "auth.md" or "guides/auth.md". Server-owned canonical layout. */
+  path: text("path").notNull(),
   title: text("title").notNull(),
   position: integer("position").notNull().default(0),
   tags: text("tags").array().notNull().default([]),

@@ -138,6 +138,14 @@ export function createSpaceRoutes(db: Database) {
       })
       .returning();
 
+    // Every space has a `default` section as a server-side invariant.
+    await db.insert(sections).values({
+      spaceId: space.id,
+      slug: "default",
+      title: "Default",
+      position: 0,
+    });
+
     // Auto-watch the space for the creator
     autoWatchSpace(db, ownerId, space.id).catch(() => {});
 
@@ -209,6 +217,11 @@ export function createSpaceRoutes(db: Database) {
         .where(eq(sections.id, existing.id))
         .returning();
       return c.json(updated, 200);
+    }
+
+    // `default` is a reserved slug — created automatically on space creation.
+    if (sectionSlug === "default") {
+      return c.json({ error: "`default` is a reserved section slug" }, 400);
     }
 
     const [section] = await db
