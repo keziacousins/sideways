@@ -1,12 +1,20 @@
 /**
  * MCP (Model Context Protocol) endpoint — Streamable HTTP transport.
- * Stateless: each request gets a fresh server + transport (auth via API key).
+ *
+ * Stateless: each request gets a fresh server + transport. Two auth paths
+ * coexist — programmatic callers (CLI etc) use `Authorization: Bearer sk-…`,
+ * and OAuth clients (claude.ai's connector flow) use a Hydra-issued JWT
+ * with audience `sideways-mcp`. The OAuth flow is bootstrapped via the
+ * RFC 9728 protected-resource-metadata endpoint below.
  */
 
 import { Hono } from "hono";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { jwtVerify } from "jose";
 import { registerTools, INSTRUCTIONS } from "@sideways/mcp/tools";
+import { JWKS } from "../middleware/auth.js";
+import { env } from "../env.js";
 import { logger } from "../logger.js";
 import type { Database } from "@sideways/db";
 import pkg from "../../package.json" with { type: "json" };
@@ -14,12 +22,27 @@ import pkg from "../../package.json" with { type: "json" };
 export function createMcpRoutes(_db: Database) {
   const router = new Hono();
 
-  function makeApiFetch(apiKey: string) {
-    const apiUrl = `http://localhost:${process.env.PORT || 4100}`;
+  const mcpResourceUrl = `${env.publicApiUrl}/api/mcp`;
+  const resourceMetadataUrl = `${mcpResourceUrl}/.well-known/oauth-protected-resource`;
+
+  // RFC 9728 — protected resource metadata. claude.ai (and other compliant
+  // MCP clients) fetch this after a 401 to learn which authorization
+  // server to use. authorization_servers[0] is the only entry inspected.
+  router.get("/.well-known/oauth-protected-resource", (c) =>
+    c.json({
+      resource: mcpResourceUrl,
+      authorization_servers: [env.hydraIssuerUrl],
+      bearer_methods_supported: ["header"],
+      scopes_supported: ["mcp"],
+    }),
+  );
+
+  function makeApiFetch(token: string) {
+    const apiUrl = `http://localhost:${env.port}`;
     return async (path: string, options?: RequestInit) => {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${token}`,
         ...((options?.headers as Record<string, string>) || {}),
       };
       const res = await fetch(`${apiUrl}${path}`, { ...options, headers });
@@ -32,19 +55,37 @@ export function createMcpRoutes(_db: Database) {
     };
   }
 
-  function extractKey(c: any): string | null {
-    const auth = c.req.header("authorization");
-    if (auth?.startsWith("Bearer ")) return auth.slice(7);
-    return null;
+  // 401 builder shared between the no-auth and bad-JWT paths. Per
+  // Anthropic's connector auth docs the `scope=` attribute is
+  // authoritative for the scope set claude.ai will request; the
+  // resource_metadata attribute points clients at the PRM document.
+  function unauthorized(c: any, error: string) {
+    c.header(
+      "WWW-Authenticate",
+      `Bearer resource_metadata="${resourceMetadataUrl}", ` +
+        `scope="mcp offline_access", error="${error}"`,
+    );
+    return c.json({ error: "Unauthorized" }, 401);
   }
 
   router.all("/*", async (c) => {
-    const apiKey = extractKey(c);
-    if (!apiKey) {
-      return c.json(
-        { error: "API key required. Pass as `Authorization: Bearer <key>`." },
-        401,
-      );
+    const auth = c.req.header("authorization");
+    if (!auth?.startsWith("Bearer ")) return unauthorized(c, "invalid_token");
+    const token = auth.slice(7);
+
+    // API keys pass through unchanged — downstream authMiddleware validates.
+    // For JWTs we verify up front so 401s carry the right WWW-Authenticate
+    // (and so DCR'd-client failures don't surface as opaque downstream errors).
+    if (!token.startsWith("sk-")) {
+      try {
+        await jwtVerify(token, JWKS, {
+          issuer: env.hydraIssuerUrl,
+          audience: env.mcpAudience,
+        });
+      } catch (err: any) {
+        logger.debug({ err: err.message }, "MCP JWT verification failed");
+        return unauthorized(c, "invalid_token");
+      }
     }
 
     const method = c.req.method;
@@ -59,7 +100,7 @@ export function createMcpRoutes(_db: Database) {
 
     // Stateless: fresh server + transport per request, no session tracking
     const server = new McpServer({ name: "sideways", version: pkg.version }, { instructions: INSTRUCTIONS });
-    registerTools(server, makeApiFetch(apiKey));
+    registerTools(server, makeApiFetch(token));
 
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // Stateless mode — no session validation

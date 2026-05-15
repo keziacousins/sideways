@@ -34,10 +34,11 @@ const RESERVED_ACTOR_NAMES = new Set([
 
 /**
  * Normalise and validate an actor name supplied via the X-Sideways-Actor
- * header. Returns the cleaned name, or null if it's unusable (empty after
- * stripping, too long, control characters, or on the reserved list).
+ * header or a DCR'd client's `client_name`. Returns the cleaned name, or
+ * null if it's unusable (empty after stripping, too long, control
+ * characters, or on the reserved list).
  */
-function sanitiseActorName(raw: string): string | null {
+export function sanitiseActorName(raw: string): string | null {
   // \p{C} = Unicode "Other" category: control chars (C0/C1, DEL), format
   // marks, surrogates. None of these belong in a display name.
   const stripped = raw.replace(/\p{C}/gu, "").trim();
@@ -47,7 +48,7 @@ function sanitiseActorName(raw: string): string | null {
 }
 
 /** Cached JWKS fetcher — validates JWT signatures against Hydra's public keys */
-const JWKS = createRemoteJWKSet(
+export const JWKS = createRemoteJWKSet(
   new URL(`${env.hydraPublicUrl}/.well-known/jwks.json`),
 );
 
@@ -93,22 +94,31 @@ export function authMiddleware(db: Database) {
         return next();
       }
 
-      // JWT path
+      // JWT path. Accept both the web API audience and the MCP audience —
+      // identity-wise they're equivalent (same user, same Hydra issuer);
+      // the distinction is for log clarity and future per-surface policy.
       try {
         const { payload } = await jwtVerify(token, JWKS, {
           issuer: env.hydraIssuerUrl,
-          audience: env.apiAudience,
+          audience: [env.apiAudience, env.mcpAudience],
         });
 
         // Custom claims injected at consent
         const ext = (payload as any).ext || {};
         if (ext.user_id) {
           const name = ext.name || "";
+          // actor_name is set at consent time for OAuth clients with the
+          // mcp scope — the DCR'd client_name becomes the agent identity.
+          // Comments and edits get attributed as "Claude via Kezia" etc.
+          const actorName = typeof ext.actor_name === "string" && ext.actor_name
+            ? sanitiseActorName(ext.actor_name)
+            : null;
           c.set("user", {
             id: ext.user_id,
             email: ext.email || "",
             name,
-            displayName: name,
+            actorName: actorName || undefined,
+            displayName: actorName ? `${actorName} via ${name}` : name,
           });
         } else if (payload.sub) {
           // Fall back to looking up by Hydra subject

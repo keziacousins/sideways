@@ -32,7 +32,7 @@ const returnTo = Astro.url.searchParams.get("returnTo") || "/";
       </form>
 
       <p class="auth-alt">
-        Don't have an account? <a href={`/auth/signup?returnTo=${encodeURIComponent(returnTo)}`}>Create one</a>
+        Don't have an account? <a href={`/auth/signup?returnTo=${encodeURIComponent(returnTo)}${loginChallenge ? `&login_challenge=${encodeURIComponent(loginChallenge)}` : ""}`}>Create one</a>
       </p>
     </div>
   </div>
@@ -65,7 +65,12 @@ const returnTo = Astro.url.searchParams.get("returnTo") || "/";
         return;
       }
 
-      window.location.href = `${API_URL}/api/auth/authorize?nonce=${data.nonce}&returnTo=${encodeURIComponent(returnTo)}`;
+      // Preserve any in-flight OAuth login challenge so /authorize can
+      // resume the original flow (e.g. an MCP connector add) rather than
+      // restarting a fresh sideways-web flow that abandons it.
+      const params = new URLSearchParams({ nonce: data.nonce, returnTo });
+      if (loginChallenge) params.set("login_challenge", loginChallenge);
+      window.location.href = `${API_URL}/api/auth/authorize?${params.toString()}`;
     } catch (err) {
       alert("Connection error. Is the API server running?");
       btn.textContent = "Sign in";

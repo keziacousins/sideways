@@ -13,27 +13,30 @@ import { z } from "zod";
 
 type ApiFetch = (path: string, options?: RequestInit) => Promise<any>;
 
-const INSTRUCTIONS = `Sideways is a documentation sharing platform. The data model is:
+const INSTRUCTIONS = `Sideways is a documentation platform. Capabilities:
+- Spaces: create, list (top-level containers)
+- Documents: read, write, edit (in-place), rename, move, duplicate, delete, version history
+- Comments: add, list, resolve, reply (threaded, optionally anchored to text)
+- Search: full-text across documents
 
-- **Spaces**: Top-level containers (like projects or teams). Each has a slug, name, visibility (public/private/shared/org), and an owner.
-- **Sections**: Filesystem-shaped groupings within a space. A section is the first segment of a doc's path.
-- **Documents**: Versioned markdown files. Identified by \`(space, path)\` where \`path\` is the filesystem path including section prefix and \`.md\` extension — e.g. \`architecture/overview.md\` is a doc in the \`architecture\` section.
-- **Comments**: Threaded discussions on documents, optionally anchored to specific text.
+Document refs:
+- Every doc has a canonical ref of the form \`<space>:<section>/<path>.md\` — e.g. \`engineering:architecture/api-design.md\`.
+- search and doc_list emit refs you can copy verbatim into doc_read, doc_edit, comment_add, etc.
+- The first segment after the colon is the section (a filesystem-shaped grouping); the rest is the path within that section.
 
-URL form: \`/s/<space>/<path-without-md>\` (with \`<dir>/index.md\` collapsed to \`<dir>\`).
+Concepts:
+- doc_write is an upsert: creates the doc if its ref is new, updates otherwise.
+- doc_edit applies search/replace pairs sequentially; if any \`old\` string is not found the whole edit fails.
+- Comments can be anchored to exact text passages for inline review.
 
-Common workflows:
-- Create documentation for a new project: create_space → write_doc (repeating for each document)
-- Review a document: read_doc → add_comment (with anchor_text for inline comments)
-- Reorganize: rename_doc (title only), move_doc (path/section/space change)
-- write_doc is an upsert: creates the doc if its path is new, updates otherwise.`;
+URL form: \`/s/<space>/<path-without-md>\` (with \`<dir>/index.md\` collapsed to \`<dir>\`).`;
 
 export function registerTools(server: McpServer, apiFetch: ApiFetch) {
   // --- Spaces ---
 
   server.tool(
-    "list_spaces",
-    "List all documentation spaces the user has access to. Returns slug, name, visibility, and description for each space.",
+    "space_list",
+    "List spaces the user can access. Returns slug, name, visibility, and description.",
     {},
     async () => {
       const spaces = await apiFetch("/api/spaces");
@@ -45,8 +48,8 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
   );
 
   server.tool(
-    "create_space",
-    'Create a new documentation space. Example: create_space("my-project", "My Project", "private"). Visibility options: "public" (anyone can view), "private" (owner + members only), "shared" (anyone with the link), "org" (authenticated users).',
+    "space_create",
+    'Create a documentation space. Visibility: "public" (anyone), "private" (owner + members, default), "shared" (anyone with the link), "org" (authenticated users).',
     {
       slug: z.string().describe('URL-friendly identifier, e.g. "engineering-docs"'),
       name: z.string().describe('Display name, e.g. "Engineering Docs"'),
@@ -69,25 +72,43 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   // --- Documents ---
 
-  function splitPath(path: string): { section: string; rest: string } {
+  /** Parse a `<space>:<section>/<rest>` ref into its three API-shaped parts. */
+  function parseRef(ref: string): { space: string; section: string; rest: string } {
+    const colon = ref.indexOf(":");
+    if (colon === -1) {
+      throw new Error(
+        `Invalid ref "${ref}" — expected "<space>:<section>/<path>.md" (e.g. "engineering:architecture/api-design.md")`,
+      );
+    }
+    const space = ref.slice(0, colon);
+    const path = ref.slice(colon + 1);
     const slash = path.indexOf("/");
     if (slash === -1) {
-      // Single-segment path = section root index doc
-      return { section: path, rest: "index.md" };
+      // section-only ref = section's index doc
+      return { space, section: path, rest: "index.md" };
     }
-    return { section: path.slice(0, slash), rest: path.slice(slash + 1) };
+    return { space, section: path.slice(0, slash), rest: path.slice(slash + 1) };
   }
 
+  /** Inverse of parseRef — build the canonical ref string. */
+  function formatRef(space: string, sectionSlug: string, path: string): string {
+    return `${space}:${sectionSlug}/${path}`;
+  }
+
+  /** Schema description shared by every `ref` arg, so renames stay consistent. */
+  const REF_DESC =
+    'Document ref: "<space>:<section>/<path>.md", e.g. "engineering:architecture/api-design.md". Copy verbatim from search or doc_list output.';
+
   server.tool(
-    "list_docs",
-    'List all documents in a space. Returns path, title, and tags for each document. Example: list_docs("engineering")',
+    "doc_list",
+    "List documents in a space. Each line is a doc_read-ready ref followed by the title.",
     { space: z.string().describe('Space slug, e.g. "engineering"') },
     async ({ space }) => {
       const docs = await apiFetch(`/api/documents?space=${space}`);
       const text = docs
         .map((d: any) => {
           const tags = d.tags?.length ? ` [${d.tags.join(", ")}]` : "";
-          return `${d.sectionSlug}/${d.path}: ${d.title}${tags}`;
+          return `${formatRef(space, d.sectionSlug, d.path)} — ${d.title}${tags}`;
         })
         .join("\n");
       return { content: [{ type: "text" as const, text: text || "No documents in this space." }] };
@@ -95,15 +116,14 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
   );
 
   server.tool(
-    "read_doc",
-    'Read a document\'s full markdown content. Path includes section prefix and `.md`. Optionally includes comments embedded as HTML comment blocks. Example: read_doc("engineering", "architecture/api-design.md")',
+    "doc_read",
+    "Read a document's full markdown content. Comments are embedded at the end as HTML comment blocks unless disabled.",
     {
-      space: z.string().describe('Space slug, e.g. "engineering"'),
-      path: z.string().describe('Doc path including section, e.g. "architecture/api-design.md"'),
+      ref: z.string().describe(REF_DESC),
       include_comments: z.boolean().optional().describe("Embed comments as <!-- @comment --> blocks at the end (default: true)"),
     },
-    async ({ space, path, include_comments }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref, include_comments }) => {
+      const { space, section, rest } = parseRef(ref);
       const doc = await apiFetch(`/api/documents/${space}/${section}/${rest}`);
       let content = doc.content;
 
@@ -125,23 +145,22 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
         } catch {}
       }
 
-      const meta = `Space: ${space} | Path: ${path} | Title: ${doc.title}`;
+      const meta = `${ref} — ${doc.title}`;
       return { content: [{ type: "text" as const, text: `${meta}\n---\n${content}` }] };
     },
   );
 
   server.tool(
-    "write_doc",
-    'Create or update a document (upsert). If the path already exists, creates a new version. Otherwise creates the doc. The title is auto-extracted from the first # heading if not provided. Example: write_doc("engineering", "architecture/api-design.md", "# API Design Guide\\n\\nOur API follows REST conventions...")',
+    "doc_write",
+    "Create or update a document. Upserts on ref: existing docs get a new version, new refs create the doc. Title is auto-extracted from the first # heading if omitted.",
     {
-      space: z.string().describe('Space slug, e.g. "engineering"'),
-      path: z.string().describe('Doc path including section and `.md`, e.g. "architecture/api-design.md". Section is the first segment.'),
+      ref: z.string().describe(REF_DESC),
       content: z.string().describe("Full markdown content of the document"),
       title: z.string().optional().describe("Document title (auto-extracted from first # heading if omitted)"),
       tags: z.array(z.string()).optional().describe('Tags for categorization, e.g. ["api", "architecture"]'),
     },
-    async ({ space, path, content, title, tags }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref, content, title, tags }) => {
+      const { space, section, rest } = parseRef(ref);
       const body: Record<string, any> = { content };
       if (title) body.title = title;
       if (tags) body.tags = tags;
@@ -151,23 +170,22 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
         body: JSON.stringify(body),
       });
 
-      return { content: [{ type: "text" as const, text: `Saved ${space}/${path} (${doc.title})` }] };
+      return { content: [{ type: "text" as const, text: `Saved ${formatRef(space, doc.sectionSlug, doc.path)} — ${doc.title}` }] };
     },
   );
 
   server.tool(
-    "edit_doc",
-    'Apply search-and-replace edits to a document without rewriting the whole thing. Each edit specifies an exact string to find and its replacement. Edits are applied sequentially. If any "old" string is not found, the operation fails with an error showing which edit failed. Use read_doc first to see the current content. Example: edit_doc("finco", "architecture/api-design.md", [{ old: "Status: Draft", new: "Status: Approved" }])',
+    "doc_edit",
+    "Apply search-and-replace edits to a document without rewriting it. Edits run sequentially; if any `old` string is not found, the whole edit fails and nothing is saved. Use doc_read first to see current content.",
     {
-      space: z.string().describe('Space slug, e.g. "finco"'),
-      path: z.string().describe('Doc path including section, e.g. "architecture/api-design.md"'),
+      ref: z.string().describe(REF_DESC),
       edits: z.array(z.object({
         old: z.string().describe("Exact string to find in the document"),
         new: z.string().describe("Replacement string"),
       })).describe("List of search/replace pairs to apply sequentially"),
     },
-    async ({ space, path, edits }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref, edits }) => {
+      const { space, section, rest } = parseRef(ref);
       const doc = await apiFetch(`/api/documents/${space}/${section}/${rest}`);
       let content: string = doc.content;
 
@@ -191,40 +209,38 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
         body: JSON.stringify({ content }),
       });
 
-      return { content: [{ type: "text" as const, text: `Applied ${edits.length} edit${edits.length !== 1 ? "s" : ""} to ${space}/${path}` }] };
+      return { content: [{ type: "text" as const, text: `Applied ${edits.length} edit${edits.length !== 1 ? "s" : ""} to ${ref}` }] };
     },
   );
 
   server.tool(
-    "rename_doc",
-    'Rename a document\'s title. Path-changing renames go through move_doc. Example: rename_doc("engineering", "architecture/api-design.md", "API Design Guide")',
+    "doc_rename",
+    "Change a document's title. Path-changing renames go through doc_move.",
     {
-      space: z.string().describe("Space slug"),
-      path: z.string().describe("Doc path including section"),
+      ref: z.string().describe(REF_DESC),
       title: z.string().describe("New title"),
     },
-    async ({ space, path, title }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref, title }) => {
+      const { space, section, rest } = parseRef(ref);
       const doc = await apiFetch(`/api/documents/${space}/${section}/${rest}`, {
         method: "PATCH",
         body: JSON.stringify({ title }),
       });
-      return { content: [{ type: "text" as const, text: `Renamed to "${doc.title}" (${space}/${path})` }] };
+      return { content: [{ type: "text" as const, text: `Renamed ${ref} — "${doc.title}"` }] };
     },
   );
 
   server.tool(
-    "move_doc",
-    'Move a document to a different space, section, or path. Example: move_doc("engineering", "architecture/api-design.md", target_section="platform") or move_doc("engineering", "draft/foo.md", target_path="architecture/foo.md")',
+    "doc_move",
+    "Move a document to a different space, section, or path. Each target_* arg is optional; omitted ones stay the same.",
     {
-      space: z.string().describe("Current space slug"),
-      path: z.string().describe("Current doc path including section"),
+      ref: z.string().describe(REF_DESC),
       target_space: z.string().optional().describe("Destination space slug (omit to keep in same space)"),
       target_section: z.string().optional().describe("Destination section slug (omit to keep in same section)"),
-      target_path: z.string().optional().describe("Destination path within section (e.g. \"architecture/foo.md\")"),
+      target_path: z.string().optional().describe('Destination path within section (e.g. "architecture/foo.md")'),
     },
-    async ({ space, path, target_space, target_section, target_path }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref, target_space, target_section, target_path }) => {
+      const { space, section, rest } = parseRef(ref);
       const body: Record<string, any> = {};
       if (target_space) body.targetSpace = target_space;
       if (target_section) body.targetSection = target_section;
@@ -235,23 +251,22 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
         body: JSON.stringify(body),
       });
 
-      const dest = target_space || space;
-      return { content: [{ type: "text" as const, text: `Moved to ${dest}/${doc.sectionSlug}/${doc.path}` }] };
+      const destSpace = target_space || space;
+      return { content: [{ type: "text" as const, text: `Moved to ${formatRef(destSpace, doc.sectionSlug, doc.path)}` }] };
     },
   );
 
   server.tool(
-    "duplicate_doc",
-    'Create a copy of a document, optionally in a different space, section, or path. Example: duplicate_doc("engineering", "architecture/api-design.md")',
+    "doc_duplicate",
+    "Copy a document, optionally into a different space, section, or path. Defaults to `<source>-copy.md` in the same place.",
     {
-      space: z.string().describe("Source space slug"),
-      path: z.string().describe("Source doc path including section"),
+      ref: z.string().describe(REF_DESC),
       target_space: z.string().optional().describe("Destination space slug (default: same space)"),
       target_section: z.string().optional().describe("Destination section slug (default: same section)"),
-      target_path: z.string().optional().describe("Custom path for the copy (default: \"<source>-copy.md\")"),
+      target_path: z.string().optional().describe('Custom path for the copy (default: "<source>-copy.md")'),
     },
-    async ({ space, path, target_space, target_section, target_path }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref, target_space, target_section, target_path }) => {
+      const { space, section, rest } = parseRef(ref);
       const body: Record<string, any> = {};
       if (target_space) body.targetSpace = target_space;
       if (target_section) body.targetSection = target_section;
@@ -262,33 +277,32 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
         body: JSON.stringify(body),
       });
 
-      return { content: [{ type: "text" as const, text: `Duplicated to ${target_space || space}/${doc.sectionSlug}/${doc.path}` }] };
+      const destSpace = target_space || space;
+      return { content: [{ type: "text" as const, text: `Duplicated to ${formatRef(destSpace, doc.sectionSlug, doc.path)}` }] };
     },
   );
 
   server.tool(
-    "delete_doc",
-    'Permanently delete a document and all its versions. This cannot be undone. Example: delete_doc("engineering", "drafts/old.md")',
+    "doc_delete",
+    "Permanently delete a document and all its versions. Cannot be undone.",
     {
-      space: z.string().describe("Space slug"),
-      path: z.string().describe("Doc path including section"),
+      ref: z.string().describe(REF_DESC),
     },
-    async ({ space, path }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref }) => {
+      const { space, section, rest } = parseRef(ref);
       await apiFetch(`/api/documents/${space}/${section}/${rest}`, { method: "DELETE" });
-      return { content: [{ type: "text" as const, text: `Deleted ${space}/${path}` }] };
+      return { content: [{ type: "text" as const, text: `Deleted ${ref}` }] };
     },
   );
 
   server.tool(
     "doc_versions",
-    "List version history of a document. Shows version number, content hash, and creation date for each version.",
+    "List a document's version history with version number, content hash, and creation date.",
     {
-      space: z.string().describe("Space slug"),
-      path: z.string().describe("Doc path including section"),
+      ref: z.string().describe(REF_DESC),
     },
-    async ({ space, path }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref }) => {
+      const { space, section, rest } = parseRef(ref);
       const versions = await apiFetch(`/api/documents/${space}/${section}/_versions/${rest}`);
       const text = versions
         .map((v: any) => `v${v.version} — ${v.contentHash} — ${new Date(v.createdAt).toLocaleString()}`)
@@ -300,18 +314,17 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
   // --- Comments ---
 
   server.tool(
-    "add_comment",
-    'Add a comment to a document. Comments can be anchored to specific text for inline discussion. For anchored comments, provide the exact text passage and the section heading path. Example: add_comment("engineering", "architecture/api-design.md", "Should we use UUIDs here?", anchor_text="All IDs are auto-incrementing integers")',
+    "comment_add",
+    "Add a comment to a document, or reply to an existing thread. Optionally anchor to a specific text passage for inline review.",
     {
-      space: z.string().describe("Space slug"),
-      path: z.string().describe("Doc path including section"),
+      ref: z.string().describe(REF_DESC),
       body: z.string().describe("Comment text (markdown supported)"),
       anchor_text: z.string().optional().describe("Exact text passage to anchor this comment to"),
       anchor_section: z.string().optional().describe('Section heading path, e.g. "## Authentication > ### Token Format"'),
       parent_id: z.string().optional().describe("Parent comment ID to reply to an existing comment thread"),
     },
-    async ({ space, path, body, anchor_text, anchor_section, parent_id }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref, body, anchor_text, anchor_section, parent_id }) => {
+      const { space, section, rest } = parseRef(ref);
       const payload: Record<string, any> = { body };
       if (anchor_text) payload.anchorText = anchor_text;
       if (anchor_section) payload.anchorSection = anchor_section;
@@ -327,15 +340,14 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
   );
 
   server.tool(
-    "list_comments",
-    "List all comments on a document. Shows author, body, anchor text, section, and resolved status. Resolved comments are hidden by default.",
+    "comment_list",
+    "List comments on a document, threaded by parent. Resolved comments are hidden unless include_resolved is set.",
     {
-      space: z.string().describe("Space slug"),
-      path: z.string().describe("Doc path including section"),
+      ref: z.string().describe(REF_DESC),
       include_resolved: z.boolean().optional().describe("Include resolved/closed comments (default: false)"),
     },
-    async ({ space, path, include_resolved }) => {
-      const { section, rest } = splitPath(path);
+    async ({ ref, include_resolved }) => {
+      const { space, section, rest } = parseRef(ref);
       const qs = include_resolved ? "?include_resolved=true" : "";
       const comments = await apiFetch(`/api/comments/${space}/${section}/${rest}${qs}`);
 
@@ -371,10 +383,10 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
   );
 
   server.tool(
-    "resolve_comment",
-    "Toggle a comment thread as resolved or reopened. Resolved comments are hidden from the default view.",
+    "comment_resolve",
+    "Toggle a comment thread between resolved and reopened. Resolved threads are hidden from the default view.",
     {
-      comment_id: z.string().describe("Comment ID (from list_comments output)"),
+      comment_id: z.string().describe("Comment ID (from comment_list output)"),
     },
     async ({ comment_id }) => {
       const comment = await apiFetch(`/api/comments/${comment_id}/resolve`, { method: "POST" });
@@ -385,8 +397,8 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
   // --- Search ---
 
   server.tool(
-    "search_docs",
-    'Full-text search across all accessible documents by title and content. Returns ranked results with snippets. Example: search_docs("api design")',
+    "search",
+    "Full-text search across accessible documents by title, tags, and content. Returns ranked results with snippets. Optionally limit to one space.",
     {
       query: z.string().describe("Search query — searches titles, tags, and document content"),
       space: z.string().optional().describe("Limit search to a specific space slug"),
@@ -396,7 +408,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
       if (space) params.set("space", space);
       const data = await apiFetch(`/api/search?${params}`);
       const text = data.results
-        .map((r: any) => `${r.spaceSlug}/${r.sectionSlug}/${r.path}: ${r.title}\n  ${r.snippet?.replace(/<[^>]+>/g, "") || ""}`)
+        .map((r: any) => `${formatRef(r.spaceSlug, r.sectionSlug, r.path)} — ${r.title}\n  ${r.snippet?.replace(/<[^>]+>/g, "") || ""}`)
         .join("\n\n");
       return { content: [{ type: "text" as const, text: text || "No documents found." }] };
     },

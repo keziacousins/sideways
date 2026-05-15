@@ -4,7 +4,7 @@ import { Buffer } from "node:buffer";
 import { timingSafeEqual as nodeTimingSafeEqual } from "node:crypto";
 import { type Database, users } from "@sideways/db";
 import { env } from "../env.js";
-import type { AuthUser } from "../middleware/auth.js";
+import { sanitiseActorName, type AuthUser } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 
 /** Constant-time string compare to avoid leaking byte-by-byte match info. */
@@ -256,6 +256,161 @@ export function createAuthRoutes(db: Database) {
     return c.redirect(`${env.publicUrl}/auth/login?login_challenge=${challenge}`);
   });
 
+  /**
+   * Scopes we recognise. Any other scope a client requests (including the
+   * notorious `claudeai` value that claude.ai sometimes appends — see
+   * modelcontextprotocol/modelcontextprotocol#653) is dropped silently
+   * before forwarding to Hydra's accept-consent call. Hydra v2.3 has no
+   * scope allow-list of its own, so this is the only enforcement point.
+   */
+  const KNOWN_SCOPES = new Set(["openid", "offline_access", "offline", "mcp"]);
+
+  /**
+   * Look up (or auto-create) the Sideways user for a Hydra consent
+   * subject. Returns null if Kratos doesn't have the identity either —
+   * shouldn't happen in practice but we don't want a 500 if it does.
+   * The 409 case (email collision with a different subject) is returned
+   * separately so the caller can surface it.
+   */
+  async function resolveConsentUser(
+    subject: string,
+  ): Promise<{ user: { id: string; email: string; name: string } | null; conflict?: true }> {
+    let user = await db.query.users.findFirst({
+      where: eq(users.hydraSubject, subject),
+    });
+    if (user) return { user };
+
+    try {
+      const identityRes = await fetch(`${KRATOS_ADMIN}/admin/identities/${subject}`);
+      if (!identityRes.ok) return { user: null };
+      const identity = await identityRes.json();
+
+      const existingByEmail = await db.query.users.findFirst({
+        where: eq(users.email, identity.traits.email),
+      });
+
+      if (existingByEmail) {
+        // Refuse to rebind a subject already linked to a different identity
+        // — see the longer note in the prior version of this function.
+        if (existingByEmail.hydraSubject && existingByEmail.hydraSubject !== subject) {
+          console.error(
+            "[consent] Refusing to rebind existing user",
+            { userId: existingByEmail.id, existing: existingByEmail.hydraSubject, attempted: subject },
+          );
+          return { user: null, conflict: true };
+        }
+        await db.update(users)
+          .set({ hydraSubject: subject })
+          .where(eq(users.id, existingByEmail.id));
+        return {
+          user: {
+            id: existingByEmail.id,
+            email: existingByEmail.email,
+            name: existingByEmail.name,
+          },
+        };
+      }
+
+      const [created] = await db
+        .insert(users)
+        .values({
+          email: identity.traits.email,
+          name: identity.traits.name || identity.traits.email,
+          hydraSubject: subject,
+        })
+        .returning();
+      return { user: created };
+    } catch (e: any) {
+      console.error("[consent] Kratos lookup error:", e.message);
+      return { user: null };
+    }
+  }
+
+  /**
+   * Compute the set of access-token audiences we want to grant for a
+   * given consent request. claude.ai (and most MCP clients) don't send
+   * RFC 8707 resource indicators, so the requested set is usually empty
+   * — we add `mcpAudience` based on scope instead, which is the only
+   * signal we have that this token is destined for /api/mcp.
+   */
+  function audiencesForConsent(
+    consentRequest: any,
+    grantScope: string[],
+  ): string[] {
+    const requestedAudience: string[] =
+      consentRequest.requested_access_token_audience || [];
+    const audiences = new Set<string>([env.apiAudience, ...requestedAudience]);
+    if (grantScope.includes("mcp")) audiences.add(env.mcpAudience);
+    return Array.from(audiences);
+  }
+
+  /**
+   * DCR'd clients register with audience=[], and Hydra rejects refresh
+   * grants for audiences not in the client's allow-list. Patch the
+   * client record so the audiences we're about to grant survive the
+   * first refresh — otherwise the connector dies 24h after issuance.
+   */
+  async function ensureClientAudiences(
+    client: any,
+    requiredAudiences: string[],
+  ): Promise<void> {
+    const current = new Set<string>(client.audience || []);
+    if (requiredAudiences.every((a) => current.has(a))) return;
+    const updated = [...new Set([...current, ...requiredAudiences])];
+    await hydraAdmin(`/admin/clients/${client.client_id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json-patch+json" },
+      body: JSON.stringify([
+        { op: "replace", path: "/audience", value: updated },
+      ]),
+    });
+  }
+
+  /**
+   * Derive the agent identity for a consent request. For OAuth clients
+   * with the `mcp` scope, the client_name from DCR becomes the actor —
+   * comments and edits get attributed as "Claude via Kezia" etc, the
+   * same way API-key actorName works for the CLI. Null if the scope
+   * doesn't include mcp or the client_name doesn't sanitise.
+   */
+  function actorNameForConsent(consentRequest: any, grantScope: string[]): string | null {
+    if (!grantScope.includes("mcp")) return null;
+    const raw = consentRequest.client?.client_name;
+    if (typeof raw !== "string" || !raw) return null;
+    return sanitiseActorName(raw);
+  }
+
+  /**
+   * Build the body for Hydra's accept-consent call. Filters scopes and
+   * packs user identity into the access-token session. Audience is
+   * passed in so the caller can also patch the client record to match.
+   */
+  function buildAcceptBody(
+    user: { id: string; email: string; name: string } | null,
+    grantScope: string[],
+    audiences: string[],
+    actorName: string | null,
+  ) {
+    return {
+      grant_scope: grantScope,
+      grant_access_token_audience: audiences,
+      remember: true,
+      remember_for: 3600,
+      session: {
+        access_token: {
+          user_id: user?.id,
+          email: user?.email,
+          name: user?.name,
+          ...(actorName ? { actor_name: actorName } : {}),
+        },
+        id_token: {
+          email: user?.email,
+          name: user?.name,
+        },
+      },
+    };
+  }
+
   router.get("/consent", async (c) => {
     const challenge = c.req.query("consent_challenge");
     if (!challenge) return c.text("Missing consent_challenge", 400);
@@ -265,104 +420,131 @@ export function createAuthRoutes(db: Database) {
         `/admin/oauth2/auth/requests/consent?consent_challenge=${challenge}`,
       );
 
-      const subject = consentRequest.subject;
-
-      // Ensure local user exists
-      let user = await db.query.users.findFirst({
-        where: eq(users.hydraSubject, subject),
-      });
-
-      if (!user) {
-        try {
-          const identityRes = await fetch(
-            `${KRATOS_ADMIN}/admin/identities/${subject}`,
-          );
-          if (identityRes.ok) {
-            const identity = await identityRes.json();
-
-            const existingByEmail = await db.query.users.findFirst({
-              where: eq(users.email, identity.traits.email),
-            });
-
-            if (existingByEmail) {
-              // Only link the Kratos subject when the row has no subject yet
-              // — the legitimate "registration webhook hasn't fired" race.
-              // Refusing to rebind an already-linked account prevents a
-              // second Kratos identity (e.g. after a delete+recreate, or
-              // any future config that allows duplicate emails) from
-              // silently taking over the existing Sideways account.
-              if (existingByEmail.hydraSubject && existingByEmail.hydraSubject !== subject) {
-                console.error(
-                  "[consent] Refusing to rebind existing user",
-                  { userId: existingByEmail.id, existing: existingByEmail.hydraSubject, attempted: subject },
-                );
-                return c.text(
-                  "An account with this email is already linked to a different identity. " +
-                  "Contact an administrator to resolve.",
-                  409,
-                );
-              }
-              // Set the subject; preserve the existing name (Kratos traits
-              // are user-mutable and not trusted to overwrite display data).
-              await db.update(users)
-                .set({ hydraSubject: subject })
-                .where(eq(users.id, existingByEmail.id));
-              user = { ...existingByEmail, hydraSubject: subject };
-            } else {
-              const [created] = await db
-                .insert(users)
-                .values({
-                  email: identity.traits.email,
-                  name: identity.traits.name || identity.traits.email,
-                  hydraSubject: subject,
-                })
-                .returning();
-              user = created;
-            }
-          }
-        } catch (e: any) {
-          console.error("[consent] Kratos lookup error:", e.message);
-        }
+      const { user, conflict } = await resolveConsentUser(consentRequest.subject);
+      if (conflict) {
+        return c.text(
+          "An account with this email is already linked to a different identity. " +
+          "Contact an administrator to resolve.",
+          409,
+        );
       }
 
-      // Inject claims — these go into the JWT access token.
-      // Force the Sideways API audience so the middleware's audience check
-      // accepts the token; intersect with whatever the client requested so
-      // we don't silently grant access to audiences we don't know about.
-      const requestedAudience: string[] =
-        consentRequest.requested_access_token_audience || [];
-      const grantedAudience = Array.from(
-        new Set<string>([env.apiAudience, ...requestedAudience]),
-      );
+      // Skip the UI for clients explicitly marked trusted (`skip_consent`
+      // on the client record — e.g. sideways-web, sideways-cli) and for
+      // remembered grants that Hydra signals via `skip: true`. v2.3
+      // doesn't populate `skip` from `client.skip_consent` reliably, so
+      // we have to check both.
+      const shouldSkipUi = consentRequest.skip || consentRequest.client?.skip_consent;
+      if (!shouldSkipUi) {
+        return c.redirect(`${env.publicUrl}/auth/consent?consent_challenge=${challenge}`);
+      }
+
+      const requestedScopes: string[] = consentRequest.requested_scope || [];
+      const grantScope = requestedScopes.filter((s) => KNOWN_SCOPES.has(s));
+      const audiences = audiencesForConsent(consentRequest, grantScope);
+      const actorName = actorNameForConsent(consentRequest, grantScope);
+      await ensureClientAudiences(consentRequest.client, audiences);
 
       const completion = await hydraAdmin(
         `/admin/oauth2/auth/requests/consent/accept?consent_challenge=${challenge}`,
         {
           method: "PUT",
-          body: JSON.stringify({
-            grant_scope: consentRequest.requested_scope,
-            grant_access_token_audience: grantedAudience,
-            remember: true,
-            remember_for: 3600,
-            session: {
-              access_token: {
-                user_id: user?.id,
-                email: user?.email,
-                name: user?.name,
-              },
-              id_token: {
-                email: user?.email,
-                name: user?.name,
-              },
-            },
-          }),
+          body: JSON.stringify(buildAcceptBody(user, grantScope, audiences, actorName)),
         },
       );
-
       return c.redirect(rewriteHydraUrl(completion.redirect_to));
     } catch (e: any) {
       console.error("Consent error:", e.message);
       return c.text(`Consent failed: ${e.message}`, 500);
+    }
+  });
+
+  /**
+   * GET /api/auth/consent/details — read endpoint for the consent UI.
+   * Returns the client and scope summary the page needs to render.
+   */
+  router.get("/consent/details", async (c) => {
+    const challenge = c.req.query("consent_challenge");
+    if (!challenge) return c.json({ error: "Missing consent_challenge" }, 400);
+
+    try {
+      const consentRequest = await hydraAdmin(
+        `/admin/oauth2/auth/requests/consent?consent_challenge=${challenge}`,
+      );
+      const requestedScopes: string[] = consentRequest.requested_scope || [];
+      return c.json({
+        client_name: consentRequest.client?.client_name || consentRequest.client?.client_id || "An application",
+        client_id: consentRequest.client?.client_id,
+        scopes: requestedScopes.filter((s) => KNOWN_SCOPES.has(s)),
+        subject_email: consentRequest.context?.email || null,
+      });
+    } catch (e: any) {
+      console.error("Consent details error:", e.message);
+      // Hydra returns 404 for unknown / expired / already-handled challenges.
+      // Anything else is a server-side problem on our end.
+      if (/error 404/.test(e.message)) {
+        return c.json(
+          { error: "This authorization request is no longer valid. Please start the connection again." },
+          404,
+        );
+      }
+      return c.json({ error: "Could not load authorization request." }, 500);
+    }
+  });
+
+  /**
+   * POST /api/auth/consent/decide — write endpoint for the consent UI.
+   * Body: { consent_challenge, accept }. Returns { redirect_to } so the
+   * UI can send the browser back to Hydra.
+   */
+  router.post("/consent/decide", async (c) => {
+    const body = await c.req.json<{ consent_challenge: string; accept: boolean }>();
+    const { consent_challenge: challenge, accept } = body;
+    if (!challenge) return c.json({ error: "Missing consent_challenge" }, 400);
+
+    try {
+      if (!accept) {
+        const completion = await hydraAdmin(
+          `/admin/oauth2/auth/requests/consent/reject?consent_challenge=${challenge}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({
+              error: "access_denied",
+              error_description: "The user declined access.",
+            }),
+          },
+        );
+        return c.json({ redirect_to: rewriteHydraUrl(completion.redirect_to) });
+      }
+
+      const consentRequest = await hydraAdmin(
+        `/admin/oauth2/auth/requests/consent?consent_challenge=${challenge}`,
+      );
+      const { user, conflict } = await resolveConsentUser(consentRequest.subject);
+      if (conflict) {
+        return c.json(
+          { error: "An account with this email is already linked to a different identity." },
+          409,
+        );
+      }
+
+      const requestedScopes: string[] = consentRequest.requested_scope || [];
+      const grantScope = requestedScopes.filter((s) => KNOWN_SCOPES.has(s));
+      const audiences = audiencesForConsent(consentRequest, grantScope);
+      const actorName = actorNameForConsent(consentRequest, grantScope);
+      await ensureClientAudiences(consentRequest.client, audiences);
+
+      const completion = await hydraAdmin(
+        `/admin/oauth2/auth/requests/consent/accept?consent_challenge=${challenge}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(buildAcceptBody(user, grantScope, audiences, actorName)),
+        },
+      );
+      return c.json({ redirect_to: rewriteHydraUrl(completion.redirect_to) });
+    } catch (e: any) {
+      console.error("Consent decide error:", e.message);
+      return c.json({ error: e.message }, 500);
     }
   });
 
@@ -378,8 +560,39 @@ export function createAuthRoutes(db: Database) {
     return c.redirect(rewriteHydraUrl(completion.redirect_to));
   });
 
-  router.get("/authorize", (c) => {
+  router.get("/authorize", async (c) => {
     const nonce = c.req.query("nonce") || "";
+    const loginChallenge = c.req.query("login_challenge");
+
+    // If we arrived here while a third-party OAuth flow (e.g. claude.ai)
+    // is already in flight, accept its login challenge directly using
+    // the Kratos subject we just authenticated. Otherwise the login form
+    // would abandon the original flow and start a fresh sideways-web
+    // authorize, leaving the connector handshake stranded.
+    if (loginChallenge) {
+      const recent = recentLogins.get(nonce);
+      if (recent && recent.expiresAt > Date.now()) {
+        recentLogins.delete(nonce);
+        try {
+          const completion = await hydraAdmin(
+            `/admin/oauth2/auth/requests/login/accept?login_challenge=${loginChallenge}`,
+            {
+              method: "PUT",
+              body: JSON.stringify({
+                subject: recent.subject,
+                remember: true,
+                remember_for: 3600,
+              }),
+            },
+          );
+          return c.redirect(rewriteHydraUrl(completion.redirect_to));
+        } catch (e: any) {
+          console.error("[authorize] login_accept failed:", e.message);
+          // Fall through to the sideways-web restart path on error.
+        }
+      }
+    }
+
     const returnTo = c.req.query("returnTo") || "/";
     const stateRandom = crypto.randomUUID().replace(/-/g, "");
     // Encode returnTo in state so it survives the OAuth redirect chain

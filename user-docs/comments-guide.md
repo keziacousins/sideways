@@ -30,10 +30,10 @@ sideways comment docs/api-design.md "Good point" --reply <comment-id>
 
 ### From MCP (AI Agents)
 
-The `add_comment` tool lets AI agents leave comments. The doc is identified by its path (filesystem-shaped, including the section as the first segment):
+The `comment_add` tool lets AI agents leave comments. The doc is identified by its ref (`<space>:<section>/<path>.md`):
 
 ```
-add_comment(space="engineering", path="architecture/api-design.md",
+comment_add(ref="engineering:architecture/api-design.md",
   body="Should we use UUIDs here?",
   anchor_text="All IDs are auto-incrementing integers")
 ```

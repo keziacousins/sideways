@@ -3,6 +3,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const returnTo = Astro.url.searchParams.get("returnTo") || "/";
+const loginChallenge = Astro.url.searchParams.get("login_challenge");
 ---
 
 <BaseLayout title="Sign up">
@@ -31,13 +32,13 @@ const returnTo = Astro.url.searchParams.get("returnTo") || "/";
       </form>
 
       <p class="auth-alt">
-        Already have an account? <a href={`/auth/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in</a>
+        Already have an account? <a href={`/auth/login?returnTo=${encodeURIComponent(returnTo)}${loginChallenge ? `&login_challenge=${encodeURIComponent(loginChallenge)}` : ""}`}>Sign in</a>
       </p>
     </div>
   </div>
 </BaseLayout>
 
-<script define:vars={{ API_URL, returnTo }}>
+<script define:vars={{ API_URL, returnTo, loginChallenge }}>
   const form = document.getElementById("signup-form");
 
   form.addEventListener("submit", async (e) => {
@@ -65,7 +66,9 @@ const returnTo = Astro.url.searchParams.get("returnTo") || "/";
         return;
       }
 
-      window.location.href = `${API_URL}/api/auth/authorize?nonce=${data.nonce}&returnTo=${encodeURIComponent(returnTo)}`;
+      const params = new URLSearchParams({ nonce: data.nonce, returnTo });
+      if (loginChallenge) params.set("login_challenge", loginChallenge);
+      window.location.href = `${API_URL}/api/auth/authorize?${params.toString()}`;
     } catch (err) {
       alert("Connection error. Is the API server running?");
       btn.textContent = "Create account";
