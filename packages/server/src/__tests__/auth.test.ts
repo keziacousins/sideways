@@ -65,10 +65,11 @@ async function createTestUserWithKey(): Promise<{
 }
 
 describe("Auth", () => {
-  // TODO(phase-3-cleanup): registration webhook tests fail (500 / dup user)
-  // — likely a webhook secret or schema mismatch between test env and the
-  // route. Pre-existing; not Phase 3.
-  describe.skip("registration webhook", () => {
+  describe("registration webhook", () => {
+    // Kratos sends `Authorization: Bearer <KRATOS_WEBHOOK_SECRET>`;
+    // vitest.config.ts seeds the secret to "test-webhook-secret".
+    const webhookHeader = { Authorization: "Bearer test-webhook-secret" };
+
     it("creates a local user from Kratos webhook", async () => {
       const identityId = `kratos-webhook-${Date.now()}`;
       const email = `webhook-${Date.now()}@sideways.dev`;
@@ -80,6 +81,7 @@ describe("Auth", () => {
           email,
           name: "Webhook User",
         }),
+        headers: webhookHeader,
       });
 
       expect(status).toBe(200);
@@ -102,8 +104,8 @@ describe("Auth", () => {
         name: "Idempotent User",
       });
 
-      await api("/auth/hooks/registration", { method: "POST", body });
-      await api("/auth/hooks/registration", { method: "POST", body });
+      await api("/auth/hooks/registration", { method: "POST", body, headers: webhookHeader });
+      await api("/auth/hooks/registration", { method: "POST", body, headers: webhookHeader });
 
       // Should only have one user with this subject
       const allUsers = await db.query.users.findMany({

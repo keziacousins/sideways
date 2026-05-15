@@ -1,21 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { Hono } from "hono";
-import { createDb } from "@sideways/db";
+import { createHash, randomBytes } from "node:crypto";
+import { createDb, users, apiKeys } from "@sideways/db";
 import { createStorage } from "@sideways/storage";
 import { createDocumentRoutes } from "../routes/documents.js";
 import { createSpaceRoutes } from "../routes/spaces.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 /**
  * Integration tests against a real Postgres (sideways_test database).
  * Uses Hono's test client — no HTTP server needed.
  *
- * NOTE(phase-3-cleanup): tests below mount routes without auth middleware
- * but the server requires `canWriteSpace` for PUT/PATCH/DELETE — so all
- * write tests get 403. Pre-existing problem, never noticed because tests
- * weren't running in CI. To fix properly, follow the pattern in
- * `comments.test.ts`: add `authMiddleware`, create a test user with an
- * API key, send `Authorization: Bearer ...` headers. Skipping for now to
- * unblock CI; tracked separately.
+ * Auth is wired in the same way the live API does it: an authenticated
+ * test user with an API key, sent as `Authorization: Bearer ...` on every
+ * write request.
  */
 
 const db = createDb(process.env.DATABASE_URL!);
@@ -24,6 +22,7 @@ const storage = createStorage({
 });
 
 const app = new Hono();
+app.use("*", authMiddleware(db));
 app.route("/api/spaces", createSpaceRoutes(db));
 app.route("/api/documents", createDocumentRoutes(db, storage));
 
@@ -35,11 +34,38 @@ async function api(path: string, options?: RequestInit) {
   return { status: res.status, body: await res.json() };
 }
 
+async function createTestUser(): Promise<Record<string, string>> {
+  const [user] = await db
+    .insert(users)
+    .values({
+      email: `api-test-${Date.now()}@sideways.dev`,
+      name: "API Tester",
+      hydraSubject: `kratos-api-${Date.now()}`,
+    })
+    .returning();
+
+  const rawKey = `sk-${randomBytes(32).toString("base64url")}`;
+  const keyHash = createHash("sha256").update(rawKey).digest("hex");
+  await db.insert(apiKeys).values({
+    userId: user.id,
+    name: "Test key",
+    keyHash,
+    prefix: rawKey.slice(0, 11),
+  });
+
+  return { Authorization: `Bearer ${rawKey}` };
+}
+
 const TEST_SPACE = `test-${Date.now()}`;
 const TEST_SECTION = "default";
 const TEST_PATH = "test-doc.md";
+let authHeader: Record<string, string>;
 
 describe("API integration", () => {
+  beforeAll(async () => {
+    authHeader = await createTestUser();
+  });
+
   describe("spaces", () => {
     it("creates a space", async () => {
       const { status, body } = await api(`/api/spaces/${TEST_SPACE}`, {
@@ -49,6 +75,7 @@ describe("API integration", () => {
           description: "Integration test space",
           visibility: "public",
         }),
+        headers: authHeader,
       });
       expect(status).toBe(201);
       expect(body.slug).toBe(TEST_SPACE);
@@ -66,20 +93,18 @@ describe("API integration", () => {
       expect(body.slug).toBe(TEST_SPACE);
     });
 
-    // TODO(phase-3-cleanup): needs auth setup — see file header.
-    it.skip("updates a space", async () => {
+    it("updates a space", async () => {
       const { status, body } = await api(`/api/spaces/${TEST_SPACE}`, {
         method: "PUT",
         body: JSON.stringify({ name: "Updated Test Space" }),
+        headers: authHeader,
       });
       expect(status).toBe(200);
       expect(body.name).toBe("Updated Test Space");
     });
   });
 
-  // TODO(phase-3-cleanup): all document write tests need auth setup. See file
-  // header. Cascading reads also fail because nothing gets created.
-  describe.skip("documents", () => {
+  describe("documents", () => {
     it("creates a document", async () => {
       const { status, body } = await api(
         `/api/documents/${TEST_SPACE}/${TEST_SECTION}/${TEST_PATH}`,
@@ -90,6 +115,7 @@ describe("API integration", () => {
             content: "# Test\n\nHello from integration tests.",
             tags: ["test"],
           }),
+          headers: authHeader,
         },
       );
       expect(status).toBe(201);
@@ -127,6 +153,7 @@ describe("API integration", () => {
         body: JSON.stringify({
           content: "# Test\n\nUpdated content.",
         }),
+        headers: authHeader,
       });
 
       const { body: versions } = await api(
@@ -142,6 +169,7 @@ describe("API integration", () => {
         body: JSON.stringify({
           content: "# Test\n\nUpdated content.",
         }),
+        headers: authHeader,
       });
 
       const { body: versions } = await api(
@@ -156,6 +184,7 @@ describe("API integration", () => {
         {
           method: "PUT",
           body: JSON.stringify({ title: "x", content: "x" }),
+          headers: authHeader,
         },
       );
       expect(status).toBe(404);

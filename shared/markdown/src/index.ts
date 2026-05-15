@@ -32,6 +32,13 @@ export interface RenderOptions {
 // we override to allow any class so wiki-link, etc. survive.
 const sanitizeSchema = {
   ...defaultSchema,
+  // Disable the DOM-clobber prefix. Default behaviour prefixes element IDs
+  // with `user-content-` to defend against `document.<id>`-style clobbering,
+  // but rehype-autolink-headings runs BEFORE sanitiser and emits hrefs
+  // without the prefix — so heading auto-links and external `#anchor` URLs
+  // never resolve to their headings. We trust author content enough to
+  // render arbitrary markdown; clobber defence isn't load-bearing here.
+  clobberPrefix: "",
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] || []), "className", "id", "style"],
@@ -60,7 +67,7 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
-    .use(remarkMath, { singleDollarTextMath: false })
+    .use(remarkMath, { singleDollarTextMath: true })
     .use(remarkWikiLinks(options.wikiLinks))
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeSlug)
