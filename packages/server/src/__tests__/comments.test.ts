@@ -156,20 +156,17 @@ describe("Comments API", () => {
     expect(status).toBe(401);
   });
 
-  // TODO(phase-3-cleanup): fixture-ordering issue — by the time this runs,
-  // the "Great document!" comment has replies (from the threaded-reply test
-  // earlier), so the route correctly rejects the PUT with 409. Need to use
-  // a freshly-created comment instead. Pre-existing.
-  it.skip("updates a comment (author only)", async () => {
-    const { body: allComments } = await api(
-      `/api/comments/${SPACE}/${SECTION}/${PATH}?include_resolved=true`,
-    );
-    const myComment = allComments.find(
-      (c: any) => c.body === "Great document!",
-    );
+  it("updates a comment (author only)", async () => {
+    // Create a fresh comment so we don't trip on the "has replies" guard —
+    // earlier tests in this file added replies to the seed comments.
+    const { body: created } = await api(`/api/comments/${SPACE}/${SECTION}/${PATH}`, {
+      method: "POST",
+      body: JSON.stringify({ body: "To edit" }),
+      headers: authHeader,
+    });
 
     const { status, body } = await api(
-      `/api/comments/${myComment.id}`,
+      `/api/comments/${created.id}`,
       {
         method: "PUT",
         body: JSON.stringify({ body: "Updated comment!" }),
