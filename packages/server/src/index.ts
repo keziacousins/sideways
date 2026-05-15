@@ -59,6 +59,8 @@ const PUBLIC_API_PATHS = new Set([
   "/api/auth/register",               // Kratos registration submit
   "/api/auth/hooks/registration",     // Kratos → API webhook (own shared-secret auth)
   "/api/auth/consent",                // Hydra consent challenge redirect target
+  "/api/auth/consent/details",        // Consent UI reads challenge metadata
+  "/api/auth/consent/decide",         // Consent UI submits Allow / Deny
   "/api/auth/logout",                 // Hydra logout challenge redirect target
   "/api/auth/authorize",              // OAuth authorize redirect builder
   "/api/auth/token",                  // OAuth token exchange (client credentials)
@@ -145,10 +147,22 @@ app.all("/oauth2/*", async (c) => {
   });
 });
 
+// RFC 8414 alias. Hydra v2.3 only serves /.well-known/openid-configuration,
+// not /.well-known/oauth-authorization-server. The MCP spec permits either,
+// but advertising both removes a guessing-game on the client side.
+app.get("/.well-known/oauth-authorization-server", async () => {
+  const url = new URL("/.well-known/openid-configuration", env.hydraPublicUrl);
+  const res = await fetch(url.toString());
+  return new Response(res.body, {
+    status: res.status,
+    headers: { "content-type": res.headers.get("content-type") || "application/json" },
+  });
+});
+
 app.get("/.well-known/*", async (c) => {
   const path = c.req.path;
-  // Don't proxy MCP OAuth discovery — we use API key auth, not OAuth
-  if (path.includes("oauth-protected-resource") || path.includes("oauth-authorization-server")) {
+  // PRM lives under /api/mcp/.well-known/oauth-protected-resource, not here.
+  if (path.includes("oauth-protected-resource")) {
     return c.json({ error: "Not found" }, 404);
   }
   const url = new URL(path, env.hydraPublicUrl);

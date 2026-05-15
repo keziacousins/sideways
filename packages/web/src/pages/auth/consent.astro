@@ -1,0 +1,256 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+
+const consentChallenge = Astro.url.searchParams.get("consent_challenge");
+
+// Server-side fetch — surfacing the client name on first paint avoids a
+// flash of "loading…" in front of the user's consent decision. If this
+// fails we render an error card instead.
+let details:
+  | { client_name: string; client_id: string; scopes: string[]; subject_email: string | null }
+  | null = null;
+let detailsError: string | null = null;
+
+if (!consentChallenge) {
+  detailsError = "Missing consent challenge.";
+} else {
+  try {
+    const res = await fetch(
+      `${API_URL}/api/auth/consent/details?consent_challenge=${encodeURIComponent(consentChallenge)}`,
+    );
+    if (res.ok) {
+      details = await res.json();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      detailsError = data.error || "Could not load consent request.";
+    }
+  } catch {
+    detailsError = "Could not reach server.";
+  }
+}
+
+const SCOPE_LABELS: Record<string, string> = {
+  mcp: "Read and modify your Sideways documents on your behalf",
+  openid: "See your account identity",
+  offline_access: "Stay connected without re-authorizing on every use",
+  offline: "Stay connected without re-authorizing on every use",
+};
+---
+
+<BaseLayout title={details ? `Authorize ${details.client_name}` : "Authorize"}>
+  <div class="auth-page">
+    <div class="auth-card animate-in">
+      <div class="auth-logo">
+        <span class="logo-mark">S</span>
+      </div>
+
+      {detailsError ? (
+        <>
+          <h1>Authorization unavailable</h1>
+          <p class="auth-subtitle">{detailsError}</p>
+          <a href="/" class="auth-secondary">Go to Sideways</a>
+        </>
+      ) : details && (
+        <>
+          <h1>Authorize {details.client_name}</h1>
+          <p class="auth-subtitle">
+            <strong>{details.client_name}</strong> is requesting access to your Sideways account.
+          </p>
+
+          <ul class="consent-scopes">
+            {details.scopes.map((s) => (
+              <li>{SCOPE_LABELS[s] || s}</li>
+            ))}
+          </ul>
+
+          <p class="consent-hint">
+            Only allow this if you started this connection yourself. You can revoke access at any time from settings.
+          </p>
+
+          <div class="consent-actions">
+            <button type="button" id="deny-btn" class="auth-secondary">Deny</button>
+            <button type="button" id="allow-btn" class="auth-submit">Allow</button>
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+</BaseLayout>
+
+<script define:vars={{ API_URL, consentChallenge }}>
+  async function decide(accept) {
+    const allowBtn = document.getElementById("allow-btn");
+    const denyBtn = document.getElementById("deny-btn");
+    if (!allowBtn || !denyBtn) return;
+    allowBtn.disabled = true;
+    denyBtn.disabled = true;
+    (accept ? allowBtn : denyBtn).textContent = accept ? "Allowing…" : "Denying…";
+
+    try {
+      const res = await fetch(`${API_URL}/api/auth/consent/decide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consent_challenge: consentChallenge, accept }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.redirect_to) {
+        alert(data.error || "Could not record your decision.");
+        allowBtn.textContent = "Allow";
+        denyBtn.textContent = "Deny";
+        allowBtn.disabled = false;
+        denyBtn.disabled = false;
+        return;
+      }
+      window.location.href = data.redirect_to;
+    } catch {
+      alert("Connection error. Please try again.");
+      allowBtn.textContent = "Allow";
+      denyBtn.textContent = "Deny";
+      allowBtn.disabled = false;
+      denyBtn.disabled = false;
+    }
+  }
+
+  document.getElementById("allow-btn")?.addEventListener("click", () => decide(true));
+  document.getElementById("deny-btn")?.addEventListener("click", () => decide(false));
+</script>
+
+<style>
+  .auth-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - var(--sw-header-height) - 4rem);
+  }
+
+  .auth-card {
+    width: 100%;
+    max-width: 440px;
+    padding: 2.5rem;
+    background: var(--sw-ink);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-lg);
+  }
+
+  .auth-logo {
+    margin-bottom: 1.5rem;
+  }
+
+  .auth-logo .logo-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-display);
+    font-weight: 600;
+    font-size: var(--sw-text-xl);
+  }
+
+  .auth-card h1 {
+    font-family: var(--sw-font-display);
+    font-size: var(--sw-text-2xl);
+    font-weight: 400;
+    margin-bottom: 0.35rem;
+  }
+
+  .auth-subtitle {
+    color: var(--sw-text-tertiary);
+    font-size: var(--sw-text-sm);
+    margin-bottom: 1.5rem;
+  }
+
+  .auth-subtitle strong {
+    color: var(--sw-text-primary);
+    font-weight: 600;
+  }
+
+  .consent-scopes {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .consent-scopes li {
+    padding: 0.6rem 0.85rem;
+    background: var(--sw-ink-deep);
+    border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-md);
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-secondary);
+  }
+
+  .consent-hint {
+    margin-bottom: 1.5rem;
+    font-size: var(--sw-text-xs);
+    color: var(--sw-text-ghost);
+    line-height: 1.5;
+  }
+
+  .consent-actions {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  .consent-actions button {
+    flex: 1;
+  }
+
+  .auth-submit {
+    padding: 0.65rem;
+    background: var(--sw-accent);
+    color: var(--sw-ink-deepest);
+    border: none;
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-base);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .auth-submit:hover:not(:disabled) {
+    background: var(--sw-accent-strong);
+    box-shadow: var(--sw-shadow-glow);
+  }
+
+  .auth-submit:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .auth-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.65rem;
+    background: transparent;
+    color: var(--sw-text-primary);
+    border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md);
+    font-family: var(--sw-font-body);
+    font-size: var(--sw-text-base);
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .auth-secondary:hover:not(:disabled) {
+    background: var(--sw-ink-deep);
+    border-color: var(--sw-border-strong);
+  }
+
+  .auth-secondary:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+</style>

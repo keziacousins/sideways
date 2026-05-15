@@ -86,6 +86,7 @@ services:
       URLS_LOGIN: ${PUBLIC_API_URL:-http://localhost:4100}/api/auth/login
       URLS_CONSENT: ${PUBLIC_API_URL:-http://localhost:4100}/api/auth/consent
       URLS_LOGOUT: ${PUBLIC_API_URL:-http://localhost:4100}/api/auth/logout
+      WEBFINGER_OIDC_DISCOVERY_CLIENT_REGISTRATION_URL: ${HYDRA_ISSUER_URL:-http://localhost:4100}/oauth2/register
       CORS_ORIGIN: ${PUBLIC_URL:-http://localhost:4000}
     depends_on:
       hydra-migrate:

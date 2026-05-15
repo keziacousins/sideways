@@ -28,9 +28,18 @@ log:
 
 ttl:
   access_token: 24h
-  refresh_token: 720h
+  refresh_token: 2160h
   id_token: 24h
   auth_code: 10m
 
 oauth2:
   expose_internal_errors: true
+
+oidc:
+  dynamic_client_registration:
+    enabled: true
+
+# webfinger.oidc_discovery.client_registration_url is set in compose.yml
+# via WEBFINGER_OIDC_DISCOVERY_CLIENT_REGISTRATION_URL so it can use the
+# same issuer env var as the other URLs. Hydra does not interpolate
+# ${VAR} inside its yaml config.

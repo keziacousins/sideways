@@ -22,10 +22,10 @@ Options:
 
 ## MCP Search
 
-The `search_docs` tool provides full-text search for AI agents:
+The `search` tool provides full-text search for AI agents:
 
 ```
-search_docs(query="api design", space="engineering")
+search(query="api design", space="engineering")
 ```
 
 Returns ranked results with text snippets (HTML tags stripped for plain text output).

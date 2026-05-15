@@ -34,6 +34,15 @@ export const env = {
   apiAudience: process.env.API_AUDIENCE || "sideways-api",
 
   /**
+   * Audience claim on JWTs issued to MCP OAuth clients (claude.ai etc).
+   * Distinct from apiAudience so MCP tokens are identifiable in logs and
+   * can be policy-gated separately later. The consent endpoint injects
+   * this audience when the requested scopes include `mcp`, and the MCP
+   * route validates against it.
+   */
+  mcpAudience: process.env.MCP_AUDIENCE || "sideways-mcp",
+
+  /**
    * Shared secret authenticating Kratos → /api/auth/hooks/registration.
    * Kratos sends this in the Authorization header (configured in compose.yml).
    * Required in production; the dev default is intentionally insecure so a
