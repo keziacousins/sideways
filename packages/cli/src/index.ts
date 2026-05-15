@@ -14,7 +14,6 @@ import {
   syncKey,
   hashLocalFile,
   slugFromFilename,
-  titleFromSlug,
   parseFrontmatter,
   serializeFrontmatter,
   discoverFiles,
@@ -90,9 +89,22 @@ function resolveFile(
   );
 }
 
-/** Normalize user input to a slug — accepts filenames, paths, or slugs. */
-function toSlug(input: string): string {
-  return slugFromFilename(basename(input));
+/**
+ * Resolve a user input to a `(sectionSlug, path)` pair for server calls.
+ * Accepts a filesystem path under a configured mount; errors if it can't
+ * be resolved.
+ */
+function resolveDocRef(
+  config: ProjectConfig,
+  input: string,
+): { sectionSlug: string; path: string } {
+  const resolved = resolveArg(config, input);
+  if (!resolved) {
+    console.error(`Path "${input}" is not under any declared section mount.`);
+    printPathHint(config, input);
+    process.exit(1);
+  }
+  return { sectionSlug: resolved.sectionSlug, path: resolved.path };
 }
 
 /** Print a "did you mean?" hint when a path argument doesn't resolve. */
@@ -117,14 +129,16 @@ async function prepareFileForDisk(
   const fm: Record<string, any> = {};
   const headingMatch = content.match(/^#\s+(.+)$/m);
   const headingTitle = headingMatch ? headingMatch[1].trim() : null;
-  if (doc.title && doc.title !== titleFromSlug(doc.slug) && doc.title !== headingTitle) {
+  // Title in frontmatter only when it differs from the H1 — basename comparison
+  // would be too noisy (most filenames don't title-case to the doc title).
+  if (doc.title && doc.title !== headingTitle) {
     fm.title = doc.title;
   }
   if (doc.tags?.length > 0) fm.tags = doc.tags;
 
   if (!opts.clean) {
     try {
-      const rawComments = await client.getComments(space, doc.slug, opts.includeResolved);
+      const rawComments = await client.getComments(space, doc.sectionSlug, doc.path, !!opts.includeResolved);
       if (rawComments.length > 0) {
         const serialized: SerializedComment[] = rawComments.map((c: any) => ({
           id: c.id, author: c.author?.name || "Unknown", authorEmail: c.author?.email,
@@ -141,13 +155,15 @@ async function prepareFileForDisk(
 }
 
 /** Read a local file and prepare for push */
-function prepareFileForPush(filePath: string): { slug: string; content: string; tags: string[]; title?: string } {
+function prepareFileForPush(filePath: string): { content: string; tags: string[]; title?: string } {
   const raw = readFileSync(filePath, "utf-8");
   const { clean } = extractComments(raw);
   const { frontmatter, content } = parseFrontmatter(clean);
-  const slug = frontmatter.slug || slugFromFilename(basename(filePath));
+  if (frontmatter.slug) {
+    console.warn(`warning: frontmatter 'slug:' is no longer used (path is the identifier) — ${filePath}`);
+  }
   const tags = frontmatter.tags || [];
-  return { slug, content, tags, title: frontmatter.title };
+  return { content, tags, title: frontmatter.title };
 }
 
 // ── add / remove ──────────────────────────────────────────────────────
@@ -271,18 +287,24 @@ program
 
       await requireSpace(client, space, { createHint: true });
 
-      // Single file pull
+      // Single file pull — `path` is a filesystem path that resolves to
+      // (sectionSlug, path). If the file doesn't exist locally yet, we
+      // still need a section to look up the doc on the server, so the path
+      // must fall under one of the configured mounts.
       if (path && (path.endsWith(".md") || !path.includes("/"))) {
-        const slug = slugFromFilename(basename(path));
-        const doc = await client.getDocument(space, slug);
-        const output = await prepareFileForDisk(client, space, doc, opts);
         const filePath = resolve(path.endsWith(".md") ? path : `${path}.md`);
+        const resolved = resolveArg(config, filePath);
+        if (!resolved) {
+          console.error(`Path "${path}" is not under any declared section mount.`);
+          printPathHint(config, path);
+          process.exit(1);
+        }
+        const doc = await client.getDocument(space, resolved.sectionSlug, resolved.path);
+        const output = await prepareFileForDisk(client, space, doc, opts);
 
         writeFileSync(filePath, output);
 
         const relPath = relative(syncRoot, filePath);
-
-        // Add to tracked list if not already tracked
         const tracked = readTracked(syncRoot) || [];
         if (tracked.length > 0 && !isTracked(tracked, relPath)) {
           tracked.push(relPath);
@@ -290,14 +312,15 @@ program
         }
 
         const syncInfo = await client.getSyncInfo(space).catch(() => [] as SyncInfo[]);
-        const remote = syncInfo.find((r: SyncInfo) => r.slug === slug);
-        const resolved = resolveArg(config, filePath);
-        if (remote && resolved) {
+        const remote = syncInfo.find(
+          (r: SyncInfo) => r.sectionSlug === resolved.sectionSlug && r.path === resolved.path,
+        );
+        if (remote) {
           const syncState = readSyncState(syncRoot, space);
           syncState.files[syncKey(resolved.sectionSlug, resolved.path)] = {
             sectionSlug: resolved.sectionSlug,
             path: resolved.path,
-            slug,
+            slug: slugFromFilename(basename(filePath)),
             remoteVersion: remote.version,
             localHash: hashLocalFile(output),
             remoteHash: remote.contentHash,
@@ -306,7 +329,7 @@ program
           writeSyncState(syncRoot, syncState);
         }
 
-        console.log(`Pulled ${space}/${slug} → ${filePath}`);
+        console.log(`Pulled ${space}/${resolved.sectionSlug}/${resolved.path} → ${filePath}`);
         return;
       }
 
@@ -346,7 +369,7 @@ program
           } catch {}
         }
 
-        const fullDoc = await client.getDocument(space, r.slug);
+        const fullDoc = await client.getDocument(space, r.sectionSlug, r.path);
         const output = await prepareFileForDisk(client, space, fullDoc, opts);
 
         mkdirSync(dirname(filePath), { recursive: true });
@@ -355,7 +378,7 @@ program
         syncState.files[key] = {
           sectionSlug: r.sectionSlug,
           path: r.path,
-          slug: r.slug,
+          slug: slugFromFilename(basename(r.path)),
           remoteVersion: r.version,
           localHash: hashLocalFile(output),
           remoteHash: r.contentHash,
@@ -415,29 +438,36 @@ program
         const relPath = relative(syncRoot, absPath);
         files = allFiles.filter(f => f.relPath === relPath);
         if (files.length === 0) {
-          // File not in sync root — push as standalone
-          const { slug, content, tags, title } = prepareFileForPush(absPath);
+          // File not in any configured mount — must be pushable via resolveArg
+          const resolved = resolveArg(config, absPath);
+          if (!resolved) {
+            console.error(`Path "${path}" is not under any declared section mount.`);
+            printPathHint(config, path);
+            process.exit(1);
+          }
+          const { content, tags, title } = prepareFileForPush(absPath);
           if (opts.dryRun) {
-            console.log(`  would push: ${slug}`);
+            console.log(`  would push: ${resolved.sectionSlug}/${resolved.path}`);
             return;
           }
-          // Check if remote exists and warn about overwrite
           if (!opts.force) {
             const remoteInfo = await client.getSyncInfo(space);
-            const existing = remoteInfo.find((r: any) => r.slug === slug);
+            const existing = remoteInfo.find(
+              (r) => r.sectionSlug === resolved.sectionSlug && r.path === resolved.path,
+            );
             if (existing) {
               const syncState = readSyncState(syncRoot, space);
-              const tracked = syncState.files[relative(syncRoot, absPath)];
+              const tracked = syncState.files[syncKey(resolved.sectionSlug, resolved.path)];
               if (tracked && existing.contentHash !== tracked.remoteHash) {
-                console.error(`  conflict: ${slug} has been modified on remote. Use --force to overwrite.`);
+                console.error(`  conflict: ${resolved.sectionSlug}/${resolved.path} has been modified on remote. Use --force to overwrite.`);
                 return;
               }
             }
           }
           const body: Record<string, any> = { content, tags };
           if (title) body.title = title;
-          const result = await client.putDocument(space, slug, body);
-          console.log(`Pushed ${space}/${slug} (${result.id})`);
+          const result = await client.putDocument(space, resolved.sectionSlug, resolved.path, body);
+          console.log(`Pushed ${space}/${resolved.sectionSlug}/${resolved.path} (${result.id})`);
           return;
         }
       }
@@ -456,7 +486,7 @@ program
 
       // Get remote state for diff
       const remoteFiles = await client.getSyncInfo(space);
-      const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
+      const remoteMap = new Map(remoteFiles.map((r) => [syncKey(r.sectionSlug, r.path), r]));
       const syncState = readSyncState(syncRoot, space);
 
       let totalPushed = 0;
@@ -470,7 +500,7 @@ program
         const raw = readFileSync(filePath, "utf-8");
         const localHash = hashLocalFile(raw);
         const tracked = syncState.files[syncKey(file.sectionSlug, file.path)];
-        const remote = remoteMap.get(file.slug);
+        const remote = remoteMap.get(syncKey(file.sectionSlug, file.path));
 
         // Compute status
         let status: string;
@@ -495,13 +525,14 @@ program
           else status = "unchanged";
         } else status = "unchanged";
 
-        // Drift detection: server has this slug at a stale path or in a
-        // different section than the local config places it. Content might
-        // be byte-identical, but we still need a PUT to align metadata.
+        // Drift detection: server has this doc at a different (section, path)
+        // than the local config places it. Path/section are URL-keyed now,
+        // so a section-drift implies it's a different doc on the server.
+        // Path drift is not possible since we look up by (section, path).
+        // Keep this as-is in case future code paths could trigger.
         if (status === "unchanged" && remote) {
-          const pathDrift = remote.path !== file.path;
           const sectionDrift = remote.sectionSlug !== file.sectionSlug;
-          if (pathDrift || sectionDrift) {
+          if (sectionDrift) {
             status = "local-modified";
           }
         }
@@ -513,22 +544,23 @@ program
         }
 
         if (opts.dryRun) {
-          console.log(`  would push: ${file.relPath} → ${file.slug} (${status})`);
+          console.log(`  would push: ${file.relPath} → ${file.sectionSlug}/${file.path} (${status})`);
           totalPushed++;
           continue;
         }
 
         const { clean } = extractComments(raw);
         const { frontmatter, content } = parseFrontmatter(clean);
+        if (frontmatter.slug) {
+          console.warn(`warning: frontmatter 'slug:' is no longer used (path is the identifier) — ${file.relPath}`);
+        }
         const tags = frontmatter.tags || [];
-        const body: Record<string, any> = { content, tags, path: file.path };
+        const body: Record<string, any> = { content, tags };
         if (frontmatter.title) body.title = frontmatter.title;
-        if (file.sectionSlug) body.sectionSlug = file.sectionSlug;
-        if (file.parentSlug) body.parentSlug = file.parentSlug;
         // Preserve local file timestamp so mtime-based fallback works
         body.updatedAt = statSync(filePath).mtime.toISOString();
 
-        await client.putDocument(space, file.slug, body);
+        await client.putDocument(space, file.sectionSlug, file.path, body);
 
         syncState.files[syncKey(file.sectionSlug, file.path)] = {
           sectionSlug: file.sectionSlug,
@@ -539,17 +571,17 @@ program
           remoteHash: localHash,
         };
 
-        console.log(`  pushed: ${file.relPath} → ${file.slug} (${status})`);
+        console.log(`  pushed: ${file.relPath} → ${file.sectionSlug}/${file.path} (${status})`);
         totalPushed++;
       }
 
       if (!opts.dryRun) {
         // Refresh remote state and ensure ALL local files are tracked
         const updatedRemote = await client.getSyncInfo(space);
-        const remoteHashMap = new Map(updatedRemote.map((r: any) => [r.slug, r]));
+        const remoteHashMap = new Map(updatedRemote.map((r) => [syncKey(r.sectionSlug, r.path), r]));
 
         for (const file of sorted) {
-          const remote = remoteHashMap.get(file.slug);
+          const remote = remoteHashMap.get(syncKey(file.sectionSlug, file.path));
           if (!remote) continue;
 
           if (syncState.files[syncKey(file.sectionSlug, file.path)]) {
@@ -604,19 +636,19 @@ program
     }
     const files = discoverFiles(config.rootDir, mountList, config.ignore).filter(f => isTracked(tracked, f.relPath));
     const remoteFiles = await client.getSyncInfo(space);
-    const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
+    const remoteMap = new Map(remoteFiles.map((r) => [syncKey(r.sectionSlug, r.path), r]));
     const syncState = readSyncState(syncRoot, space);
 
-    // Fetch comment counts for remote docs
+    // Fetch comment counts for remote docs — keyed by (sectionSlug, path).
     let commentCounts = new Map<string, number>();
     try {
       const counts = await client.getCommentCounts(space);
-      commentCounts = new Map(counts.map((r: any) => [r.slug, r.count]));
+      commentCounts = new Map(counts.map((r) => [syncKey(r.sectionSlug, r.path), r.count]));
     } catch {}
 
     const sorted = [...files].sort((a, b) => a.relPath.localeCompare(b.relPath));
 
-    function show(label: string, file: { relPath: string; slug: string }) {
+    function show(label: string, file: { relPath: string; sectionSlug: string; path: string }) {
       const colors: Record<string, string> = {
         "new-local": "\x1b[32m",
         "local-modified": "\x1b[33m",
@@ -627,7 +659,7 @@ program
       };
       const color = colors[label] || "";
       const reset = color ? "\x1b[0m" : "";
-      const cc = commentCounts.get(file.slug);
+      const cc = commentCounts.get(syncKey(file.sectionSlug, file.path));
       const commentInfo = cc ? ` \x1b[35m[${cc} comment${cc !== 1 ? "s" : ""}]\x1b[0m` : "";
       console.log(`  ${color}${label.padEnd(16)}${reset} ${file.relPath}${commentInfo}`);
     }
@@ -638,7 +670,7 @@ program
       const raw = readFileSync(filePath, "utf-8");
       const localHash = hashLocalFile(raw);
       const tracked = syncState.files[syncKey(file.sectionSlug, file.path)];
-      const remote = remoteMap.get(file.slug);
+      const remote = remoteMap.get(syncKey(file.sectionSlug, file.path));
 
       let status: string;
       if (!tracked && !remote) status = "new-local";
@@ -661,12 +693,6 @@ program
         else status = "unchanged";
       } else status = "unchanged";
 
-      // Drift detection: surface stale server-side path/section as
-      // "local-modified" so the user sees it and a push will fix it.
-      if (status === "unchanged" && remote && (remote.path !== file.path || remote.sectionSlug !== file.sectionSlug)) {
-        status = "local-modified";
-      }
-
       if (status !== "unchanged") {
         show(status, file);
         hasChanges = true;
@@ -674,24 +700,24 @@ program
     }
 
     // Check for remote-only files
-    const localSlugs = new Set(files.map(f => f.slug));
+    const localKeys = new Set(files.map(f => syncKey(f.sectionSlug, f.path)));
     for (const remote of remoteFiles) {
-      if (!localSlugs.has(remote.slug)) {
-        show("new-remote", { relPath: `${remote.slug}.md`, slug: remote.slug });
+      const key = syncKey(remote.sectionSlug, remote.path);
+      if (!localKeys.has(key)) {
+        show("new-remote", { relPath: `${remote.sectionSlug}/${remote.path}`, sectionSlug: remote.sectionSlug, path: remote.path });
         hasChanges = true;
       }
     }
 
     // Show unchanged files that have open comments
     for (const file of sorted) {
-      const cc = commentCounts.get(file.slug);
+      const cc = commentCounts.get(syncKey(file.sectionSlug, file.path));
       if (cc) {
-        // Check if this file was already shown (had changes)
         const filePath = join(syncRoot, file.relPath);
         const raw = readFileSync(filePath, "utf-8");
         const localHash = hashLocalFile(raw);
         const trackedEntry = syncState.files[syncKey(file.sectionSlug, file.path)];
-        const remote = remoteMap.get(file.slug);
+        const remote = remoteMap.get(syncKey(file.sectionSlug, file.path));
         const isUnchanged = trackedEntry && remote && localHash === trackedEntry.localHash && remote.contentHash === trackedEntry.remoteHash;
         if (isUnchanged) {
           console.log(`  ${"".padEnd(16)} ${file.relPath} \x1b[35m[${cc} comment${cc !== 1 ? "s" : ""}]\x1b[0m`);
@@ -740,22 +766,24 @@ program
     }
     const allFiles = discoverFiles(config.rootDir, mountList, config.ignore).filter(f => isTracked(tracked, f.relPath));
     const remoteFiles = await client.getSyncInfo(space);
-    const remoteMap = new Map(remoteFiles.map((r: any) => [r.slug, r]));
+    const remoteMap = new Map(remoteFiles.map((r) => [syncKey(r.sectionSlug, r.path), r]));
     const syncState = readSyncState(syncRoot, space);
 
     // Classify all files
-    const toPull: { slug: string; relativePath: string }[] = [];
+    type PullEntry = { sectionSlug: string; path: string; relativePath: string };
+    const toPull: PullEntry[] = [];
     const toPush: { file: (typeof allFiles)[0]; raw: string }[] = [];
     const conflicts: string[] = [];
-    const localSlugs = new Set<string>();
+    const localKeys = new Set<string>();
 
     for (const file of allFiles) {
-      localSlugs.add(file.slug);
+      const key = syncKey(file.sectionSlug, file.path);
+      localKeys.add(key);
       const filePath = join(syncRoot, file.relPath);
       const raw = readFileSync(filePath, "utf-8");
       const localHash = hashLocalFile(raw);
-      const tracked = syncState.files[syncKey(file.sectionSlug, file.path)];
-      const remote = remoteMap.get(file.slug);
+      const tracked = syncState.files[key];
+      const remote = remoteMap.get(key);
 
       let status: string;
       if (!tracked && !remote) status = "new-local";
@@ -778,19 +806,14 @@ program
         else status = "unchanged";
       } else status = "unchanged";
 
-      // Drift detection: path or section on server doesn't match local config.
-      if (status === "unchanged" && remote && (remote.path !== file.path || remote.sectionSlug !== file.sectionSlug)) {
-        status = "local-modified";
-      }
-
       // Reconcile: if hashes differ but actual content matches, treat as unchanged
       if (opts.reconcile && remote && (status === "conflict" || status === "remote-modified" || status === "local-modified")) {
-        const remoteDoc = await client.getDocument(space, file.slug);
+        const remoteDoc = await client.getDocument(space, file.sectionSlug, file.path);
         const { clean: localClean } = extractComments(raw);
         const { content: localContent } = parseFrontmatter(localClean);
         if (localContent.trim() === remoteDoc.content.trim()) {
           console.log(`  \x1b[2mreconciled\x1b[0m  ${file.relPath}`);
-          syncState.files[syncKey(file.sectionSlug, file.path)] = {
+          syncState.files[key] = {
             sectionSlug: file.sectionSlug,
             path: file.path,
             slug: file.slug,
@@ -800,15 +823,14 @@ program
           };
           // Update remote timestamp to match local
           const localMtime = statSync(filePath).mtime.toISOString();
-          await client.putDocument(space, file.slug, { updatedAt: localMtime });
+          await client.putDocument(space, file.sectionSlug, file.path, { updatedAt: localMtime });
           continue;
         }
       }
 
       if (status === "unchanged") {
-        // Ensure sync state is recorded even for unchanged files
         if (!tracked && remote) {
-          syncState.files[syncKey(file.sectionSlug, file.path)] = {
+          syncState.files[key] = {
             sectionSlug: file.sectionSlug,
             path: file.path,
             slug: file.slug,
@@ -820,14 +842,25 @@ program
         continue;
       }
       if (status === "conflict") { conflicts.push(file.relPath); continue; }
-      if (status === "remote-modified") { toPull.push({ slug: file.slug, relativePath: file.relPath }); continue; }
+      if (status === "remote-modified") {
+        toPull.push({ sectionSlug: file.sectionSlug, path: file.path, relativePath: file.relPath });
+        continue;
+      }
       if (status === "new-local" || status === "local-modified") { toPush.push({ file, raw }); }
     }
 
     // Check for remote-only files (new on remote)
+    const sectionPathMap = new Map<string, string>(Object.entries(config.sections));
     for (const remote of remoteFiles) {
-      if (!localSlugs.has(remote.slug)) {
-        toPull.push({ slug: remote.slug, relativePath: `${remote.slug}.md` });
+      const key = syncKey(remote.sectionSlug, remote.path);
+      if (!localKeys.has(key)) {
+        const mountRel = sectionPathMap.get(remote.sectionSlug);
+        if (!mountRel) continue; // Section not owned locally; skip.
+        toPull.push({
+          sectionSlug: remote.sectionSlug,
+          path: remote.path,
+          relativePath: normalise(join(mountRel, remote.path)),
+        });
       }
     }
 
@@ -839,23 +872,23 @@ program
     // Pull remote changes
     if (toPull.length > 0) {
       console.log(`\nPulling ${toPull.length} file(s):`);
-      for (const { slug, relativePath } of toPull) {
+      for (const { sectionSlug, path: docPath, relativePath } of toPull) {
         if (opts.dryRun) {
           console.log(`  would pull: ${relativePath}`);
           continue;
         }
-        const doc = await client.getDocument(space, slug);
+        const doc = await client.getDocument(space, sectionSlug, docPath);
         const output = await prepareFileForDisk(client, space, doc, { clean: opts.clean });
         const filePath = join(syncRoot, relativePath);
         mkdirSync(join(filePath, ".."), { recursive: true });
         writeFileSync(filePath, output);
 
-        const remoteInfo = remoteMap.get(slug);
+        const remoteInfo = remoteMap.get(syncKey(sectionSlug, docPath));
         if (remoteInfo) {
-          syncState.files[syncKey(remoteInfo.sectionSlug, remoteInfo.path)] = {
-            sectionSlug: remoteInfo.sectionSlug,
-            path: remoteInfo.path,
-            slug,
+          syncState.files[syncKey(sectionSlug, docPath)] = {
+            sectionSlug,
+            path: docPath,
+            slug: slugFromFilename(basename(docPath)),
             remoteVersion: remoteInfo.version ?? 1,
             localHash: hashLocalFile(output),
             remoteHash: remoteInfo.contentHash ?? hashLocalFile(output),
@@ -886,14 +919,15 @@ program
         }
         const { clean } = extractComments(raw);
         const { frontmatter, content } = parseFrontmatter(clean);
+        if (frontmatter.slug) {
+          console.warn(`warning: frontmatter 'slug:' is no longer used (path is the identifier) — ${file.relPath}`);
+        }
         const tags = frontmatter.tags || [];
-        const body: Record<string, any> = { content, tags, path: file.path };
+        const body: Record<string, any> = { content, tags };
         if (frontmatter.title) body.title = frontmatter.title;
-        if (file.sectionSlug) body.sectionSlug = file.sectionSlug;
-        if (file.parentSlug) body.parentSlug = file.parentSlug;
         body.updatedAt = statSync(join(syncRoot, file.relPath)).mtime.toISOString();
 
-        await client.putDocument(space, file.slug, body);
+        await client.putDocument(space, file.sectionSlug, file.path, body);
 
         const localHash = hashLocalFile(raw);
         syncState.files[syncKey(file.sectionSlug, file.path)] = {
@@ -922,9 +956,9 @@ program
     if (!opts.dryRun) {
       // Refresh remote state for pushed files
       const updatedRemote = await client.getSyncInfo(space);
-      const remoteHashMap = new Map(updatedRemote.map((r: any) => [r.slug, r]));
+      const remoteHashMap = new Map(updatedRemote.map((r) => [syncKey(r.sectionSlug, r.path), r]));
       for (const entry of Object.values(syncState.files)) {
-        const remote = remoteHashMap.get(entry.slug);
+        const remote = remoteHashMap.get(syncKey(entry.sectionSlug, entry.path));
         if (remote) {
           entry.remoteHash = remote.contentHash;
           entry.remoteVersion = remote.version;
@@ -938,26 +972,26 @@ program
 // ── diff ──────────────────────────────────────────────────────────────
 
 program
-  .command("diff [slug]")
+  .command("diff [path]")
   .description("Show content differences between local and remote")
   .option("--space <space>", "Override space from config")
-  .action(async (slug: string | undefined, opts: { space?: string }) => {
+  .action(async (input: string | undefined, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
     const syncRoot = config.rootDir;
     const mountList = buildMounts(config);
 
-    if (!slug) {
-      console.error("Usage: sideways diff <slug>");
+    if (!input) {
+      console.error("Usage: sideways diff <path>");
       process.exit(1);
     }
 
     const files = discoverFiles(config.rootDir, mountList, config.ignore);
-    const file = resolveFile(files, config, slug);
+    const file = resolveFile(files, config, input);
     if (!file) {
-      console.error(`No local file found for "${slug}"`);
-      printPathHint(config, slug);
+      console.error(`No local file found for "${input}"`);
+      printPathHint(config, input);
       process.exit(1);
     }
 
@@ -967,7 +1001,7 @@ program
     const { content: localContent } = parseFrontmatter(clean);
 
     try {
-      const doc = await client.getDocument(space, file.slug);
+      const doc = await client.getDocument(space, file.sectionSlug, file.path);
       const remoteContent = doc.content;
 
       if (localContent.trim() === remoteContent.trim()) {
@@ -978,7 +1012,7 @@ program
       const localLines = localContent.split("\n");
       const remoteLines = remoteContent.split("\n");
 
-      console.log(`--- remote: ${space}/${slug}`);
+      console.log(`--- remote: ${space}/${file.sectionSlug}/${file.path}`);
       console.log(`+++ local: ${file.relPath}`);
 
       // Simple line diff
@@ -998,95 +1032,93 @@ program
 // ── rename ────────────────────────────────────────────────────────────
 
 program
-  .command("rename <slug> <new-title>")
+  .command("rename <path> <new-title>")
   .description("Rename a document's title")
   .option("--space <space>", "Override space from config")
-  .option("--slug <new-slug>", "Also change the slug")
-  .action(async (input: string, newTitle: string, opts: { space?: string; slug?: string }) => {
+  .option("--target-path <path>", "Also change the path (server-side rename/move)")
+  .action(async (input: string, newTitle: string, opts: { space?: string; targetPath?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const slug = toSlug(input);
+    const { sectionSlug, path } = resolveDocRef(config, input);
 
     const patch: Record<string, any> = { title: newTitle };
-    if (opts.slug) patch.slug = opts.slug;
+    if (opts.targetPath) patch.targetPath = opts.targetPath;
 
-    const result = await client.patchDocument(space, slug, patch);
-    console.log(`Renamed → "${result.title}" (${result.slug})`);
+    const result = await client.patchDocument(space, sectionSlug, path, patch);
+    console.log(`Renamed → "${result.title}" (${result.sectionSlug}/${result.path})`);
   });
 
 // ── move ──────────────────────────────────────────────────────────────
 
 program
-  .command("move <slug> <target-space>")
+  .command("move <path> <target-space>")
   .description("Move a document to another space")
   .option("--space <space>", "Override source space from config")
   .action(async (input: string, targetSpace: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const slug = toSlug(input);
+    const { sectionSlug, path } = resolveDocRef(config, input);
 
-    const result = await client.patchDocument(space, slug, { space: targetSpace });
-    console.log(`Moved ${slug} → ${targetSpace}/${result.slug}`);
+    const result = await client.patchDocument(space, sectionSlug, path, { targetSpace });
+    console.log(`Moved ${sectionSlug}/${path} → ${targetSpace}/${result.sectionSlug}/${result.path}`);
   });
 
 // ── section ──────────────────────────────────────────────────────────
 
 program
-  .command("section <slug> [section-slug]")
-  .description("Move a document into a section, or remove it from its current section")
+  .command("section <path> <section-slug>")
+  .description("Move a document into a different section")
   .option("--space <space>", "Override space from config")
-  .action(async (input: string, section: string | undefined, opts: { space?: string }) => {
+  .action(async (input: string, targetSection: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const slug = toSlug(input);
+    const { sectionSlug, path } = resolveDocRef(config, input);
 
-    await client.patchDocument(space, slug, { section: section || null });
-    if (section) {
-      console.log(`Moved ${slug} → section "${section}"`);
-    } else {
-      console.log(`Removed ${slug} from its section`);
-    }
+    const result = await client.patchDocument(space, sectionSlug, path, { targetSection });
+    console.log(`Moved ${sectionSlug}/${path} → section "${targetSection}" (${result.sectionSlug}/${result.path})`);
   });
 
 // ── duplicate ─────────────────────────────────────────────────────────
 
 program
-  .command("duplicate <slug>")
+  .command("duplicate <path>")
   .description("Duplicate a document")
   .option("--space <space>", "Override space from config")
   .option("--target-space <space>", "Target space for the copy")
-  .option("--slug <slug>", "Custom slug for the copy")
-  .action(async (input: string, opts: { space?: string; targetSpace?: string; slug?: string }) => {
+  .option("--target-section <section>", "Target section for the copy")
+  .option("--target-path <path>", "Custom path for the copy")
+  .action(async (input: string, opts: { space?: string; targetSpace?: string; targetSection?: string; targetPath?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const slug = toSlug(input);
+    const { sectionSlug, path } = resolveDocRef(config, input);
 
-    const result = await client.duplicateDocument(space, slug, {
+    const result = await client.duplicateDocument(space, sectionSlug, path, {
       targetSpace: opts.targetSpace,
-      targetSlug: opts.slug,
+      targetSection: opts.targetSection,
+      targetPath: opts.targetPath,
     });
-    console.log(`Duplicated → ${result.slug}`);
+    console.log(`Duplicated → ${result.sectionSlug}/${result.path}`);
   });
 
 // ── delete ────────────────────────────────────────────────────────────
 
 program
-  .command("delete <slug>")
+  .command("delete <path>")
   .description("Delete a document from the server")
   .option("--space <space>", "Override space from config")
   .action(async (input: string, opts: { space?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const slug = toSlug(input);
+    const { sectionSlug, path } = resolveDocRef(config, input);
 
     await requireSpace(client, space);
-    await client.deleteDocument(space, slug);
-    console.log(`Deleted ${space}/${slug}`);
+    await client.deleteDocument(space, sectionSlug, path);
+    console.log(`Deleted ${space}/${sectionSlug}/${path}`);
   });
 
 // ── space-set ─────────────────────────────────────────────────────────
@@ -1190,7 +1222,7 @@ program
     for (const r of data.results) {
       const snippet = (r.snippet || "").replace(/<[^>]+>/g, "").trim();
       console.log(`  \x1b[1m${r.title}\x1b[0m`);
-      console.log(`  ${r.spaceSlug}/${r.docSlug}`);
+      console.log(`  ${r.url}`);
       if (snippet) console.log(`  \x1b[2m${snippet}\x1b[0m`);
       console.log();
     }
@@ -1201,7 +1233,7 @@ program
 // ── comments ──────────────────────────────────────────────────────────
 
 program
-  .command("comments <slug>")
+  .command("comments <path>")
   .description("List comments on a document")
   .option("--space <space>", "Override space from config")
   .option("--resolved", "Include resolved comments")
@@ -1209,9 +1241,9 @@ program
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const slug = toSlug(input);
+    const { sectionSlug, path } = resolveDocRef(config, input);
 
-    const comments = await client.getComments(space, slug, opts.resolved);
+    const comments = await client.getComments(space, sectionSlug, path, !!opts.resolved);
     if (comments.length === 0) {
       console.log("No comments.");
       return;
@@ -1253,45 +1285,41 @@ program
   });
 
 program
-  .command("comment <slug> <body>")
+  .command("comment <path> <body>")
   .description("Add a comment to a document")
   .option("--space <space>", "Override space from config")
   .option("--anchor <text>", "Anchor comment to specific text in the document")
-  .option("--section <path>", "Section heading path for the anchor")
+  .option("--section <heading-path>", "Section heading path for the anchor")
   .option("--reply <id>", "Reply to an existing comment")
   .action(async (input: string, body: string, opts: { space?: string; anchor?: string; section?: string; reply?: string }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const slug = toSlug(input);
+    const { sectionSlug, path } = resolveDocRef(config, input);
 
     const payload: Record<string, any> = { body };
     if (opts.anchor) payload.anchorText = opts.anchor;
     if (opts.section) payload.anchorSection = opts.section;
     if (opts.reply) payload.parentId = opts.reply;
 
-    const result = await client.addComment(space, slug, payload as any);
+    const result = await client.addComment(space, sectionSlug, path, payload as any);
     console.log(`Comment added (${result.id.slice(0, 8)})`);
   });
 
 program
-  .command("resolve <slug> <comment-id>")
+  .command("resolve <comment-id>")
   .description("Toggle resolve/reopen on a comment")
-  .option("--space <space>", "Override space from config")
-  .action(async (input: string, commentId: string, opts: { space?: string }) => {
+  .action(async (commentId: string) => {
     const config = requireConfig();
-    const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const slug = toSlug(input);
-
-    const result = await client.resolveComment(space, slug, commentId);
+    const result = await client.resolveComment(commentId);
     console.log(`Comment ${result.resolved ? "resolved" : "reopened"}`);
   });
 
 // ── export ────────────────────────────────────────────────────────────
 
 program
-  .command("export <slug>")
+  .command("export <path>")
   .description("Export a document as PDF")
   .option("--space <space>", "Override space from config")
   .option("-o, --output <path>", "Output file path")
@@ -1302,18 +1330,19 @@ program
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
-    const slug = toSlug(input);
+    const { sectionSlug, path } = resolveDocRef(config, input);
 
-    const res = await client.downloadPdf(space, slug, {
+    const res = await client.downloadPdf(space, sectionSlug, path, {
       toc: opts.toc,
       titlePage: opts.titlePage,
       theme: opts.theme,
     });
 
-    const outPath = opts.output || `${slug}.pdf`;
+    const baseName = path.replace(/\.md$/, "").split("/").pop() || "document";
+    const outPath = opts.output || `${baseName}.pdf`;
     const buffer = Buffer.from(await res.arrayBuffer());
     writeFileSync(outPath, buffer);
-    console.log(`Exported ${space}/${slug} → ${outPath} (${buffer.length} bytes)`);
+    console.log(`Exported ${space}/${sectionSlug}/${path} → ${outPath} (${buffer.length} bytes)`);
   });
 
 // ── auth ──────────────────────────────────────────────────────────────

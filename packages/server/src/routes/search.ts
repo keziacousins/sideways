@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { type Database } from "@sideways/db";
+import { docUrl } from "@sideways/types";
 import type { AuthUser } from "../middleware/auth.js";
 
 export function createSearchRoutes(db: Database) {
@@ -59,7 +60,8 @@ export function createSearchRoutes(db: Database) {
       SELECT
         s.slug as "spaceSlug",
         s.name as "spaceName",
-        d.slug as "docSlug",
+        sec.slug as "sectionSlug",
+        d.path as "path",
         d.title,
         d.tags,
         d.updated_at as "updatedAt",
@@ -72,6 +74,7 @@ export function createSearchRoutes(db: Database) {
         ) as snippet
       FROM documents d
       JOIN spaces s ON d.space_id = s.id
+      JOIN sections sec ON d.section_id = sec.id
       LEFT JOIN LATERAL (
         SELECT content FROM document_versions
         WHERE document_id = d.id
@@ -104,6 +107,7 @@ export function createSearchRoutes(db: Database) {
         results: (results as any[]).map((r) => ({
           ...r,
           rank: parseFloat(r.rank),
+          url: docUrl({ spaceSlug: r.spaceSlug, sectionSlug: r.sectionSlug, path: r.path }),
         })),
         total,
         query: q,

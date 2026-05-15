@@ -6,10 +6,11 @@ interface Props {
   spaceSlug: string;
   spaceName: string;
   items: NavItem[];
-  activeSlug?: string;
+  /** URL of the currently-displayed doc, used to highlight the active node. */
+  activeUrl?: string | null;
 }
 
-const { spaceSlug, spaceName, items, activeSlug } = Astro.props;
+const { spaceSlug, spaceName, items, activeUrl } = Astro.props;
 ---
 
 <nav class="sidebar-nav">
@@ -17,7 +18,7 @@ const { spaceSlug, spaceName, items, activeSlug } = Astro.props;
     <a href={`/s/${spaceSlug}`} class="sidebar-space-name">{spaceName}</a>
   </div>
 
-  <NavTree spaceSlug={spaceSlug} items={items} activeSlug={activeSlug} />
+  <NavTree items={items} activeUrl={activeUrl ?? undefined} />
 </nav>
 
 <style is:global>

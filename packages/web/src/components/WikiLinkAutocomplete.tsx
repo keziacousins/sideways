@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 interface DocSuggestion {
-  slug: string;
+  sectionSlug: string;
+  path: string;
   title: string;
+  url: string;
 }
 
 interface Props {
@@ -30,7 +32,7 @@ export default function WikiLinkAutocomplete({ apiUrl, spaceSlug, accessToken }:
   const timerRef = useRef<number | undefined>(undefined);
 
   const fetchSuggestions = useCallback(async (q: string) => {
-    if (q.length < 1) { setSuggestions([]); return; }
+    // Empty query is fine — the server returns the first 15 docs alphabetically.
     try {
       const headers: Record<string, string> = {};
       if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
@@ -49,7 +51,11 @@ export default function WikiLinkAutocomplete({ apiUrl, spaceSlug, accessToken }:
 
     const before = textarea.value.slice(0, triggerPosRef.current);
     const after = textarea.value.slice(textarea.selectionStart);
-    const insert = `[[${doc.slug}|${doc.title}]]`;
+    // Path-qualified target — strip `.md` and `index` collapse to mirror the
+    // canonical URL form. The display text after `|` lets the rendered link
+    // show the title rather than the raw path.
+    const target = doc.path.replace(/\.md$/, "").replace(/(^|\/)index$/, "");
+    const insert = `[[${target}|${doc.title}]]`;
     const newValue = before + insert + after;
     const newPos = before.length + insert.length;
 
@@ -164,13 +170,13 @@ export default function WikiLinkAutocomplete({ apiUrl, spaceSlug, accessToken }:
     >
       {suggestions.map((doc, i) => (
         <div
-          key={doc.slug}
+          key={`${doc.sectionSlug}/${doc.path}`}
           className={`wiki-autocomplete-item ${i === selectedIndex ? "active" : ""}`}
           onMouseEnter={() => setSelectedIndex(i)}
           onClick={() => insertLink(doc)}
         >
           <span className="wiki-autocomplete-title">{doc.title}</span>
-          <span className="wiki-autocomplete-slug">{doc.slug}</span>
+          <span className="wiki-autocomplete-slug">{doc.sectionSlug}/{doc.path.replace(/\.md$/, "")}</span>
         </div>
       ))}
     </div>

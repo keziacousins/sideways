@@ -9,25 +9,37 @@ import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { remarkWikiLinks } from "./wikilinks.js";
+import { remarkWikiLinks, type WikiLinkContext } from "./wikilinks.js";
 
 export interface RenderOptions {
   /** "web" includes interactive features; "pdf" produces print-ready HTML */
   target: "web" | "pdf";
-  /** Space slug for resolving wiki-links like [[doc-slug]] */
-  spaceSlug?: string;
+  /**
+   * Context for resolving `[[wikilinks]]` against the doc list. If omitted,
+   * all wikilinks render as unresolved spans.
+   */
+  wikiLinks?: WikiLinkContext;
 }
 
 /**
  * Create the shared remark/rehype processor.
  * Used by both the web viewer and the PDF pipeline.
  */
-// Sanitize schema: allow KaTeX, highlight.js classes, heading IDs, task list checkboxes
+// Sanitize schema: allow KaTeX, highlight.js classes, heading IDs, task list checkboxes.
+// hast-util-sanitize's per-tag attribute lists OVERRIDE the `*` wildcard (they
+// don't merge), so any tag we want className on needs it listed explicitly.
+// `<a>` defaults to allowing only `data-footnote-backref` as a className value;
+// we override to allow any class so wiki-link, etc. survive.
 const sanitizeSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] || []), "className", "id", "style"],
+    // hast-util-sanitize takes the FIRST matching attribute definition. The
+    // default schema for <a> has a restrictive [['className', 'data-footnote-
+    // backref']] entry that would match first and strip everything else, so
+    // we prepend the permissive 'className' so it wins.
+    a: ["className", ...(defaultSchema.attributes?.["a"] || [])],
     input: ["type", "checked", "disabled"],
     span: [...(defaultSchema.attributes?.["span"] || []), "className", "style"],
     div: [...(defaultSchema.attributes?.["div"] || []), "className", "style"],
@@ -49,7 +61,7 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath, { singleDollarTextMath: false })
-    .use(remarkWikiLinks(options.spaceSlug))
+    .use(remarkWikiLinks(options.wikiLinks))
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeSlug)
     .use(rehypeAutolinkHeadings, { behavior: "wrap" })
@@ -63,6 +75,14 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
 
 export { extractComments, embedComments } from "./comments.js";
 export type { SerializedComment } from "./comments.js";
+export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.js";
+
+/**
+ * Cache-key segment for rendered HTML. Bump whenever renderer output changes
+ * meaningfully (new plugin, changed sanitiser, wikilink semantics, etc.) so
+ * cached entries from previous renderer versions are no longer served.
+ */
+export const RENDERER_VERSION = "v2";
 
 /**
  * Render markdown to HTML string.

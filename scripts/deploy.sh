@@ -121,15 +121,15 @@ if ! $QUICK; then
   ssh $VM "set -a && source $APP_DIR/.env && set +a && cd $APP_DIR && pnpm --filter @sideways/web build"
 fi
 
-# ── Run one-shot data migrations (before schema push) ────────────────
-
-echo "==> Running data migrations..."
-ssh $VM "set -a && source $APP_DIR/.env && set +a && cd $APP_DIR && npx tsx scripts/migrate-paths-sections.ts"
-
 # ── Push database schema ─────────────────────────────────────────────
+#
+# `--force` auto-approves drizzle's data-loss prompts (column drops).
+# We don't get an interactive TTY over SSH, so push would otherwise hang
+# on any destructive change. Before destructive deploys, run
+# `./scripts/backup-db.sh` first.
 
 echo "==> Pushing database schema..."
-ssh $VM "set -a && source $APP_DIR/.env && set +a && cd $APP_DIR/shared/db && npx drizzle-kit push"
+ssh $VM "set -a && source $APP_DIR/.env && set +a && cd $APP_DIR/shared/db && npx drizzle-kit push --force"
 
 # ── Deploy nginx config ──────────────────────────────────────────────
 

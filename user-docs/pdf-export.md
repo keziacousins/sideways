@@ -9,13 +9,14 @@ Click the **⋯** menu on any document and select **Download PDF**.
 ## From the CLI
 
 ```bash
-sideways export api-design.md
+sideways export docs/api-design.md
 ```
 
 Options:
-- `-o <path>` — output file path (default: `<slug>.pdf`)
+- `-o <path>` — output file path (default: `<basename>.pdf`)
 - `--no-toc` — omit table of contents
 - `--no-title-page` — omit cover page
+- `--theme <id-or-name>` — print theme override
 
 ## Cover Pages
 

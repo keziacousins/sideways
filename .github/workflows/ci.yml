@@ -3,20 +3,35 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # Run on pushes to any branch — we don't run tests locally, so we want
+    # branch pushes to surface failures before opening a PR.
+    branches: ['**']
+
+# Default to read-only token for every job. Any job that needs more
+# (e.g. writing comments on a PR) opts in explicitly via its own
+# `permissions:` block. Same model GitHub itself recommends — minimum
+# privilege by default cuts the blast radius if a step does something
+# unexpected.
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Third-party actions are pinned to commit SHAs (with a version comment)
+# so a hijacked tag — like the tj-actions/changed-files compromise — can't
+# silently start running new code. GitHub-maintained `actions/*` are pinned
+# the same way for consistency. Bump deliberately, ideally via Dependabot.
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
@@ -27,9 +42,9 @@ jobs:
     name: Typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
@@ -42,9 +57,9 @@ jobs:
     name: Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
@@ -55,9 +70,9 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
@@ -69,3 +84,64 @@ jobs:
           PUBLIC_URL: http://localhost:4000
           PUBLIC_API_URL: http://localhost:4100
         run: pnpm --filter @sideways/web build
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      # Postgres as a service container. Healthcheck makes the runner block
+      # until ready, so the schema-push step can connect immediately.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sideways
+          POSTGRES_PASSWORD: sideways
+          POSTGRES_DB: sideways_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Start SeaweedFS
+        # GitHub `services:` blocks can't pass a command to the container,
+        # but `seaweedfs` needs `server -filer` to start in all-in-one mode.
+        # Run via plain docker instead.
+        run: |
+          docker run -d --name seaweedfs \
+            -p 8888:8888 -p 9333:9333 -p 8080:8080 \
+            chrislusf/seaweedfs:4.25 \
+            server -filer
+          # Wait for the filer to come up
+          for i in {1..30}; do
+            if curl -sf http://localhost:8888 > /dev/null; then
+              echo "SeaweedFS filer ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "SeaweedFS filer never came up" >&2
+          docker logs seaweedfs >&2 || true
+          exit 1
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Push schema
+        env:
+          DATABASE_URL: postgres://sideways:sideways@localhost:5432/sideways_test
+        run: pnpm --filter @sideways/db exec drizzle-kit push --force
+
+      - name: Run tests
+        env:
+          TEST_DATABASE_URL: postgres://sideways:sideways@localhost:5432/sideways_test
+          TEST_SEAWEEDFS_FILER_URL: http://localhost:8888
+        run: pnpm test

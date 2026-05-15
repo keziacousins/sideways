@@ -7,6 +7,8 @@
  * clickable page for that header.
  */
 
+import { docUrl } from "@sideways/types";
+
 interface Section {
   id: string;
   slug: string;
@@ -17,9 +19,9 @@ interface Section {
 
 interface Doc {
   id?: string;
-  slug: string;
   title: string;
   sectionId: string | null;
+  sectionSlug: string;
   /** Server-owned path within the section. */
   path: string;
   parentId?: string | null;
@@ -31,15 +33,15 @@ interface Doc {
 export type NavItem =
   | { type: "section"; slug: string; title: string; children: NavItem[] }
   | {
-      /** A path-component group. Non-clickable unless `docSlug` is set
+      /** A path-component group. Non-clickable unless `href` is set
        *  (i.e. the directory has an `index.md` to act as its page). */
       type: "directory";
       name: string;
       children: NavItem[];
-      docSlug?: string;
+      href?: string;
       unread?: boolean;
     }
-  | { type: "doc"; slug: string; title: string; unread?: boolean };
+  | { type: "doc"; href: string; title: string; unread?: boolean };
 
 /** Title-case a directory segment for display (e.g. "event-system" → "Event System"). */
 function titleizeDir(name: string): string {
@@ -49,13 +51,13 @@ function titleizeDir(name: string): string {
     .join(" ");
 }
 
-/** Build a directory tree from a flat list of docs (with paths). */
-function buildPathTree(docs: Doc[]): NavItem[] {
+/** Build a directory tree from a flat list of docs in a single space. */
+function buildPathTree(spaceSlug: string, docs: Doc[]): NavItem[] {
   type Node = { docs: Doc[]; subdirs: Map<string, Node> };
   const root: Node = { docs: [], subdirs: new Map() };
 
   for (const doc of docs) {
-    const parts = (doc.path || `${doc.slug}.md`).split("/");
+    const parts = doc.path.split("/");
     const segments = parts.slice(0, -1);
     let node = root;
     for (const seg of segments) {
@@ -71,17 +73,14 @@ function buildPathTree(docs: Doc[]): NavItem[] {
     // Directories first, alphabetical by segment name.
     const dirs = [...node.subdirs.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     for (const [name, child] of dirs) {
-      const idx = child.docs.find(d => {
-        const last = (d.path || "").split("/").pop();
-        return last === "index.md";
-      });
+      const idx = child.docs.find(d => d.path.split("/").pop() === "index.md");
       const childWithoutIndex: Node = idx
         ? { docs: child.docs.filter(d => d !== idx), subdirs: child.subdirs }
         : child;
       items.push({
         type: "directory",
         name: idx?.title ?? titleizeDir(name),
-        docSlug: idx?.slug,
+        href: idx ? docUrl({ spaceSlug, sectionSlug: idx.sectionSlug, path: idx.path }) : undefined,
         unread: idx?.unread,
         children: render(childWithoutIndex),
       });
@@ -89,10 +88,15 @@ function buildPathTree(docs: Doc[]): NavItem[] {
 
     // Then loose docs at this level, sorted by position then title.
     const sortedDocs = [...node.docs]
-      .filter(d => (d.path || "").split("/").pop() !== "index.md")
+      .filter(d => d.path.split("/").pop() !== "index.md")
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.title.localeCompare(b.title));
     for (const d of sortedDocs) {
-      items.push({ type: "doc", slug: d.slug, title: d.title, unread: d.unread });
+      items.push({
+        type: "doc",
+        href: docUrl({ spaceSlug, sectionSlug: d.sectionSlug, path: d.path }),
+        title: d.title,
+        unread: d.unread,
+      });
     }
 
     return items;
@@ -122,11 +126,10 @@ function applyVisibilityRules(items: NavItem[]): NavItem[] {
   return [...topLevelOther, ...visibleSections];
 }
 
-export function buildNavTree(sections: Section[], documents: Doc[]): NavItem[] {
+export function buildNavTree(spaceSlug: string, sections: Section[], documents: Doc[]): NavItem[] {
   const items: NavItem[] = [];
 
-  // Group docs by sectionId. Sectionless docs shouldn't exist post-migration,
-  // but if any sneak through, render them at the top level.
+  // Group docs by sectionId.
   const docsBySection = new Map<string, Doc[]>();
   const orphanDocs: Doc[] = [];
   for (const d of documents) {
@@ -138,9 +141,8 @@ export function buildNavTree(sections: Section[], documents: Doc[]): NavItem[] {
     }
   }
 
-  // Orphans (defensive): render at top level using path-tree logic.
   if (orphanDocs.length > 0) {
-    items.push(...buildPathTree(orphanDocs));
+    items.push(...buildPathTree(spaceSlug, orphanDocs));
   }
 
   // Sections sorted by position.
@@ -151,7 +153,7 @@ export function buildNavTree(sections: Section[], documents: Doc[]): NavItem[] {
       type: "section",
       slug: s.slug,
       title: s.title,
-      children: buildPathTree(sectionDocs),
+      children: buildPathTree(spaceSlug, sectionDocs),
     });
   }
 

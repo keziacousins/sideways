@@ -7,25 +7,27 @@ import { getStoredCredentials } from "./auth.js";
 
 /** A single entry from /api/documents/{space}/_sync */
 export interface SyncInfo {
-  slug: string;
+  id: string;
   title: string;
   sectionSlug: string;
   path: string;
+  url: string;
   version: number;
   contentHash: string;
   updatedAt: string;
 }
 
-/** A document with its current content (GET /api/documents/{space}/{slug}) */
+/** A document with its current content (GET /api/documents/{space}/{section}/{path}) */
 export interface DocumentWithContent extends Document {
   content: string;
   version: number;
   contentHash: string;
-  sectionSlug: string | null;
-  parentSlug: string | null;
+  sectionSlug: string;
+  parentId: string | null;
+  url: string;
 }
 
-/** Comment payload returned by the server (with denormalised author + threading) */
+/** Comment payload returned by the server */
 export interface CommentResponse {
   id: string;
   body: string;
@@ -119,6 +121,7 @@ export function createClient(baseUrl: string, actorName?: string) {
       throw new Error(`API error ${res.status}: ${message}`);
     }
 
+    if (res.status === 204) return undefined as T;
     return res.json();
   }
 
@@ -132,40 +135,51 @@ export function createClient(baseUrl: string, actorName?: string) {
     },
 
     listDocuments(space: string) {
-      return request<Document[]>(`/api/documents?space=${space}`);
+      return request<(Document & { sectionSlug: string; url: string })[]>(`/api/documents?space=${space}`);
     },
 
-    getDocument(space: string, slug: string) {
-      return request<DocumentWithContent>(`/api/documents/${space}/${slug}`);
+    getDocument(space: string, sectionSlug: string, path: string) {
+      return request<DocumentWithContent>(`/api/documents/${space}/${sectionSlug}/${path}`);
     },
 
     putDocument(
       space: string,
-      slug: string,
-      body: { title?: string; content?: string; tags?: string[]; sectionSlug?: string; parentSlug?: string; path?: string; updatedAt?: string },
+      sectionSlug: string,
+      path: string,
+      body: { title?: string; content?: string; tags?: string[]; parentPath?: string; updatedAt?: string },
     ) {
-      return request<DocumentWithContent>(`/api/documents/${space}/${slug}`, {
+      return request<DocumentWithContent>(`/api/documents/${space}/${sectionSlug}/${path}`, {
         method: "PUT",
         body: JSON.stringify(body),
       });
     },
 
-    patchDocument(space: string, slug: string, patch: Record<string, any>) {
-      return request<DocumentWithContent>(`/api/documents/${space}/${slug}`, {
+    patchDocument(
+      space: string,
+      sectionSlug: string,
+      path: string,
+      patch: Record<string, any>,
+    ) {
+      return request<DocumentWithContent>(`/api/documents/${space}/${sectionSlug}/${path}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
     },
 
-    duplicateDocument(space: string, slug: string, opts?: { targetSpace?: string; targetSlug?: string }) {
-      return request<DocumentWithContent>(`/api/documents/${space}/${slug}/duplicate`, {
-        method: "POST",
-        body: JSON.stringify(opts || {}),
-      });
+    duplicateDocument(
+      space: string,
+      sectionSlug: string,
+      path: string,
+      opts?: { targetSpace?: string; targetSection?: string; targetPath?: string },
+    ) {
+      return request<DocumentWithContent>(
+        `/api/documents/${space}/${sectionSlug}/_duplicate/${path}`,
+        { method: "POST", body: JSON.stringify(opts || {}) },
+      );
     },
 
-    deleteDocument(space: string, slug: string) {
-      return request<void>(`/api/documents/${space}/${slug}`, {
+    deleteDocument(space: string, sectionSlug: string, path: string) {
+      return request<void>(`/api/documents/${space}/${sectionSlug}/${path}`, {
         method: "DELETE",
       });
     },
@@ -188,7 +202,9 @@ export function createClient(baseUrl: string, actorName?: string) {
     },
 
     getCommentCounts(space: string) {
-      return request<Array<{ slug: string; count: number }>>(`/api/documents/${space}/_comment-counts`);
+      return request<Array<{ sectionSlug: string; path: string; count: number }>>(
+        `/api/documents/${space}/_comment-counts`,
+      );
     },
 
     createSpace(slug: string, name?: string, visibility: string = "private") {
@@ -237,9 +253,6 @@ export function createClient(baseUrl: string, actorName?: string) {
       });
     },
 
-    /** Idempotent upsert for a section. Server preserves fields not provided
-     *  in the body, so passing just `{ position }` is safe on existing
-     *  sections (won't overwrite a web-UI-set title). */
     putSection(space: string, slug: string, body: { title?: string; position?: number }) {
       return request<Section>(`/api/spaces/${space}/sections/${slug}`, {
         method: "PUT",
@@ -247,31 +260,36 @@ export function createClient(baseUrl: string, actorName?: string) {
       });
     },
 
-    getVersions(space: string, slug: string) {
+    getVersions(space: string, sectionSlug: string, path: string) {
       return request<Array<{ version: number; contentHash: string; createdAt: string; createdBy: string }>>(
-        `/api/documents/${space}/${slug}/versions`,
+        `/api/documents/${space}/${sectionSlug}/_versions/${path}`,
       );
     },
 
-    getComments(space: string, slug: string, includeResolved = false) {
+    getComments(space: string, sectionSlug: string, path: string, includeResolved = false) {
       const qs = includeResolved ? "?include_resolved=true" : "";
-      return request<CommentResponse[]>(`/api/comments/${space}/${slug}${qs}`);
+      return request<CommentResponse[]>(`/api/comments/${space}/${sectionSlug}/${path}${qs}`);
     },
 
-    addComment(space: string, slug: string, body: {
-      body: string;
-      anchorText?: string;
-      anchorSection?: string;
-      parentId?: string;
-    }) {
-      return request<CommentResponse>(`/api/comments/${space}/${slug}`, {
+    addComment(
+      space: string,
+      sectionSlug: string,
+      path: string,
+      body: {
+        body: string;
+        anchorText?: string;
+        anchorSection?: string;
+        parentId?: string;
+      },
+    ) {
+      return request<CommentResponse>(`/api/comments/${space}/${sectionSlug}/${path}`, {
         method: "POST",
         body: JSON.stringify(body),
       });
     },
 
-    resolveComment(space: string, slug: string, commentId: string) {
-      return request<CommentResponse>(`/api/comments/${space}/${slug}/${commentId}/resolve`, {
+    resolveComment(commentId: string) {
+      return request<CommentResponse>(`/api/comments/${commentId}/resolve`, {
         method: "POST",
       });
     },
@@ -291,7 +309,8 @@ export function createClient(baseUrl: string, actorName?: string) {
     /** Download PDF — returns raw Response (not parsed JSON) */
     async downloadPdf(
       space: string,
-      slug: string,
+      sectionSlug: string,
+      path: string,
       opts?: { toc?: boolean; titlePage?: boolean; theme?: string },
     ): Promise<Response> {
       const creds = getStoredCredentials();
@@ -305,7 +324,7 @@ export function createClient(baseUrl: string, actorName?: string) {
       const qs = params.toString() ? `?${params}` : "";
 
       const res = await fetch(
-        `${baseUrl}/api/documents/${space}/${slug}/pdf${qs}`,
+        `${baseUrl}/api/documents/${space}/${sectionSlug}/_pdf/${path}${qs}`,
         { headers },
       );
 

@@ -1,8 +1,15 @@
-import type { APIRoute } from "astro";
+/**
+ * Server-side helper for the internal RPC endpoints under `pages/op/`.
+ * Refreshes the session's access token if it's near expiry, then forwards
+ * a request to the API server with `Authorization: Bearer ...`.
+ *
+ * Centralised so each action endpoint stays a thin proxy without
+ * duplicating the OAuth refresh dance.
+ */
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 
-async function getFreshToken(session: any): Promise<string | null> {
+export async function getFreshToken(session: any): Promise<string | null> {
   let accessToken = await session?.get("access_token");
   const refreshToken = await session?.get("refresh_token");
   if (!accessToken) return null;
@@ -13,7 +20,11 @@ async function getFreshToken(session: any): Promise<string | null> {
       const res = await fetch(`${API_URL}/api/auth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: "sideways-web" }),
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+          client_id: "sideways-web",
+        }),
       });
       if (res.ok) {
         const tokens = await res.json();
@@ -26,16 +37,4 @@ async function getFreshToken(session: any): Promise<string | null> {
   return accessToken;
 }
 
-export const POST: APIRoute = async ({ params, request, session }) => {
-  const token = await getFreshToken(session);
-  if (!token) return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401, headers: { "Content-Type": "application/json" } });
-
-  const body = await request.json();
-  const res = await fetch(`${API_URL}/api/documents/${params.space}/${params.slug}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-
-  return new Response(await res.text(), { status: res.status, headers: { "Content-Type": "application/json" } });
-};
+export { API_URL };

@@ -11,7 +11,7 @@ const { space: spaceSlug } = Astro.params;
 const { accessToken } = Astro.locals;
 
 let space: { name: string; slug: string; description: string | null; visibility: string; canWrite?: boolean; theme?: { tokens: any } } | null = null;
-let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number; unread?: boolean; updatedAt?: string }[] = [];
+let documents: { id: string; title: string; tags: string[]; sectionId: string | null; sectionSlug: string; parentId: string | null; position?: number; unread?: boolean; updatedAt?: string; path: string; url: string }[] = [];
 let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 
 try {
@@ -29,7 +29,7 @@ try {
   // API not available
 }
 
-const navItems = buildNavTree(sections, documents);
+const navItems = buildNavTree(spaceSlug!, sections, documents);
 const themeCss = themeToCSS(space?.theme?.tokens);
 ---
 
@@ -97,10 +97,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
               class:list={["doc-card-row", "animate-in", { unread: doc.unread }]}
               style={`animation-delay: ${(i + 1) * 60}ms`}
               data-updated={doc.updatedAt || ""}
-              data-slug={doc.slug}
+              data-section={doc.sectionSlug}
+              data-path={doc.path}
             >
               <a
-                href={`/s/${spaceSlug}/${doc.slug}`}
+                href={doc.url}
                 class="doc-card"
               >
                 <div class="doc-card-icon"><Fragment set:html={icons.document(16)} /></div>
@@ -117,7 +118,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
                 )}
               </a>
               {space?.canWrite && (
-                <button class="doc-rename-btn" title="Rename" data-slug={doc.slug} data-title={doc.title}>
+                <button class="doc-rename-btn" title="Rename" data-section={doc.sectionSlug} data-path={doc.path} data-title={doc.title}>
                   <Fragment set:html={icons.pencil(13)} />
                 </button>
               )}
@@ -432,7 +433,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
   markAllBtn?.addEventListener("click", async () => {
     const spaceSlug = window.location.pathname.split("/")[2];
-    const res = await fetch(`/s/${spaceSlug}/mark-read`, { method: "POST" });
+    const res = await fetch(`/op/mark-read`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ space: spaceSlug }),
+    });
     if (res.ok) {
       // Remove all unread indicators
       document.querySelectorAll(".doc-card-row.unread").forEach(el => el.classList.remove("unread"));
@@ -449,7 +454,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     const bellFilled = bellOutline.replace('fill="none"', 'fill="currentColor"');
 
     // Fetch initial state
-    fetch(`/s/${spaceSlug}/watch`).then(r => r.json()).then(data => {
+    fetch(`/op/space-watch?space=${encodeURIComponent(spaceSlug)}`).then(r => r.json()).then(data => {
       if (data.watching) {
         watchBtn.innerHTML = bellFilled;
         watchBtn.classList.add("watching");
@@ -458,7 +463,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     }).catch(() => {});
 
     watchBtn.addEventListener("click", async () => {
-      const res = await fetch(`/s/${spaceSlug}/watch`, { method: "POST" });
+      const res = await fetch(`/op/space-watch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ space: spaceSlug }),
+      });
       if (res.ok) {
         const data = await res.json();
         watchBtn.innerHTML = data.watching ? bellFilled : bellOutline;
@@ -474,10 +483,14 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     const spaceSlug = window.location.pathname.split("/")[2];
     newDocBtn.setAttribute("disabled", "");
     newDocBtn.textContent = "Creating...";
-    const res = await fetch(`/s/${spaceSlug}/new-doc`, { method: "POST" });
+    const res = await fetch(`/op/new-doc`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ space: spaceSlug }),
+    });
     if (res.ok) {
-      const { slug } = await res.json();
-      window.location.href = `/s/${spaceSlug}/${slug}?edit=1`;
+      const { url } = await res.json();
+      window.location.href = url;
     } else {
       alert("Failed to create document.");
       newDocBtn.removeAttribute("disabled");
@@ -485,23 +498,23 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     }
   });
 
-  // Rename from listing
+  // Rename from listing — title-only rename (no path/slug change here).
   document.querySelectorAll(".doc-rename-btn").forEach(btn => {
     btn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
       const el = btn as HTMLElement;
-      const docSlug = el.dataset.slug;
+      const sectionSlug = el.dataset.section;
+      const path = el.dataset.path;
       const currentTitle = el.dataset.title;
       const newTitle = prompt("Rename document:", currentTitle);
       if (!newTitle || newTitle === currentTitle) return;
 
-      const newSlug = newTitle.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
       const spaceSlug = window.location.pathname.split("/")[2];
-      const res = await fetch(`/s/${spaceSlug}/${docSlug}/rename`, {
+      const res = await fetch(`/op/patch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle, slug: newSlug }),
+        body: JSON.stringify({ space: spaceSlug, section: sectionSlug, path, title: newTitle }),
       });
 
       if (res.ok) {

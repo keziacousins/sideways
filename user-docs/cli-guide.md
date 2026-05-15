@@ -73,13 +73,15 @@ Comment options:
 
 ## File Identifiers
 
-All commands that take a document accept filenames, slugs, or relative paths:
+All commands that take a document take a **filesystem path**. The path must fall under one of your declared section mounts (see [Configuration](#configuration)):
 
 ```bash
-sideways diff CHANGES-for-main.md    # filename
-sideways diff changes-for-main       # slug
-sideways diff docs/api-design.md     # relative path
+sideways diff docs/api-design.md       # relative to cwd
+sideways diff ./docs/api-design.md     # explicit relative
+sideways diff /abs/path/api-design.md  # absolute
 ```
+
+Internally the CLI resolves the path to a `(section, path)` pair — the canonical identity of a document — and the server URL becomes `/s/<space>/<section>/<path-without-md>`.
 
 ## Selective Tracking
 
@@ -145,28 +147,29 @@ This fetches remote content for files with mismatched hashes and aligns sync sta
 
 ```yaml
 space: my-project
+spaceName: My Project
 api: https://your-sideways-instance
-root: .
-name: My Project
+sections:
+  default: .
 ignore:
   - reference-code
   - tmp
 ```
 
-### Section Mappings
+`sections:` is a map of **section slug → local directory**. At least one entry is required; `default` is conventional for the top-level mount but you can name it anything. Sections not listed are skipped — sync operations leave them alone.
 
-Map deep subdirectories to sections when your docs live alongside code:
+### Multiple sections
+
+When your docs live alongside code in different subtrees, declare each one:
 
 ```yaml
 sections:
-  - path: src/packages/api/docs
-    name: API Reference
-    slug: api-docs
-  - path: src/packages/web/docs
-    name: Web App
+  default: docs
+  api: src/packages/api/docs
+  web: src/packages/web/docs
 ```
 
-When `sections` is set, only those directories are synced. Each maps to a section in your space. Files pulled from remote are written back into the mapped paths.
+This maps three on-disk directories to three sections (`default`, `api`, `web`) in the space. A doc at `src/packages/api/docs/architecture/overview.md` syncs to section `api`, path `architecture/overview.md`, and is reachable at `/s/<space>/api/architecture/overview`.
 
 ### ~/.sideways/token.json
 

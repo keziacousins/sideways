@@ -11,33 +11,134 @@ import type { AuthUser } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { createNotification, autoWatch, parseMentions } from "../lib/notify.js";
+import { resolveSection, findDocByPath } from "../lib/doc-resolver.js";
 
 export function createCommentRoutes(db: Database) {
   const router = new Hono();
 
   /**
-   * GET /api/comments/:space/:slug
-   * List comments on a document. Includes author name/email.
-   * Query: ?include_resolved=true to include resolved comments.
+   * Resolve `(space, section, path)` from URL params to a doc with read
+   * access checked. Used by the doc-targeting comment routes.
    */
-  router.get("/:space/:slug", async (c) => {
+  async function resolveDoc(c: any) {
     const space = await db.query.spaces.findFirst({
       where: eq(spaces.slug, c.req.param("space")),
     });
-    if (!space) return c.json({ error: "Space not found" }, 404);
+    if (!space) return { error: c.json({ error: "Space not found" }, 404) };
 
     const user = c.get("user") as AuthUser | null;
     if (!(await canAccessSpace(db, space.id, space.visibility, space.ownerId, user))) {
+      return { error: c.json({ error: "Forbidden" }, 403) };
+    }
+
+    const section = await resolveSection(db, space.id, c.req.param("section"));
+    if (!section) return { error: c.json({ error: "Section not found" }, 404) };
+
+    const doc = await findDocByPath(db, space.id, section.id, c.req.param("path"));
+    if (!doc) return { error: c.json({ error: "Document not found" }, 404) };
+
+    return { space, section, doc };
+  }
+
+  // ── Comment-by-ID routes (single segment, declared first so the path
+  //    catch-all under doc routes doesn't accidentally shadow them) ─────
+
+  /** PUT /:commentId — update body. Must be author. */
+  router.put("/:commentId", requireAuth(), async (c) => {
+    const user = c.get("user") as AuthUser;
+    const commentId = c.req.param("commentId");
+
+    const comment = await db.query.comments.findFirst({
+      where: eq(comments.id, commentId),
+    });
+    if (!comment) return c.json({ error: "Comment not found" }, 404);
+    if (comment.authorId !== user.id) {
       return c.json({ error: "Forbidden" }, 403);
     }
 
+    const hasReplies = await db.query.comments.findFirst({
+      where: eq(comments.parentId, commentId),
+    });
+    if (hasReplies) {
+      return c.json({ error: "Cannot edit a comment that has replies" }, 409);
+    }
+
+    const body = await c.req.json<{ body: string }>();
+
+    const [updated] = await db
+      .update(comments)
+      .set({ body: body.body, updatedAt: new Date() })
+      .where(eq(comments.id, commentId))
+      .returning();
+
+    return c.json(updated);
+  });
+
+  /** POST /:commentId/resolve — toggle resolved status. */
+  router.post("/:commentId/resolve", requireAuth(), async (c) => {
+    const commentId = c.req.param("commentId");
+    const comment = await db.query.comments.findFirst({
+      where: eq(comments.id, commentId),
+    });
+    if (!comment) return c.json({ error: "Comment not found" }, 404);
+
+    // Resolve requires write access to the doc's space.
     const doc = await db.query.documents.findFirst({
-      where: and(
-        eq(documents.spaceId, space.id),
-        eq(documents.slug, c.req.param("slug")),
-      ),
+      where: eq(documents.id, comment.documentId),
     });
     if (!doc) return c.json({ error: "Document not found" }, 404);
+
+    const user = c.get("user") as AuthUser | null;
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.id, doc.spaceId),
+    });
+    if (!space || !(await canWriteSpace(db, space.id, space.ownerId, user))) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const [updated] = await db
+      .update(comments)
+      .set({ resolved: !comment.resolved, updatedAt: new Date() })
+      .where(eq(comments.id, commentId))
+      .returning();
+
+    return c.json(updated);
+  });
+
+  /** DELETE /:commentId — delete. Must be author. */
+  router.delete("/:commentId", requireAuth(), async (c) => {
+    const user = c.get("user") as AuthUser;
+    const commentId = c.req.param("commentId");
+
+    const comment = await db.query.comments.findFirst({
+      where: eq(comments.id, commentId),
+    });
+    if (!comment) return c.json({ error: "Comment not found" }, 404);
+    if (comment.authorId !== user.id) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const hasReplies = await db.query.comments.findFirst({
+      where: eq(comments.parentId, commentId),
+    });
+    if (hasReplies) {
+      return c.json({ error: "Cannot delete a comment that has replies. Resolve it instead." }, 409);
+    }
+
+    await db.delete(comments).where(eq(comments.id, commentId));
+    return c.json({ deleted: true });
+  });
+
+  // ── Doc-targeting comment routes ────────────────────────────────────
+
+  /**
+   * GET /:space/:section/:path — list comments on a doc.
+   * Query: ?include_resolved=true to include resolved comments.
+   */
+  router.get("/:space/:section/:path{.+}", async (c) => {
+    const result = await resolveDoc(c);
+    if ("error" in result) return result.error;
+    const { doc } = result;
 
     const includeResolved = c.req.query("include_resolved") === "true";
 
@@ -48,7 +149,6 @@ export function createCommentRoutes(db: Database) {
       orderBy: comments.createdAt,
     });
 
-    // Fetch author info
     const authorIds = [...new Set(allComments.map((c) => c.authorId))];
     const authors = authorIds.length
       ? await db.query.users.findMany({
@@ -58,39 +158,24 @@ export function createCommentRoutes(db: Database) {
       : [];
     const authorMap = new Map(authors.map((a) => [a.id, a]));
 
-    const result = allComments.map((comment) => ({
-      ...comment,
-      author: authorMap.get(comment.authorId) || null,
-    }));
-
-    return c.json(result);
+    return c.json(
+      allComments.map((comment) => ({
+        ...comment,
+        author: authorMap.get(comment.authorId) || null,
+      })),
+    );
   });
 
   /**
-   * POST /api/comments/:space/:slug
-   * Create a comment. Requires auth.
-   * Body: { body, anchorText?, parentId? }
+   * POST /:space/:section/:path — create comment on a doc. Requires auth.
+   * Body: { body, anchorText?, anchorSection?, anchorContext?, parentId? }
    */
-  router.post("/:space/:slug", requireAuth(), async (c) => {
+  router.post("/:space/:section/:path{.+}", requireAuth(), async (c) => {
     const user = c.get("user") as AuthUser;
 
-    const space = await db.query.spaces.findFirst({
-      where: eq(spaces.slug, c.req.param("space")),
-    });
-    if (!space) return c.json({ error: "Space not found" }, 404);
-
-    // The caller must be able to read the space before they can comment in it.
-    if (!(await canAccessSpace(db, space.id, space.visibility, space.ownerId, user))) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
-
-    const doc = await db.query.documents.findFirst({
-      where: and(
-        eq(documents.spaceId, space.id),
-        eq(documents.slug, c.req.param("slug")),
-      ),
-    });
-    if (!doc) return c.json({ error: "Document not found" }, 404);
+    const result = await resolveDoc(c);
+    if ("error" in result) return result.error;
+    const { doc } = result;
 
     const body = await c.req.json<{
       body: string;
@@ -126,14 +211,12 @@ export function createCommentRoutes(db: Database) {
       .returning();
 
     // Fire notifications (async, don't block response)
-    const spaceSlug = c.req.param("space");
-    const docSlug = c.req.param("slug");
-    const notified = new Set<string>(); // prevent double-notify
-    const isAgent = !!user.actorName; // API key with actor name = bot/agent
+    const notified = new Set<string>();
+    const isAgent = !!user.actorName;
     const displayName = user.displayName;
 
     (async () => {
-      // 1. Reply notification — agents always notify, even the key owner
+      // 1. Reply notification
       if (body.parentId) {
         const parent = await db.query.comments.findFirst({
           where: eq(comments.id, body.parentId),
@@ -143,7 +226,6 @@ export function createCommentRoutes(db: Database) {
           await createNotification({
             db, type: "reply", userId: parent.authorId,
             documentId: doc.id, commentId: comment.id,
-            spaceSlug, docSlug,
             title: `${displayName} replied to your comment`,
             body: body.body.slice(0, 200),
             actorName: displayName,
@@ -163,7 +245,6 @@ export function createCommentRoutes(db: Database) {
             await createNotification({
               db, type: "mention", userId: mentioned.id,
               documentId: doc.id, commentId: comment.id,
-              spaceSlug, docSlug,
               title: `${displayName} mentioned you in a comment`,
               body: body.body.slice(0, 200),
               actorName: displayName,
@@ -172,7 +253,7 @@ export function createCommentRoutes(db: Database) {
         }
       }
 
-      // 3. Notify watchers (excluding commenter unless agent, and already-notified)
+      // 3. Notify watchers
       const watchers = await db.query.documentWatches.findMany({
         where: eq(documentWatches.documentId, doc.id),
       });
@@ -181,7 +262,6 @@ export function createCommentRoutes(db: Database) {
           await createNotification({
             db, type: "new_comment", userId: w.userId,
             documentId: doc.id, commentId: comment.id,
-            spaceSlug, docSlug,
             title: `${displayName} commented on ${doc.title}`,
             body: body.body.slice(0, 200),
             actorName: displayName,
@@ -194,99 +274,6 @@ export function createCommentRoutes(db: Database) {
     })().catch(() => {});
 
     return c.json(comment, 201);
-  });
-
-  /**
-   * PUT /api/comments/:space/:slug/:commentId
-   * Update a comment (body only). Must be author.
-   */
-  router.put("/:space/:slug/:commentId", requireAuth(), async (c) => {
-    const user = c.get("user") as AuthUser;
-    const commentId = c.req.param("commentId");
-
-    const comment = await db.query.comments.findFirst({
-      where: eq(comments.id, commentId),
-    });
-    if (!comment) return c.json({ error: "Comment not found" }, 404);
-    if (comment.authorId !== user.id) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
-
-    // Can only edit if no replies
-    const hasReplies = await db.query.comments.findFirst({
-      where: eq(comments.parentId, commentId),
-    });
-    if (hasReplies) {
-      return c.json({ error: "Cannot edit a comment that has replies" }, 409);
-    }
-
-    const body = await c.req.json<{ body: string }>();
-
-    const [updated] = await db
-      .update(comments)
-      .set({ body: body.body, updatedAt: new Date() })
-      .where(eq(comments.id, commentId))
-      .returning();
-
-    return c.json(updated);
-  });
-
-  /**
-   * POST /api/comments/:space/:slug/:commentId/resolve
-   * Toggle resolved status. Requires write access to the space.
-   */
-  router.post("/:space/:slug/:commentId/resolve", requireAuth(), async (c) => {
-    const space = await db.query.spaces.findFirst({
-      where: eq(spaces.slug, c.req.param("space")),
-    });
-    if (!space) return c.json({ error: "Space not found" }, 404);
-
-    const user = c.get("user") as AuthUser | null;
-    if (!await canWriteSpace(db, space.id, space.ownerId, user)) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
-
-    const commentId = c.req.param("commentId");
-    const comment = await db.query.comments.findFirst({
-      where: eq(comments.id, commentId),
-    });
-    if (!comment) return c.json({ error: "Comment not found" }, 404);
-
-    const [updated] = await db
-      .update(comments)
-      .set({ resolved: !comment.resolved, updatedAt: new Date() })
-      .where(eq(comments.id, commentId))
-      .returning();
-
-    return c.json(updated);
-  });
-
-  /**
-   * DELETE /api/comments/:space/:slug/:commentId
-   * Delete a comment. Must be author.
-   */
-  router.delete("/:space/:slug/:commentId", requireAuth(), async (c) => {
-    const user = c.get("user") as AuthUser;
-    const commentId = c.req.param("commentId");
-
-    const comment = await db.query.comments.findFirst({
-      where: eq(comments.id, commentId),
-    });
-    if (!comment) return c.json({ error: "Comment not found" }, 404);
-    if (comment.authorId !== user.id) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
-
-    // Can only delete if no replies
-    const hasReplies = await db.query.comments.findFirst({
-      where: eq(comments.parentId, commentId),
-    });
-    if (hasReplies) {
-      return c.json({ error: "Cannot delete a comment that has replies. Resolve it instead." }, 409);
-    }
-
-    await db.delete(comments).where(eq(comments.id, commentId));
-    return c.json({ deleted: true });
   });
 
   return router;

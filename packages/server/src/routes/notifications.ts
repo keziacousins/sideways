@@ -1,6 +1,7 @@
 import { Hono } from "hono";
-import { eq, desc, and } from "drizzle-orm";
-import { type Database, notifications, documentReads } from "@sideways/db";
+import { eq, desc, and, inArray } from "drizzle-orm";
+import { type Database, notifications, documentReads, documents, sections, spaces } from "@sideways/db";
+import { docUrl } from "@sideways/types";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthUser } from "../middleware/auth.js";
 
@@ -23,20 +24,42 @@ export function createNotificationRoutes(db: Database) {
     });
 
     // Batch fetch read timestamps for all notified documents
-    const docIds = [...new Set(allNotifs.map(n => n.documentId).filter(Boolean))];
+    const docIds = [...new Set(allNotifs.map(n => n.documentId).filter(Boolean))] as string[];
     const reads = docIds.length > 0
       ? await db.query.documentReads.findMany({
-          where: and(
-            eq(documentReads.userId, user.id),
-          ),
+          where: eq(documentReads.userId, user.id),
         })
       : [];
     const readMap = new Map(reads.map(r => [r.documentId, r.readAt]));
 
+    // Batch fetch URL parts for each notified doc — joined to (section, space)
+    // so the bell can navigate. Live data, not denormalised, so renames/moves
+    // don't leave stale links.
+    const docUrlParts = docIds.length > 0
+      ? await db
+          .select({
+            id: documents.id,
+            path: documents.path,
+            sectionSlug: sections.slug,
+            spaceSlug: spaces.slug,
+          })
+          .from(documents)
+          .innerJoin(sections, eq(documents.sectionId, sections.id))
+          .innerJoin(spaces, eq(documents.spaceId, spaces.id))
+          .where(inArray(documents.id, docIds))
+      : [];
+    const urlMap = new Map(
+      docUrlParts.map((d) => [
+        d.id,
+        docUrl({ spaceSlug: d.spaceSlug, sectionSlug: d.sectionSlug, path: d.path }),
+      ]),
+    );
+
     const enriched = allNotifs.map(n => {
       const readAt = n.documentId ? readMap.get(n.documentId) : null;
       const isRead = readAt ? readAt >= n.createdAt : false;
-      return { ...n, read: isRead };
+      const url = n.documentId ? urlMap.get(n.documentId) ?? null : null;
+      return { ...n, read: isRead, url };
     });
 
     const filtered = unreadOnly ? enriched.filter(n => !n.read) : enriched;

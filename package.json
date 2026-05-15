@@ -1,6 +1,6 @@
 {
   "name": "sideways",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Neither markup nor markdown, but something else entirely.",
@@ -24,6 +24,7 @@
     "overrides": {
       "axios": "^1.15.1",
       "defu": "^6.1.5",
+      "devalue": "^5.8.1",
       "fast-uri": "^3.1.2",
       "follow-redirects": "^1.16.0",
       "ip-address": "^10.1.1",

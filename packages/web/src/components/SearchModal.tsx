@@ -37,7 +37,9 @@ function renderSnippet(snippet: string): ReactNode[] {
 interface SearchResult {
   spaceSlug: string;
   spaceName: string;
-  docSlug: string;
+  sectionSlug: string;
+  path: string;
+  url: string;
   title: string;
   tags: string[];
   snippet: string;
@@ -131,7 +133,7 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
 
   const navigate = (result: SearchResult) => {
     setOpen(false);
-    window.location.href = `/s/${result.spaceSlug}/${result.docSlug}`;
+    window.location.href = result.url;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -186,8 +188,8 @@ export default function SearchModal({ apiUrl, accessToken }: Props) {
           )}
           {results.map((r, i) => (
             <a
-              key={`${r.spaceSlug}/${r.docSlug}`}
-              href={`/s/${r.spaceSlug}/${r.docSlug}`}
+              key={r.url}
+              href={r.url}
               className={`search-result ${i === activeIndex ? "active" : ""}`}
               onClick={(e) => { e.preventDefault(); navigate(r); }}
               onMouseEnter={() => setActiveIndex(i)}
