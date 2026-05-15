@@ -51,14 +51,17 @@ Add to `.mcp.json` in your project:
 | `create_space` | Create a new space |
 
 ### Documents
+
+Document tools take `(space, path)`. `path` is the filesystem-shaped doc path with `.md` and includes the section as the first segment — e.g. `architecture/overview.md` lives in section `architecture`.
+
 | Tool | Description |
 |------|-------------|
 | `list_docs` | List documents in a space |
 | `read_doc` | Read a document's markdown (optionally with comments) |
 | `write_doc` | Create or update a document (upsert) |
 | `edit_doc` | Search-and-replace edits without rewriting |
-| `rename_doc` | Rename title or slug |
-| `move_doc` | Move to another space or section |
+| `rename_doc` | Rename a document's title (path-changing renames go through `move_doc`) |
+| `move_doc` | Move to another space, section, or path |
 | `duplicate_doc` | Create a copy |
 | `delete_doc` | Delete a document |
 | `doc_versions` | List version history |
@@ -80,7 +83,7 @@ Add to `.mcp.json` in your project:
 `edit_doc` is particularly useful for AI agents — it applies search-and-replace edits without needing to rewrite the entire document:
 
 ```
-edit_doc(space="engineering", slug="api-design", edits=[
+edit_doc(space="engineering", path="architecture/api-design.md", edits=[
   { old: "Status: Draft", new: "Status: Approved" },
   { old: "## Next Steps\n\n1. Review", new: "## Next Steps\n\n1. ~~Review~~ Done" }
 ])

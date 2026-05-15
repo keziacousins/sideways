@@ -12,28 +12,28 @@ Anchored comments show a gold gutter bar next to the relevant paragraph. Click t
 ### From the CLI
 
 ```bash
-sideways comment api-design.md "Should we use UUIDs here?"
+sideways comment docs/api-design.md "Should we use UUIDs here?"
 ```
 
 With anchor:
 
 ```bash
-sideways comment api-design.md "Needs clarification" \
+sideways comment docs/api-design.md "Needs clarification" \
   --anchor "All IDs are auto-incrementing integers"
 ```
 
 Reply to a comment:
 
 ```bash
-sideways comment api-design.md "Good point" --reply <comment-id>
+sideways comment docs/api-design.md "Good point" --reply <comment-id>
 ```
 
 ### From MCP (AI Agents)
 
-The `add_comment` tool lets AI agents leave comments:
+The `add_comment` tool lets AI agents leave comments. The doc is identified by its path (filesystem-shaped, including the section as the first segment):
 
 ```
-add_comment(space="engineering", slug="api-design",
+add_comment(space="engineering", path="architecture/api-design.md",
   body="Should we use UUIDs here?",
   anchor_text="All IDs are auto-incrementing integers")
 ```
@@ -49,8 +49,10 @@ Click "Resolve" on a comment to mark the discussion as complete. Resolved commen
 From the CLI:
 
 ```bash
-sideways resolve api-design.md <comment-id>
+sideways resolve <comment-id>
 ```
+
+(The CLI looks up the comment by its ID — no doc path needed.)
 
 ## Formatting in Comments
 
@@ -58,7 +60,7 @@ Comments support inline markdown:
 
 - `**bold**` and `*italic*`
 - `` `inline code` ``
-- Wiki-links: `[[api-design|API Design Guide]]`
+- Wiki-links: `[[architecture/api-design|API Design Guide]]` (path-qualified, or bare `[[api-design]]` for same-section lookup)
 - Line breaks
 
 Wiki-links in comments render as clickable links to other documents.
