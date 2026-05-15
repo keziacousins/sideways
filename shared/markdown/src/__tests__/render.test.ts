@@ -33,17 +33,13 @@ describe("renderMarkdown", () => {
     expect(html).toContain("42");
   });
 
-  // TODO(phase-3-cleanup): KaTeX output isn't reaching the rendered HTML.
-  // remark-math + rehype-katex are wired in but the math doesn't survive
-  // the pipeline. Pre-existing — these tests never ran in CI before. Needs
-  // a separate investigation; not blocking Phase 3.
-  it.skip("renders KaTeX math", async () => {
+  it("renders KaTeX math", async () => {
     const md = "Inline $E = mc^2$ math.";
     const html = await renderMarkdown(md);
     expect(html).toContain("katex");
   });
 
-  it.skip("renders display math blocks", async () => {
+  it("renders display math blocks", async () => {
     const md = "$$\n\\sum_{i=0}^{n} i\n$$";
     const html = await renderMarkdown(md);
     expect(html).toContain("katex");

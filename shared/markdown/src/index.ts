@@ -67,7 +67,7 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
-    .use(remarkMath, { singleDollarTextMath: false })
+    .use(remarkMath, { singleDollarTextMath: true })
     .use(remarkWikiLinks(options.wikiLinks))
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeSlug)
