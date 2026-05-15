@@ -88,6 +88,16 @@ ssh "$DEPLOY_HOST" "sudo journalctl -u sideways-web -n 50"
 
 App code lives at `/opt/sideways` on the host. Env vars in `/opt/sideways/.env`.
 
+### Database backup
+
+Take a `pg_dump` before any destructive schema change (column drops, table drops, constraint changes that could fail). Cheap insurance:
+
+```bash
+DEPLOY_HOST=admin@your-server.example.com ./scripts/backup-db.sh
+```
+
+Output: `backups/sideways-YYYYMMDD-HHMMSS.sql` (gitignored). Restore with `psql ... < backups/<file>.sql` against a target database.
+
 ## Releasing
 
 Versioning is **manual** — not bumped on every commit. The number in `package.json` is a signal to CLI users, not a commit counter. Bump when you intend to publish a new CLI bundle or surface a noticeable change to users.
