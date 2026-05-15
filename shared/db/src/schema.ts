@@ -68,9 +68,9 @@ export const documents = pgTable("documents", {
   spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
   sectionId: uuid("section_id").notNull().references(() => sections.id, { onDelete: "restrict" }),
   parentId: uuid("parent_id").references((): any => documents.id, { onDelete: "set null" }),
-  slug: text("slug").notNull(),
-  /** Leaf path of the doc within its section's local mount root, e.g.
-   *  "auth.md" or "guides/auth.md". Server-owned canonical layout. */
+  /** Filesystem-shaped path within the section's local mount root, e.g.
+   *  "auth.md" or "guides/auth.md". Identifier within (space, section);
+   *  also drives the canonical URL via `docUrl()` from `@sideways/types`. */
   path: text("path").notNull(),
   title: text("title").notNull(),
   position: integer("position").notNull().default(0),
@@ -80,7 +80,7 @@ export const documents = pgTable("documents", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex("documents_space_slug_idx").on(t.spaceId, t.slug),
+  uniqueIndex("documents_space_section_path_idx").on(t.spaceId, t.sectionId, t.path),
   index("documents_space_idx").on(t.spaceId),
   index("documents_section_idx").on(t.sectionId),
   index("documents_parent_idx").on(t.parentId),
@@ -233,15 +233,20 @@ export const shareLinks = pgTable("share_links", {
   index("share_links_space_idx").on(t.spaceId),
 ]);
 
-/** In-app notifications (read status derived from document_reads) */
+/**
+ * In-app notifications (read status derived from document_reads).
+ *
+ * `title`, `body`, and `actorName` are frozen historical copy — they read
+ * correctly even after the doc is later renamed. Navigation URL is derived
+ * from `documentId` at read time via `docUrl()`, so renames/moves don't
+ * leave stale links behind.
+ */
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   type: text("type").notNull(), // 'reply', 'mention', 'doc_updated', 'new_comment'
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "cascade" }),
   commentId: uuid("comment_id").references(() => comments.id, { onDelete: "set null" }),
-  spaceSlug: text("space_slug").notNull(),
-  docSlug: text("doc_slug").notNull(),
   title: text("title").notNull(),
   body: text("body"),
   actorName: text("actor_name"),

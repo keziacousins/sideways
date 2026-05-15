@@ -13,8 +13,6 @@ interface NotifyOpts {
   userId: string;       // recipient
   documentId: string;
   commentId?: string;
-  spaceSlug: string;
-  docSlug: string;
   title: string;
   body?: string;
   actorName?: string;
@@ -23,14 +21,12 @@ interface NotifyOpts {
 /** Create a notification for a single user */
 export async function createNotification(opts: NotifyOpts) {
   try {
-    logger.info({ userId: opts.userId, type: opts.type, docSlug: opts.docSlug }, "Inserting notification");
+    logger.info({ userId: opts.userId, type: opts.type, documentId: opts.documentId }, "Inserting notification");
     await opts.db.insert(notifications).values({
       userId: opts.userId,
       type: opts.type,
       documentId: opts.documentId,
       commentId: opts.commentId,
-      spaceSlug: opts.spaceSlug,
-      docSlug: opts.docSlug,
       title: opts.title,
       body: opts.body,
       actorName: opts.actorName,
@@ -47,8 +43,6 @@ export async function notifyWatchers(
   excludeUserId: string,
   opts: {
     type: "doc_updated" | "new_comment";
-    spaceSlug: string;
-    docSlug: string;
     title: string;
     body?: string;
     actorName?: string;
@@ -89,8 +83,6 @@ export async function notifySpaceWatchers(
   alreadyNotified: string[],
   opts: {
     type: "doc_updated" | "new_comment" | "doc_created";
-    spaceSlug: string;
-    docSlug: string;
     title: string;
     body?: string;
     actorName?: string;

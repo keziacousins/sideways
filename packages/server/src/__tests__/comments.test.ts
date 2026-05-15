@@ -52,7 +52,8 @@ async function createTestUser(): Promise<{
 }
 
 const SPACE = `comments-test-${Date.now()}`;
-const DOC = "test-doc";
+const SECTION = "default";
+const PATH = "test-doc.md";
 let authHeader: Record<string, string>;
 
 describe("Comments API", () => {
@@ -60,13 +61,12 @@ describe("Comments API", () => {
     const testUser = await createTestUser();
     authHeader = testUser.authHeader;
 
-    // Create space and doc
     await api(`/api/spaces/${SPACE}`, {
       method: "PUT",
       body: JSON.stringify({ name: "Comment Test", visibility: "public" }),
       headers: authHeader,
     });
-    await api(`/api/documents/${SPACE}/${DOC}`, {
+    await api(`/api/documents/${SPACE}/${SECTION}/${PATH}`, {
       method: "PUT",
       body: JSON.stringify({
         title: "Test Doc",
@@ -77,7 +77,7 @@ describe("Comments API", () => {
   });
 
   it("creates a page-level comment", async () => {
-    const { status, body } = await api(`/api/comments/${SPACE}/${DOC}`, {
+    const { status, body } = await api(`/api/comments/${SPACE}/${SECTION}/${PATH}`, {
       method: "POST",
       body: JSON.stringify({ body: "Great document!" }),
       headers: authHeader,
@@ -88,7 +88,7 @@ describe("Comments API", () => {
   });
 
   it("creates an anchored comment", async () => {
-    const { status, body } = await api(`/api/comments/${SPACE}/${DOC}`, {
+    const { status, body } = await api(`/api/comments/${SPACE}/${SECTION}/${PATH}`, {
       method: "POST",
       body: JSON.stringify({
         body: "This needs more detail.",
@@ -101,13 +101,12 @@ describe("Comments API", () => {
   });
 
   it("creates a threaded reply", async () => {
-    // Get comments to find a parent
     const { body: allComments } = await api(
-      `/api/comments/${SPACE}/${DOC}`,
+      `/api/comments/${SPACE}/${SECTION}/${PATH}`,
     );
     const parentId = allComments[0].id;
 
-    const { status, body } = await api(`/api/comments/${SPACE}/${DOC}`, {
+    const { status, body } = await api(`/api/comments/${SPACE}/${SECTION}/${PATH}`, {
       method: "POST",
       body: JSON.stringify({
         body: "Replying to this.",
@@ -120,7 +119,7 @@ describe("Comments API", () => {
   });
 
   it("lists comments with author info", async () => {
-    const { body } = await api(`/api/comments/${SPACE}/${DOC}`);
+    const { body } = await api(`/api/comments/${SPACE}/${SECTION}/${PATH}`);
     expect(body.length).toBeGreaterThanOrEqual(3);
     expect(body[0].author).toBeDefined();
     expect(body[0].author.name).toBe("Comment Tester");
@@ -128,12 +127,12 @@ describe("Comments API", () => {
 
   it("resolves a comment", async () => {
     const { body: allComments } = await api(
-      `/api/comments/${SPACE}/${DOC}`,
+      `/api/comments/${SPACE}/${SECTION}/${PATH}`,
     );
     const commentId = allComments[0].id;
 
     const { body } = await api(
-      `/api/comments/${SPACE}/${DOC}/${commentId}/resolve`,
+      `/api/comments/${commentId}/resolve`,
       { method: "POST", headers: authHeader },
     );
     expect(body.resolved).toBe(true);
@@ -141,16 +140,16 @@ describe("Comments API", () => {
 
   it("hides resolved comments by default", async () => {
     const { body: withoutResolved } = await api(
-      `/api/comments/${SPACE}/${DOC}`,
+      `/api/comments/${SPACE}/${SECTION}/${PATH}`,
     );
     const { body: withResolved } = await api(
-      `/api/comments/${SPACE}/${DOC}?include_resolved=true`,
+      `/api/comments/${SPACE}/${SECTION}/${PATH}?include_resolved=true`,
     );
     expect(withResolved.length).toBeGreaterThan(withoutResolved.length);
   });
 
   it("rejects unauthenticated comment creation", async () => {
-    const { status } = await api(`/api/comments/${SPACE}/${DOC}`, {
+    const { status } = await api(`/api/comments/${SPACE}/${SECTION}/${PATH}`, {
       method: "POST",
       body: JSON.stringify({ body: "Should fail" }),
     });
@@ -159,14 +158,14 @@ describe("Comments API", () => {
 
   it("updates a comment (author only)", async () => {
     const { body: allComments } = await api(
-      `/api/comments/${SPACE}/${DOC}?include_resolved=true`,
+      `/api/comments/${SPACE}/${SECTION}/${PATH}?include_resolved=true`,
     );
     const myComment = allComments.find(
       (c: any) => c.body === "Great document!",
     );
 
     const { status, body } = await api(
-      `/api/comments/${SPACE}/${DOC}/${myComment.id}`,
+      `/api/comments/${myComment.id}`,
       {
         method: "PUT",
         body: JSON.stringify({ body: "Updated comment!" }),
@@ -178,15 +177,14 @@ describe("Comments API", () => {
   });
 
   it("deletes a comment (author only)", async () => {
-    // Create one to delete
-    const { body: created } = await api(`/api/comments/${SPACE}/${DOC}`, {
+    const { body: created } = await api(`/api/comments/${SPACE}/${SECTION}/${PATH}`, {
       method: "POST",
       body: JSON.stringify({ body: "To delete" }),
       headers: authHeader,
     });
 
     const { status } = await api(
-      `/api/comments/${SPACE}/${DOC}/${created.id}`,
+      `/api/comments/${created.id}`,
       { method: "DELETE", headers: authHeader },
     );
     expect(status).toBe(200);

@@ -9,13 +9,16 @@ import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { remarkWikiLinks } from "./wikilinks.js";
+import { remarkWikiLinks, type WikiLinkContext } from "./wikilinks.js";
 
 export interface RenderOptions {
   /** "web" includes interactive features; "pdf" produces print-ready HTML */
   target: "web" | "pdf";
-  /** Space slug for resolving wiki-links like [[doc-slug]] */
-  spaceSlug?: string;
+  /**
+   * Context for resolving `[[wikilinks]]` against the doc list. If omitted,
+   * all wikilinks render as unresolved spans.
+   */
+  wikiLinks?: WikiLinkContext;
 }
 
 /**
@@ -49,7 +52,7 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath, { singleDollarTextMath: false })
-    .use(remarkWikiLinks(options.spaceSlug))
+    .use(remarkWikiLinks(options.wikiLinks))
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeSlug)
     .use(rehypeAutolinkHeadings, { behavior: "wrap" })
@@ -63,6 +66,14 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
 
 export { extractComments, embedComments } from "./comments.js";
 export type { SerializedComment } from "./comments.js";
+export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.js";
+
+/**
+ * Cache-key segment for rendered HTML. Bump whenever renderer output changes
+ * meaningfully (new plugin, changed sanitiser, wikilink semantics, etc.) so
+ * cached entries from previous renderer versions are no longer served.
+ */
+export const RENDERER_VERSION = "v2";
 
 /**
  * Render markdown to HTML string.

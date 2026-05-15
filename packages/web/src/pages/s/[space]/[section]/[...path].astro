@@ -1,17 +1,18 @@
 ---
-import BaseLayout from "../../../layouts/BaseLayout.astro";
-import Sidebar from "../../../components/Sidebar.astro";
-import Comments from "../../../components/Comments.tsx";
-import "../../../styles/document.css";
-import "../../../styles/comments.css";
+import BaseLayout from "../../../../layouts/BaseLayout.astro";
+import Sidebar from "../../../../components/Sidebar.astro";
+import Comments from "../../../../components/Comments.tsx";
+import "../../../../styles/document.css";
+import "../../../../styles/comments.css";
 
-import { apiFetch } from "../../../lib/api.ts";
-import { buildNavTree } from "../../../lib/nav.ts";
-import { themeToCSS } from "../../../lib/theme.ts";
-import { icons } from "../../../lib/icons.ts";
+import { apiFetch } from "../../../../lib/api.ts";
+import { buildNavTree } from "../../../../lib/nav.ts";
+import { themeToCSS } from "../../../../lib/theme.ts";
+import { icons } from "../../../../lib/icons.ts";
+import { docUrl } from "@sideways/types";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
-const { space: spaceSlug, slug } = Astro.params;
+const { space: spaceSlug, section: sectionSlug, path: urlPath } = Astro.params;
 const { accessToken } = Astro.locals;
 const refreshToken = await Astro.session?.get("refresh_token") || null;
 
@@ -24,32 +25,71 @@ let doc: {
   version: number;
   versionCount: number;
   versionDate: string;
+  path: string;
+  sectionSlug: string;
+  url: string;
+  id: string;
+  parentId: string | null;
 } | null = null;
-let documents: { id: string; slug: string; title: string; tags: string[]; sectionId: string | null; parentId: string | null; position?: number; unread?: boolean }[] = [];
+let documents: {
+  id: string;
+  title: string;
+  tags: string[];
+  sectionId: string | null;
+  sectionSlug: string;
+  parentId: string | null;
+  position?: number;
+  unread?: boolean;
+  path: string;
+}[] = [];
 let sections: { id: string; slug: string; title: string; parentId: string | null; position: number }[] = [];
 let themes: { id: string; name: string; tokens: any }[] = [];
 let rawContent = "";
+let resolvedPath: string | null = null;
 
 try {
   const spaceRes = await apiFetch(`/api/spaces/${spaceSlug}`, accessToken);
   if (spaceRes.ok) {
     space = await spaceRes.json();
 
-    const [docRes, rawRes, docsRes, sectionsRes, themesRes] = await Promise.all([
-      apiFetch(`/api/documents/${spaceSlug}/${slug}/render`, accessToken),
-      apiFetch(`/api/documents/${spaceSlug}/${slug}`, accessToken),
+    // Fetch sidebar data first so we can resolve the URL form to a stored path.
+    const [docsRes, sectionsRes, themesRes] = await Promise.all([
       apiFetch(`/api/documents?space=${spaceSlug}`, accessToken),
       apiFetch(`/api/spaces/${spaceSlug}/sections`, accessToken),
       apiFetch(`/api/themes`, accessToken),
     ]);
-
-    if (docRes.ok) doc = await docRes.json();
     if (docsRes.ok) documents = await docsRes.json();
     if (sectionsRes.ok) sections = await sectionsRes.json();
     if (themesRes.ok) themes = await themesRes.json();
-    if (rawRes.ok) {
-      const rawDoc = await rawRes.json();
-      rawContent = rawDoc.content || "";
+
+    // Resolve the URL path (no .md, with `index.md` collapse) to a stored path.
+    // Try `<path>/index.md` first (directory form), fall back to `<path>.md`.
+    // Empty URL path means the section's `index.md`.
+    const candidates = urlPath
+      ? [`${urlPath}/index.md`, `${urlPath}.md`]
+      : ["index.md"];
+
+    const matched = documents.find(
+      (d) => d.sectionSlug === sectionSlug && candidates.includes(d.path),
+    );
+    resolvedPath = matched?.path ?? null;
+
+    if (resolvedPath) {
+      const [docRes, rawRes] = await Promise.all([
+        apiFetch(
+          `/api/documents/${spaceSlug}/${sectionSlug}/_render/${resolvedPath}`,
+          accessToken,
+        ),
+        apiFetch(
+          `/api/documents/${spaceSlug}/${sectionSlug}/${resolvedPath}`,
+          accessToken,
+        ),
+      ]);
+      if (docRes.ok) doc = await docRes.json();
+      if (rawRes.ok) {
+        const rawDoc = await rawRes.json();
+        rawContent = rawDoc.content || "";
+      }
     }
   }
 } catch {
@@ -57,17 +97,28 @@ try {
 }
 
 // Mark document as read (fire and forget, server-side)
-if (doc && accessToken) {
-  apiFetch(`/api/documents/${spaceSlug}/${slug}/read`, accessToken, { method: "POST" }).catch(() => {});
+if (doc && resolvedPath && accessToken) {
+  apiFetch(
+    `/api/documents/${spaceSlug}/${sectionSlug}/_read/${resolvedPath}`,
+    accessToken,
+    { method: "POST" },
+  ).catch(() => {});
 }
 
 const html = doc?.html ?? "";
-const navItems = buildNavTree(sections, documents);
+const navItems = buildNavTree(spaceSlug!, sections, documents);
+const activeUrl = doc?.url ?? null;
 
 // Find child pages of the current doc
-const currentDoc = documents.find(d => d.slug === slug);
+const currentDoc = doc ? documents.find((d) => d.id === doc.id) : null;
 const childPages = currentDoc
-  ? documents.filter(d => d.parentId === currentDoc.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  ? documents
+      .filter((d) => d.parentId === currentDoc.id)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((d) => ({
+        ...d,
+        url: docUrl({ spaceSlug: spaceSlug!, sectionSlug: d.sectionSlug, path: d.path }),
+      }))
   : [];
 const themeCss = themeToCSS(space?.theme?.tokens);
 ---
@@ -79,7 +130,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
         spaceSlug={spaceSlug!}
         spaceName={space.name}
         items={navItems}
-        activeSlug={slug}
+        activeUrl={activeUrl}
       />
     )}
   </Fragment>
@@ -96,7 +147,14 @@ const themeCss = themeToCSS(space?.theme?.tokens);
           <span class="breadcrumb-sep">/</span>
           <span class="breadcrumb-current">{doc.title}</span>
         </nav>
-        <div class="doc-tags" id="doc-tags" data-space={spaceSlug} data-slug={slug} data-can-write={space?.canWrite ? "true" : "false"}>
+        <div
+          class="doc-tags"
+          id="doc-tags"
+          data-space={spaceSlug}
+          data-section={sectionSlug}
+          data-path={doc.path}
+          data-can-write={space?.canWrite ? "true" : "false"}
+        >
           {(doc.tags || []).map((tag) => (
             <span class="tag" data-tag={tag}>
               {tag}
@@ -133,7 +191,8 @@ const themeCss = themeToCSS(space?.theme?.tokens);
           <Comments
             client:load
             spaceSlug={spaceSlug!}
-            docSlug={slug!}
+            sectionSlug={sectionSlug!}
+            path={doc.path}
             apiUrl={API_URL}
             accessToken={accessToken}
             refreshToken={refreshToken}
@@ -165,12 +224,9 @@ const themeCss = themeToCSS(space?.theme?.tokens);
                         Move to&hellip;
                       </button>
                       <div class="submenu-dropdown" id="move-submenu" style="display: none;">
-                        <button class="submenu-item" data-section="">
-                          No section {!currentDoc?.sectionId ? '(current)' : ''}
-                        </button>
                         {sections.map((s) => (
-                          <button class="submenu-item" data-section={s.slug}>
-                            {s.title} {currentDoc?.sectionId === s.id ? '(current)' : ''}
+                          <button class="submenu-item" data-target-section={s.slug}>
+                            {s.title} {s.slug === sectionSlug ? '(current)' : ''}
                           </button>
                         ))}
                       </div>
@@ -197,7 +253,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
           <ul class="child-pages-list">
             {childPages.map((child) => (
               <li>
-                <a href={`/s/${spaceSlug}/${child.slug}`} class="child-page-link">
+                <a href={child.url} class="child-page-link">
                   <Fragment set:html={icons.documentSimple(14)} />
                   <span>{child.title}</span>
                 </a>
@@ -265,637 +321,272 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 </BaseLayout>
 
 <style>
-  .doc-page {
-    max-width: var(--sw-content-max);
-  }
+  .doc-page { max-width: var(--sw-content-max); }
 
   .doc-meta-top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 1rem;
-    margin-bottom: 0.5rem;
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: 0.5rem 1rem; margin-bottom: 0.5rem;
   }
 
   .breadcrumbs {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: var(--sw-text-sm);
-    color: var(--sw-text-tertiary);
+    display: flex; align-items: center; gap: 0.4rem;
+    font-size: var(--sw-text-sm); color: var(--sw-text-tertiary);
   }
+  .breadcrumbs a { color: var(--sw-text-tertiary); text-decoration: none; }
+  .breadcrumbs a:hover { color: var(--sw-accent); }
+  .breadcrumb-sep { color: var(--sw-text-ghost); }
+  .breadcrumb-current { color: var(--sw-text-secondary); }
 
-  .breadcrumbs a {
-    color: var(--sw-text-tertiary);
-    text-decoration: none;
-  }
-
-  .breadcrumbs a:hover {
-    color: var(--sw-accent);
-  }
-
-  .breadcrumb-sep {
-    color: var(--sw-text-ghost);
-  }
-
-  .breadcrumb-current {
-    color: var(--sw-text-secondary);
-  }
-
-  .doc-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-  }
-
+  .doc-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25em;
-    font-size: var(--sw-text-xs);
-    padding: 0.15em 0.5em;
-    background: var(--sw-ink-surface);
-    border-radius: var(--sw-radius-sm);
+    display: inline-flex; align-items: center; gap: 0.25em;
+    font-size: var(--sw-text-xs); padding: 0.15em 0.5em;
+    background: var(--sw-ink-surface); border-radius: var(--sw-radius-sm);
     color: var(--sw-text-secondary);
   }
-
   .tag-remove {
-    background: none;
-    border: none;
-    color: var(--sw-text-ghost);
-    cursor: pointer;
-    font-size: 1em;
-    line-height: 1;
-    padding: 0;
-    margin-left: -0.1em;
+    background: none; border: none; color: var(--sw-text-ghost);
+    cursor: pointer; font-size: 1em; line-height: 1; padding: 0; margin-left: -0.1em;
   }
-  .tag-remove:hover {
-    color: var(--sw-text-primary);
-  }
-
+  .tag-remove:hover { color: var(--sw-text-primary); }
   .tag-add {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--sw-text-xs);
-    width: 1.5em;
-    height: 1.5em;
-    padding: 0;
-    background: none;
-    border: 1px dashed var(--sw-border-strong);
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-ghost);
-    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: var(--sw-text-xs); width: 1.5em; height: 1.5em; padding: 0;
+    background: none; border: 1px dashed var(--sw-border-strong);
+    border-radius: var(--sw-radius-sm); color: var(--sw-text-ghost); cursor: pointer;
   }
-  .tag-add:hover {
-    color: var(--sw-text-secondary);
-    border-color: var(--sw-text-ghost);
-  }
-
+  .tag-add:hover { color: var(--sw-text-secondary); border-color: var(--sw-text-ghost); }
   .tag-input {
-    font-size: var(--sw-text-xs);
-    padding: 0.15em 0.4em;
-    background: var(--sw-ink);
-    border: 1px solid var(--sw-border-strong);
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-primary);
-    color-scheme: dark;
-    outline: none;
-    width: 6em;
+    font-size: var(--sw-text-xs); padding: 0.15em 0.4em;
+    background: var(--sw-ink); border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-sm); color: var(--sw-text-primary);
+    color-scheme: dark; outline: none; width: 6em;
   }
-  .tag-input:focus {
-    border-color: var(--sw-accent);
-  }
+  .tag-input:focus { border-color: var(--sw-accent); }
 
   .doc-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1rem; padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--sw-border);
-    position: sticky;
-    top: var(--sw-header-height);
-    background: var(--sw-ink-deep);
-    z-index: 10;
-    padding-top: 0.5rem;
-    margin-top: -0.5rem;
+    position: sticky; top: var(--sw-header-height);
+    background: var(--sw-ink-deep); z-index: 10;
+    padding-top: 0.5rem; margin-top: -0.5rem;
   }
-
-  .doc-toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
+  .doc-toolbar-right { display: flex; align-items: center; gap: 0.5rem; }
   .toolbar-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    background: none;
-    border: none;
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-tertiary);
-    cursor: pointer;
-    transition: all var(--sw-duration-fast) var(--sw-ease);
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0; background: none; border: none;
+    border-radius: var(--sw-radius-sm); color: var(--sw-text-tertiary);
+    cursor: pointer; transition: all var(--sw-duration-fast) var(--sw-ease);
   }
+  .toolbar-btn:hover { color: var(--sw-text-primary); background: var(--sw-ink-lighter); }
+  .toolbar-btn.watching { color: var(--sw-accent); background: var(--sw-accent-glow); }
+  .toolbar-btn.watching svg path:first-child { fill: var(--sw-accent); }
 
-  .toolbar-btn:hover {
-    color: var(--sw-text-primary);
-    background: var(--sw-ink-lighter);
-  }
-
-  .toolbar-btn.watching {
-    color: var(--sw-accent);
-    background: var(--sw-accent-glow);
-  }
-  .toolbar-btn.watching svg path:first-child {
-    fill: var(--sw-accent);
-  }
-
-  /* ── Actions Menu ────────────────────── */
-  .doc-actions-menu {
-    position: relative;
-  }
-
+  .doc-actions-menu { position: relative; }
   .actions-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 0.35rem;
-    background: var(--sw-ink);
-    border: 1px solid var(--sw-border-strong);
-    border-radius: var(--sw-radius-md);
-    box-shadow: var(--sw-shadow-lg);
-    min-width: 160px;
-    z-index: 50;
-    padding: 0.25rem;
+    position: absolute; top: 100%; right: 0; margin-top: 0.35rem;
+    background: var(--sw-ink); border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md); box-shadow: var(--sw-shadow-lg);
+    min-width: 160px; z-index: 50; padding: 0.25rem;
   }
-
   .action-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    padding: 0.45rem 0.65rem;
-    background: none;
-    border: none;
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-secondary);
-    font-family: var(--sw-font-body);
-    font-size: var(--sw-text-sm);
-    cursor: pointer;
-    text-align: left;
+    display: flex; align-items: center; gap: 0.5rem; width: 100%;
+    padding: 0.45rem 0.65rem; background: none; border: none;
+    border-radius: var(--sw-radius-sm); color: var(--sw-text-secondary);
+    font-family: var(--sw-font-body); font-size: var(--sw-text-sm);
+    cursor: pointer; text-align: left;
   }
+  .action-item:hover { background: var(--sw-ink-light); color: var(--sw-text-primary); }
+  .action-item.action-danger:hover { background: rgba(248, 113, 113, 0.08); color: var(--sw-error); }
 
-  .action-item:hover {
-    background: var(--sw-ink-light);
-    color: var(--sw-text-primary);
-  }
-
-  .action-item.action-danger:hover {
-    background: rgba(248, 113, 113, 0.08);
-    color: var(--sw-error);
-  }
-
-  .action-submenu-wrap {
-    position: relative;
-  }
-
+  .action-submenu-wrap { position: relative; }
   .submenu-dropdown {
-    position: absolute;
-    right: 100%;
-    top: 0;
-    margin-right: 0.25rem;
-    background: var(--sw-ink);
-    border: 1px solid var(--sw-border-strong);
-    border-radius: var(--sw-radius-md);
-    box-shadow: var(--sw-shadow-lg);
-    min-width: 160px;
-    z-index: 51;
-    padding: 0.25rem;
+    position: absolute; right: 100%; top: 0; margin-right: 0.25rem;
+    background: var(--sw-ink); border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-md); box-shadow: var(--sw-shadow-lg);
+    min-width: 160px; z-index: 51; padding: 0.25rem;
   }
-
   .submenu-item {
-    display: block;
-    width: 100%;
-    padding: 0.4rem 0.65rem;
-    background: none;
-    border: none;
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-secondary);
-    font-family: var(--sw-font-body);
-    font-size: var(--sw-text-sm);
-    cursor: pointer;
-    text-align: left;
-    white-space: nowrap;
+    display: block; width: 100%; padding: 0.4rem 0.65rem;
+    background: none; border: none; border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-secondary); font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm); cursor: pointer; text-align: left; white-space: nowrap;
   }
+  .submenu-item:hover { background: var(--sw-ink-light); color: var(--sw-text-primary); }
 
-  .submenu-item:hover {
-    background: var(--sw-ink-light);
-    color: var(--sw-text-primary);
-  }
-
-  .doc-toolbar-left {
-    display: flex;
-    align-items: center;
-  }
-
+  .doc-toolbar-left { display: flex; align-items: center; }
   .doc-version {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.25rem 0.5rem;
-    background: none;
-    border: 1px solid transparent;
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-secondary);
-    font-size: var(--sw-text-xs);
-    font-family: var(--sw-font-body);
-    cursor: pointer;
+    display: flex; align-items: center; gap: 0.35rem;
+    padding: 0.25rem 0.5rem; background: none;
+    border: 1px solid transparent; border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-secondary); font-size: var(--sw-text-xs);
+    font-family: var(--sw-font-body); cursor: pointer;
     transition: all var(--sw-duration-fast) var(--sw-ease);
   }
-
   .doc-version:hover {
-    color: var(--sw-text-primary);
-    border-color: var(--sw-border);
+    color: var(--sw-text-primary); border-color: var(--sw-border);
     background: var(--sw-ink-light);
   }
+  .action-divider { height: 1px; background: var(--sw-border); margin: 0.2rem 0.4rem; }
 
-  .action-divider {
-    height: 1px;
-    background: var(--sw-border);
-    margin: 0.2rem 0.4rem;
-  }
-
-  /* ── PDF download modal ── */
   .pdf-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(8, 9, 12, 0.5);
-    z-index: 300;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position: fixed; inset: 0; background: rgba(8, 9, 12, 0.5); z-index: 300;
+    display: flex; align-items: center; justify-content: center;
   }
-
   .pdf-modal {
-    width: 100%;
-    max-width: 340px;
-    background: var(--sw-ink);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: var(--sw-radius-lg);
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
-    overflow: hidden;
+    width: 100%; max-width: 340px; background: var(--sw-ink);
+    border: 1px solid rgba(255, 255, 255, 0.18); border-radius: var(--sw-radius-lg);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4); overflow: hidden;
   }
-
   .pdf-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.85rem 1rem;
-    border-bottom: 1px solid var(--sw-border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.85rem 1rem; border-bottom: 1px solid var(--sw-border);
   }
-
   .pdf-modal-header h3 {
-    margin: 0;
-    font-size: var(--sw-text-sm);
-    font-weight: 600;
+    margin: 0; font-size: var(--sw-text-sm); font-weight: 600;
     color: var(--sw-text-primary);
   }
-
   .pdf-modal-close {
-    background: none;
-    border: none;
-    color: var(--sw-text-ghost);
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 0 0.2rem;
-    line-height: 1;
+    background: none; border: none; color: var(--sw-text-ghost);
+    font-size: 1.2rem; cursor: pointer; padding: 0 0.2rem; line-height: 1;
   }
-
-  .pdf-modal-close:hover {
-    color: var(--sw-text-primary);
-  }
-
-  .pdf-modal-body {
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
-  }
-
-  .pdf-field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-
+  .pdf-modal-close:hover { color: var(--sw-text-primary); }
+  .pdf-modal-body { padding: 1rem; display: flex; flex-direction: column; gap: 0.85rem; }
+  .pdf-field { display: flex; flex-direction: column; gap: 0.3rem; }
   .pdf-field > label {
-    font-size: var(--sw-text-xs);
-    color: var(--sw-text-tertiary);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    font-size: var(--sw-text-xs); color: var(--sw-text-tertiary);
+    font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em;
   }
-
   .pdf-field select {
-    background: var(--sw-ink-light);
-    border: 1px solid var(--sw-border);
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-primary);
-    font-size: var(--sw-text-sm);
-    padding: 0.4rem 0.5rem;
-    font-family: var(--sw-font-body);
-    width: 100%;
+    background: var(--sw-ink-light); border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-sm); color: var(--sw-text-primary);
+    font-size: var(--sw-text-sm); padding: 0.4rem 0.5rem;
+    font-family: var(--sw-font-body); width: 100%;
   }
-
-  .pdf-checks {
-    flex-direction: row;
-    gap: 1rem;
-  }
-
+  .pdf-checks { flex-direction: row; gap: 1rem; }
   .pdf-checks label {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: var(--sw-text-sm);
-    color: var(--sw-text-secondary);
-    cursor: pointer;
-    text-transform: none;
-    letter-spacing: 0;
-    font-weight: 400;
+    display: flex; align-items: center; gap: 0.35rem;
+    font-size: var(--sw-text-sm); color: var(--sw-text-secondary);
+    cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 400;
   }
-
-  .pdf-checks input[type="checkbox"] {
-    accent-color: var(--sw-accent);
-  }
-
+  .pdf-checks input[type="checkbox"] { accent-color: var(--sw-accent); }
   .pdf-modal-footer {
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--sw-border);
-    display: flex;
-    justify-content: flex-end;
+    padding: 0.75rem 1rem; border-top: 1px solid var(--sw-border);
+    display: flex; justify-content: flex-end;
   }
-
   .pdf-btn-download {
-    background: var(--sw-accent);
-    color: var(--sw-ink-deepest);
-    border: none;
-    border-radius: var(--sw-radius-sm);
-    padding: 0.45rem 1.2rem;
-    font-size: var(--sw-text-sm);
-    font-weight: 500;
-    font-family: var(--sw-font-body);
-    cursor: pointer;
+    background: var(--sw-accent); color: var(--sw-ink-deepest); border: none;
+    border-radius: var(--sw-radius-sm); padding: 0.45rem 1.2rem;
+    font-size: var(--sw-text-sm); font-weight: 500;
+    font-family: var(--sw-font-body); cursor: pointer;
     transition: opacity var(--sw-duration-fast) var(--sw-ease);
   }
+  .pdf-btn-download:hover { opacity: 0.85; }
 
-  .pdf-btn-download:hover {
-    opacity: 0.85;
-  }
-
-  /* ── Mobile ── */
   @media (max-width: 600px) {
-    .doc-meta-top {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.35rem;
-    }
-    .breadcrumbs {
-      font-size: var(--sw-text-xs);
-    }
-    .tag-remove {
-      display: none;
-    }
-    .tag-add {
-      display: none;
-    }
-    #edit-toggle,
-    #copy-markdown,
-    .doc-version {
-      display: none;
-    }
+    .doc-meta-top { flex-direction: column; align-items: flex-start; gap: 0.35rem; }
+    .breadcrumbs { font-size: var(--sw-text-xs); }
+    .tag-remove { display: none; }
+    .tag-add { display: none; }
+    #edit-toggle, #copy-markdown, .doc-version { display: none; }
   }
 
-  /* ── Editor ──────────────────────────── */
   .child-pages {
-    margin-top: 3rem;
-    padding-top: 2rem;
+    margin-top: 3rem; padding-top: 2rem;
     border-top: 1px solid var(--sw-border);
     max-width: var(--sw-content-max);
   }
-
   .child-pages-heading {
-    font-family: var(--sw-font-display);
-    font-size: var(--sw-text-sm);
-    font-weight: 500;
-    color: var(--sw-text-tertiary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 0.75rem;
+    font-family: var(--sw-font-display); font-size: var(--sw-text-sm);
+    font-weight: 500; color: var(--sw-text-tertiary);
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.75rem;
   }
-
-  .child-pages-list {
-    list-style: none;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
+  .child-pages-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 2px; }
   .child-page-link {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.6rem 0.75rem;
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-secondary);
-    text-decoration: none;
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.6rem 0.75rem; border-radius: var(--sw-radius-sm);
+    color: var(--sw-text-secondary); text-decoration: none;
     transition: all var(--sw-duration-fast) var(--sw-ease);
   }
-
-  .child-page-link:hover {
-    background: var(--sw-ink-light);
-    color: var(--sw-text-primary);
-  }
-
-  .child-page-link svg {
-    color: var(--sw-text-tertiary);
-    flex-shrink: 0;
-  }
+  .child-page-link:hover { background: var(--sw-ink-light); color: var(--sw-text-primary); }
+  .child-page-link svg { color: var(--sw-text-tertiary); flex-shrink: 0; }
 
   .doc-editor {
-    display: flex;
-    flex-direction: column;
-    /* Fill from current position to bottom of viewport, minus floating bar space */
+    display: flex; flex-direction: column;
     height: calc(100vh - var(--sw-header-height) - var(--sw-page-pad-y) - 5rem);
-    min-height: 300px;
-    position: relative;
-    overflow: hidden;
+    min-height: 300px; position: relative; overflow: hidden;
   }
-
   .editor-panes {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    background: var(--sw-border);
-    border: 1px solid var(--sw-border);
-    border-radius: var(--sw-radius-md);
-    overflow: hidden;
-    flex: 1;
-    min-height: 0;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+    background: var(--sw-border); border: 1px solid var(--sw-border);
+    border-radius: var(--sw-radius-md); overflow: hidden;
+    flex: 1; min-height: 0;
   }
-
-  .editor-input {
-    background: var(--sw-ink-deepest);
-    overflow: hidden;
-  }
-
+  .editor-input { background: var(--sw-ink-deepest); overflow: hidden; }
   .editor-input textarea {
-    width: 100%;
-    height: 100%;
-    padding: 1.25rem;
-    background: transparent;
-    border: none;
-    color: var(--sw-text-primary);
-    font-family: var(--sw-font-mono);
-    font-size: var(--sw-text-sm);
-    line-height: 1.7;
-    resize: none;
-    outline: none;
-    tab-size: 2;
+    width: 100%; height: 100%; padding: 1.25rem; background: transparent;
+    border: none; color: var(--sw-text-primary);
+    font-family: var(--sw-font-mono); font-size: var(--sw-text-sm);
+    line-height: 1.7; resize: none; outline: none; tab-size: 2;
   }
-
-  .editor-preview {
-    background: var(--sw-ink);
-    padding: 1.25rem;
-    overflow-y: auto;
-  }
-
+  .editor-preview { background: var(--sw-ink); padding: 1.25rem; overflow-y: auto; }
   .editor-floating-bar {
-    position: fixed;
-    bottom: 1.5rem;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: var(--sw-ink);
-    border: 1px solid var(--sw-border-strong);
-    border-radius: var(--sw-radius-lg);
-    box-shadow: var(--sw-shadow-lg);
+    position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 0.5rem; padding: 0.5rem 1rem;
+    background: var(--sw-ink); border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-lg); box-shadow: var(--sw-shadow-lg);
     z-index: 50;
   }
-
   .editor-cancel {
-    padding: 0.45rem 1rem;
-    background: none;
-    border: 1px solid var(--sw-border);
-    border-radius: var(--sw-radius-md);
-    color: var(--sw-text-secondary);
-    font-family: var(--sw-font-body);
-    font-size: var(--sw-text-sm);
-    cursor: pointer;
+    padding: 0.45rem 1rem; background: none;
+    border: 1px solid var(--sw-border); border-radius: var(--sw-radius-md);
+    color: var(--sw-text-secondary); font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm); cursor: pointer;
   }
-
-  .editor-cancel:hover {
-    border-color: var(--sw-border-strong);
-    color: var(--sw-text-primary);
-  }
-
+  .editor-cancel:hover { border-color: var(--sw-border-strong); color: var(--sw-text-primary); }
   .editor-save {
-    padding: 0.45rem 1.25rem;
-    background: var(--sw-accent);
-    color: var(--sw-ink-deepest);
-    border: none;
-    border-radius: var(--sw-radius-md);
-    font-family: var(--sw-font-body);
-    font-size: var(--sw-text-sm);
-    font-weight: 600;
-    cursor: pointer;
+    padding: 0.45rem 1.25rem; background: var(--sw-accent);
+    color: var(--sw-ink-deepest); border: none;
+    border-radius: var(--sw-radius-md); font-family: var(--sw-font-body);
+    font-size: var(--sw-text-sm); font-weight: 600; cursor: pointer;
   }
-
-  .editor-save:hover {
-    background: var(--sw-accent-strong);
-  }
-
-  .editor-save:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+  .editor-save:hover { background: var(--sw-accent-strong); }
+  .editor-save:disabled { opacity: 0.6; cursor: not-allowed; }
 
   @media (max-width: 800px) {
-    .editor-panes {
-      grid-template-columns: 1fr;
-    }
-    .editor-preview {
-      display: none;
-    }
+    .editor-panes { grid-template-columns: 1fr; }
+    .editor-preview { display: none; }
   }
 
-  .not-found {
-    padding: 4rem 0;
-    text-align: center;
-  }
-
-  .not-found h1 {
-    font-family: var(--sw-font-display);
-    margin-bottom: 1rem;
-  }
+  .not-found { padding: 4rem 0; text-align: center; }
+  .not-found h1 { font-family: var(--sw-font-display); margin-bottom: 1rem; }
 </style>
 
 <style is:global>
-  /* Global tag styles — needed for JS-created tag elements (Astro scoping doesn't apply) */
   .doc-tags .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25em;
-    font-size: var(--sw-text-xs);
-    padding: 0.15em 0.5em;
-    background: var(--sw-ink-surface);
-    border-radius: var(--sw-radius-sm);
+    display: inline-flex; align-items: center; gap: 0.25em;
+    font-size: var(--sw-text-xs); padding: 0.15em 0.5em;
+    background: var(--sw-ink-surface); border-radius: var(--sw-radius-sm);
     color: var(--sw-text-secondary);
   }
   .doc-tags .tag-remove {
-    background: none;
-    border: none;
-    color: var(--sw-text-ghost);
-    cursor: pointer;
-    font-size: 1em;
-    line-height: 1;
-    padding: 0;
-    margin-left: -0.1em;
+    background: none; border: none; color: var(--sw-text-ghost);
+    cursor: pointer; font-size: 1em; line-height: 1; padding: 0; margin-left: -0.1em;
   }
   .doc-tags .tag-remove:hover { color: var(--sw-text-primary); }
   .doc-tags .tag-add {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--sw-text-xs);
-    width: 1.5em;
-    height: 1.5em;
-    padding: 0;
-    background: none;
-    border: 1px dashed var(--sw-border-strong);
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-ghost);
-    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: var(--sw-text-xs); width: 1.5em; height: 1.5em; padding: 0;
+    background: none; border: 1px dashed var(--sw-border-strong);
+    border-radius: var(--sw-radius-sm); color: var(--sw-text-ghost); cursor: pointer;
   }
   .doc-tags .tag-add:hover { color: var(--sw-text-secondary); border-color: var(--sw-text-ghost); }
   .doc-tags .tag-input {
-    font-size: var(--sw-text-xs);
-    padding: 0.15em 0.4em;
-    background: var(--sw-ink);
-    border: 1px solid var(--sw-border-strong);
-    border-radius: var(--sw-radius-sm);
-    color: var(--sw-text-primary);
-    color-scheme: dark;
-    outline: none;
-    width: 6em;
+    font-size: var(--sw-text-xs); padding: 0.15em 0.4em;
+    background: var(--sw-ink); border: 1px solid var(--sw-border-strong);
+    border-radius: var(--sw-radius-sm); color: var(--sw-text-primary);
+    color-scheme: dark; outline: none; width: 6em;
   }
   .doc-tags .tag-input:focus { border-color: var(--sw-accent); }
 </style>
@@ -903,28 +594,31 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 {doc && (
 <script>
   // Watch toggle — swap between outline and filled bell
-  const watchBtn = document.getElementById("watch-toggle");
+  const watchBtn = document.getElementById("watch-toggle") as HTMLButtonElement | null;
   if (watchBtn) {
-    const docTags = document.getElementById("doc-tags");
-    const spaceSlug = docTags?.dataset.space;
-    const docSlug = docTags?.dataset.slug;
+    const docTags = document.getElementById("doc-tags") as HTMLElement | null;
+    const spaceSlug = docTags?.dataset.space ?? "";
+    const sectionSlug = docTags?.dataset.section ?? "";
+    const path = docTags?.dataset.path ?? "";
 
     const bellOutline = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-0.125em"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
     const bellFilled = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" style="vertical-align:-0.125em"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
 
-    function setWatchState(watching) {
-      watchBtn.innerHTML = watching ? bellFilled : bellOutline;
-      watchBtn.classList.toggle("watching", watching);
-      watchBtn.title = watching ? "Unwatch this document" : "Watch this document";
+    function setWatchState(watching: boolean) {
+      watchBtn!.innerHTML = watching ? bellFilled : bellOutline;
+      watchBtn!.classList.toggle("watching", watching);
+      watchBtn!.title = watching ? "Unwatch this document" : "Watch this document";
     }
 
-    // Check initial state
-    fetch(`/s/${spaceSlug}/${docSlug}/watch`).then(r => r.json()).then(data => {
-      setWatchState(data.watching);
-    }).catch(() => {});
+    const watchUrl = `/op/doc-watch?space=${encodeURIComponent(spaceSlug)}&section=${encodeURIComponent(sectionSlug)}&path=${encodeURIComponent(path)}`;
+    fetch(watchUrl).then(r => r.json()).then(data => setWatchState(data.watching)).catch(() => {});
 
     watchBtn.addEventListener("click", async () => {
-      const res = await fetch(`/s/${spaceSlug}/${docSlug}/watch`, { method: "POST" });
+      const res = await fetch(`/op/doc-watch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ space: spaceSlug, section: sectionSlug, path }),
+      });
       if (res.ok) {
         const data = await res.json();
         setWatchState(data.watching);
@@ -933,25 +627,26 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   }
 
   // Tag editor
-  const tagsEl = document.getElementById("doc-tags");
+  const tagsEl = document.getElementById("doc-tags") as HTMLElement | null;
   if (tagsEl && tagsEl.dataset.canWrite === "true") {
-    const spaceSlug = tagsEl.dataset.space;
-    const docSlug = tagsEl.dataset.slug;
+    const spaceSlug = tagsEl.dataset.space ?? "";
+    const sectionSlug = tagsEl.dataset.section ?? "";
+    const path = tagsEl.dataset.path ?? "";
     const addBtn = document.getElementById("tag-add-btn");
 
-    function getCurrentTags() {
-      return Array.from(tagsEl.querySelectorAll(".tag[data-tag]")).map(el => el.dataset.tag);
+    function getCurrentTags(): string[] {
+      return Array.from(tagsEl!.querySelectorAll<HTMLElement>(".tag[data-tag]")).map(el => el.dataset.tag ?? "");
     }
 
-    async function saveTags(tags) {
-      await fetch(`/s/${spaceSlug}/${docSlug}/rename`, {
+    async function saveTags(tags: string[]) {
+      await fetch(`/op/patch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags }),
+        body: JSON.stringify({ space: spaceSlug, section: sectionSlug, path, tags }),
       });
     }
 
-    function createTagEl(tag) {
+    function createTagEl(tag: string) {
       const span = document.createElement("span");
       span.className = "tag";
       span.dataset.tag = tag;
@@ -968,16 +663,15 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       return span;
     }
 
-    // Remove existing tags
     tagsEl.addEventListener("click", async (e) => {
-      const removeBtn = e.target.closest(".tag-remove");
+      const target = e.target as HTMLElement | null;
+      const removeBtn = target?.closest(".tag-remove");
       if (!removeBtn) return;
       e.preventDefault();
-      removeBtn.closest(".tag").remove();
+      removeBtn.closest(".tag")?.remove();
       await saveTags(getCurrentTags());
     });
 
-    // Add tag
     addBtn?.addEventListener("click", () => {
       if (tagsEl.querySelector(".tag-input")) return;
       const input = document.createElement("input");
@@ -991,7 +685,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
         const val = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
         input.remove();
         if (!val || getCurrentTags().includes(val)) return;
-        tagsEl.insertBefore(createTagEl(val), addBtn);
+        tagsEl!.insertBefore(createTagEl(val), addBtn);
         await saveTags(getCurrentTags());
       }
 
@@ -1015,56 +709,39 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
   let currentDetail: any = null;
 
-  /** Walk up from a node to find the heading hierarchy */
   function getSectionPath(node: Node): string {
     const docContent = (node as HTMLElement).closest?.(".sw-doc-content")
       || (node.parentElement?.closest(".sw-doc-content"));
     if (!docContent) return "";
-
-    // Find all headings before the selection point
     const headings = Array.from(docContent.querySelectorAll("h1, h2, h3, h4, h5, h6"));
     const selectionTop = (node as HTMLElement).getBoundingClientRect?.()?.top
       ?? node.parentElement?.getBoundingClientRect()?.top ?? 0;
-
-    // Filter headings that are above the selection
     const above = headings.filter(h => h.getBoundingClientRect().top < selectionTop);
     if (above.length === 0) return "";
-
-    // Build hierarchy: keep the most recent heading at each level
     const levels: Map<number, string> = new Map();
     for (const h of above) {
       const level = parseInt(h.tagName[1]);
       const text = h.textContent?.trim() || "";
       levels.set(level, text);
-      // Clear deeper levels when a shallower heading appears
       for (const [k] of levels) {
         if (k > level) levels.delete(k);
       }
     }
-
-    // Build path from shallowest to deepest
-    return Array.from(levels.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([, text]) => text)
-      .join(" > ");
+    return Array.from(levels.entries()).sort(([a], [b]) => a - b).map(([, text]) => text).join(" > ");
   }
 
-  /** Get surrounding text context around the selection */
   function getContext(range: Range): string {
     const container = range.commonAncestorContainer;
     const block = container.nodeType === Node.TEXT_NODE
       ? container.parentElement
       : container as HTMLElement;
     if (!block) return "";
-
-    // Walk up to find a meaningful block (p, li, td, pre, blockquote)
     let contextEl: HTMLElement | null = block;
     while (contextEl && !["P", "LI", "TD", "PRE", "BLOCKQUOTE", "H1", "H2", "H3", "H4", "H5", "H6"].includes(contextEl.tagName)) {
       contextEl = contextEl.parentElement;
       if (contextEl?.classList.contains("sw-doc-content")) { contextEl = block; break; }
     }
     if (!contextEl) return "";
-
     const fullText = contextEl.textContent?.trim() || "";
     return fullText.slice(0, 300);
   }
@@ -1076,21 +753,17 @@ const themeCss = themeToCSS(space?.theme?.tokens);
         btn.style.display = "none";
         return;
       }
-
       const docContent = sel.anchorNode?.parentElement?.closest(".sw-doc-content");
       if (!docContent) {
         btn.style.display = "none";
         return;
       }
-
       const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
       const anchorText = sel.toString().trim().slice(0, 200);
       const anchorSection = getSectionPath(sel.anchorNode!);
       const anchorContext = getContext(range);
-
       currentDetail = { anchorText, anchorSection, anchorContext };
-
       btn.style.display = "flex";
       btn.style.position = "fixed";
       btn.style.left = `${rect.right + 6}px`;
@@ -1103,22 +776,15 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       btn.style.display = "none";
     }
   });
-
-  document.addEventListener("scroll", () => {
-    btn.style.display = "none";
-  }, { passive: true });
+  document.addEventListener("scroll", () => { btn.style.display = "none"; }, { passive: true });
 
   btn.addEventListener("click", () => {
     btn.style.display = "none";
     window.getSelection()?.removeAllRanges();
-    document.dispatchEvent(
-      new CustomEvent("sideways:inline-comment", {
-        detail: currentDetail,
-      })
-    );
+    document.dispatchEvent(new CustomEvent("sideways:inline-comment", { detail: currentDetail }));
   });
 </script>
-<script define:vars={{ rawContent, API_URL, spaceSlug, slug, pdfThemesJson: JSON.stringify(themes.map(t => ({ id: t.id, name: t.name, tokens: t.tokens }))) }}>
+<script define:vars={{ rawContent, API_URL, spaceSlug, sectionSlug, path: doc.path, pdfThemesJson: JSON.stringify(themes.map(t => ({ id: t.id, name: t.name, tokens: t.tokens }))) }}>
   // Editor mode toggle
   const editBtn = document.getElementById("edit-toggle");
   const docView = document.getElementById("doc-view");
@@ -1136,7 +802,6 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     const docPage = document.querySelector(".doc-page");
     const previewPane = document.querySelector(".editor-preview");
 
-    /** Find the topmost visible heading in rendered content */
     function getTopmostVisibleHeading() {
       const headings = docView.querySelectorAll("h1, h2, h3, h4, h5, h6");
       const headerOffset = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sw-header-height")) || 56;
@@ -1146,12 +811,10 @@ const themeCss = themeToCSS(space?.theme?.tokens);
           return h.textContent?.trim() || null;
         }
       }
-      // All headings above viewport — use last one
       if (headings.length) return headings[headings.length - 1].textContent?.trim() || null;
       return null;
     }
 
-    /** Find the line number of a heading in the textarea */
     function findHeadingLine(headingText) {
       const lines = textarea.value.split("\n");
       for (let i = 0; i < lines.length; i++) {
@@ -1161,13 +824,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       return -1;
     }
 
-    /** Scroll textarea to a line number */
     function scrollTextareaToLine(lineNum) {
       const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24;
       textarea.scrollTop = lineNum * lineHeight;
     }
 
-    /** Get the heading nearest the cursor position in the textarea */
     function getHeadingNearCursor() {
       const pos = textarea.selectionStart;
       const textBefore = textarea.value.slice(0, pos);
@@ -1179,7 +840,6 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       return null;
     }
 
-    /** Scroll preview pane to a heading by text (without affecting page scroll) */
     function scrollPreviewToHeading(headingText) {
       if (!previewPane) return;
       const headings = previewPane.querySelectorAll("h1, h2, h3, h4, h5, h6");
@@ -1191,7 +851,6 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       }
     }
 
-    /** Scroll rendered view to a heading by text */
     function scrollViewToHeading(headingText) {
       const headings = docView.querySelectorAll("h1, h2, h3, h4, h5, h6");
       for (const h of headings) {
@@ -1203,9 +862,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     }
 
     editBtn.addEventListener("click", () => {
-      // Find which heading is visible before switching
       const visibleHeading = getTopmostVisibleHeading();
-
       textarea.value = rawContent;
       docView.style.display = "none";
       docEditor.style.display = "flex";
@@ -1213,22 +870,18 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       if (sidebar) sidebar.style.display = "none";
       if (docPage) docPage.style.maxWidth = "none";
       document.body.style.overflow = "hidden";
-      // Scroll page to top so editor starts at top
       window.scrollTo(0, 0);
 
-      // Scroll textarea and place cursor at the visible heading
       requestAnimationFrame(() => {
         if (visibleHeading) {
           const line = findHeadingLine(visibleHeading);
           if (line >= 0) {
             scrollTextareaToLine(line);
-            // Place cursor at start of that line
             const lines = textarea.value.split("\n");
             const pos = lines.slice(0, line).reduce((sum, l) => sum + l.length + 1, 0);
             textarea.setSelectionRange(pos, pos);
           }
         } else {
-          // No heading found — cursor at top
           textarea.setSelectionRange(0, 0);
           textarea.scrollTop = 0;
         }
@@ -1244,21 +897,17 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
     cancelBtn?.addEventListener("click", () => {
       const headingNearCursor = getHeadingNearCursor();
-
       docEditor.style.display = "none";
       docView.style.display = "block";
       editBtn.style.display = "";
       if (sidebar) sidebar.style.display = "";
       if (docPage) docPage.style.maxWidth = "";
       document.body.style.overflow = "";
-
-      // Scroll view to the heading nearest the cursor
       requestAnimationFrame(() => {
         if (headingNearCursor) scrollViewToHeading(headingNearCursor);
       });
     });
 
-    // Sync preview scroll to cursor position on input/click
     let syncTimer = null;
     function syncPreviewToCursor() {
       clearTimeout(syncTimer);
@@ -1270,13 +919,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
     textarea.addEventListener("click", syncPreviewToCursor);
     textarea.addEventListener("keyup", (e) => {
-      // Only sync on cursor-moving keys, not every keystroke
       if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(e.key)) {
         syncPreviewToCursor();
       }
     });
 
-    // Live preview (debounced) — no scroll sync on typing, only on cursor movement
     textarea.addEventListener("input", () => {
       clearTimeout(previewTimer);
       previewTimer = setTimeout(() => updatePreview(), 300);
@@ -1284,12 +931,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
     async function updatePreview() {
       try {
-        const res = await fetch(`/s/${spaceSlug}/${slug}/render`, {
+        const res = await fetch(`/op/render`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: textarea.value }),
+          body: JSON.stringify({ space: spaceSlug, section: sectionSlug, path, content: textarea.value }),
         });
-        // Fallback: if no preview endpoint, render client-side as plain text
         if (!res.ok) {
           preview.innerHTML = `<pre style="white-space: pre-wrap;">${textarea.value.replace(/</g, "&lt;")}</pre>`;
           return;
@@ -1305,10 +951,10 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving...";
       try {
-        const res = await fetch(`/s/${spaceSlug}/${slug}/save`, {
+        const res = await fetch(`/op/save`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: textarea.value }),
+          body: JSON.stringify({ space: spaceSlug, section: sectionSlug, path, content: textarea.value }),
         });
         if (res.ok) {
           window.location.reload();
@@ -1324,10 +970,8 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       }
     });
 
-    // Auto-enter edit mode if ?edit=1 (e.g. newly created doc)
     if (new URLSearchParams(window.location.search).has("edit")) {
       editBtn.click();
-      // Pre-fill with heading prompt if content is empty
       if (!rawContent.trim()) {
         textarea.value = "# ";
         requestAnimationFrame(() => {
@@ -1335,12 +979,10 @@ const themeCss = themeToCSS(space?.theme?.tokens);
           textarea.focus();
         });
       }
-      // Clean up URL
       history.replaceState(null, "", window.location.pathname);
     }
   }
 
-  // Copy markdown
   copyBtn?.addEventListener("click", () => {
     navigator.clipboard.writeText(rawContent).then(() => {
       const span = copyBtn.querySelector("span");
@@ -1354,34 +996,40 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   // Actions menu
   const actionsToggle = document.getElementById("actions-toggle");
   const actionsDropdown = document.getElementById("actions-dropdown");
-
   actionsToggle?.addEventListener("click", (e) => {
     e.stopPropagation();
     const visible = actionsDropdown.style.display !== "none";
     actionsDropdown.style.display = visible ? "none" : "block";
   });
-
   document.addEventListener("click", () => {
     if (actionsDropdown) actionsDropdown.style.display = "none";
   });
 
-  // Rename
+  // Rename — change the path's basename. Title goes through patch too.
   document.getElementById("action-rename")?.addEventListener("click", async () => {
-    const newTitle = prompt("New title:", document.querySelector("h1")?.textContent || "");
+    const currentTitle = document.querySelector("h1")?.textContent || "";
+    const newTitle = prompt("New title:", currentTitle);
     if (!newTitle) return;
-    const newSlug = newTitle.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 
-    const res = await fetch(`/s/${spaceSlug}/${slug}/rename`, {
+    // Derive a new path by replacing the basename with a slugified title.
+    // Preserve directory prefix and the filename ext (.md).
+    const newBase = newTitle.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    const dirPart = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
+    // If renaming an `index.md`, keep it as `index.md` (the directory name doesn't change here).
+    const isIndex = path.endsWith("/index.md") || path === "index.md";
+    const targetPath = isIndex ? path : `${dirPart}${newBase}.md`;
+
+    const res = await fetch(`/op/patch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: newTitle, slug: newSlug }),
+      body: JSON.stringify({ space: spaceSlug, section: sectionSlug, path, title: newTitle, targetPath }),
     });
 
     if (res.ok) {
-      const doc = await res.json();
-      window.location.href = `/s/${spaceSlug}/${doc.slug}`;
+      const updated = await res.json();
+      window.location.href = updated.url;
     } else if (res.status === 409) {
-      alert("A document with that name already exists.");
+      alert("A document with that path already exists.");
     } else {
       alert("Rename failed.");
     }
@@ -1389,13 +1037,14 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
   // Duplicate
   document.getElementById("action-duplicate")?.addEventListener("click", async () => {
-    const res = await fetch(`/s/${spaceSlug}/${slug}/duplicate`, {
+    const res = await fetch(`/op/duplicate`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ space: spaceSlug, section: sectionSlug, path }),
     });
-
     if (res.ok) {
-      const doc = await res.json();
-      window.location.href = `/s/${spaceSlug}/${doc.slug}`;
+      const newDoc = await res.json();
+      window.location.href = newDoc.url;
     } else {
       alert("Duplicate failed.");
     }
@@ -1407,15 +1056,8 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   const pdfCover = document.getElementById("pdf-cover");
   const pdfToc = document.getElementById("pdf-toc");
 
-  function openPdfModal() {
-    updatePdfDefaults();
-    pdfOverlay.style.display = "flex";
-  }
-
-  function closePdfModal() {
-    pdfOverlay.style.display = "none";
-  }
-
+  function openPdfModal() { updatePdfDefaults(); pdfOverlay.style.display = "flex"; }
+  function closePdfModal() { pdfOverlay.style.display = "none"; }
   function updatePdfDefaults() {
     if (!pdfThemeSelect || !pdfCover || !pdfToc) return;
     const themeId = pdfThemeSelect.value;
@@ -1425,8 +1067,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       pdfCover.checked = theme.tokens.print.defaultTitlePage !== false;
       pdfToc.checked = theme.tokens.print.defaultToc !== false;
     } else {
-      pdfCover.checked = true;
-      pdfToc.checked = true;
+      pdfCover.checked = true; pdfToc.checked = true;
     }
   }
 
@@ -1434,31 +1075,25 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     if (actionsDropdown) actionsDropdown.style.display = "none";
     openPdfModal();
   });
-
   document.getElementById("pdf-modal-close")?.addEventListener("click", closePdfModal);
-
-  pdfOverlay?.addEventListener("click", (e) => {
-    if (e.target === pdfOverlay) closePdfModal();
-  });
-
+  pdfOverlay?.addEventListener("click", (e) => { if (e.target === pdfOverlay) closePdfModal(); });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && pdfOverlay?.style.display !== "none") {
-      closePdfModal();
-    }
+    if (e.key === "Escape" && pdfOverlay?.style.display !== "none") closePdfModal();
   });
-
   pdfThemeSelect?.addEventListener("change", updatePdfDefaults);
 
   document.getElementById("pdf-btn-download")?.addEventListener("click", () => {
     const params = new URLSearchParams();
+    params.set("space", spaceSlug);
+    params.set("section", sectionSlug);
+    params.set("path", path);
     if (pdfThemeSelect?.value) params.set("theme", pdfThemeSelect.value);
     if (pdfCover && !pdfCover.checked) params.set("title-page", "false");
     if (pdfToc && !pdfToc.checked) params.set("toc", "false");
 
-    const qs = params.toString();
     const a = document.createElement("a");
-    a.href = `/s/${spaceSlug}/${slug}/pdf${qs ? `?${qs}` : ""}`;
-    a.download = `${slug}.pdf`;
+    a.href = `/op/pdf?${params.toString()}`;
+    a.download = `${path.replace(/\.md$/, "").split("/").pop()}.pdf`;
     a.click();
     closePdfModal();
   });
@@ -1466,7 +1101,6 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   // Move to section
   const moveBtn = document.getElementById("action-move");
   const moveSubmenu = document.getElementById("move-submenu");
-
   moveBtn?.addEventListener("click", (e) => {
     e.stopPropagation();
     const visible = moveSubmenu.style.display !== "none";
@@ -1476,17 +1110,18 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   document.querySelectorAll(".submenu-item").forEach((item) => {
     item.addEventListener("click", async (e) => {
       e.stopPropagation();
-      const section = e.target.dataset.section;
-      const body = { section: section || null };
+      const targetSection = e.target.dataset.targetSection;
+      if (!targetSection || targetSection === sectionSlug) return;
 
-      const res = await fetch(`/s/${spaceSlug}/${slug}/move`, {
+      const res = await fetch(`/op/patch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ space: spaceSlug, section: sectionSlug, path, targetSection }),
       });
 
       if (res.ok) {
-        window.location.reload();
+        const updated = await res.json();
+        window.location.href = updated.url;
       } else {
         alert("Move failed.");
       }
@@ -1496,11 +1131,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   // Delete
   document.getElementById("action-delete")?.addEventListener("click", async () => {
     if (!confirm("Delete this document? This cannot be undone.")) return;
-
-    const res = await fetch(`/s/${spaceSlug}/${slug}/delete`, {
-      method: "DELETE",
+    const res = await fetch(`/op/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ space: spaceSlug, section: sectionSlug, path }),
     });
-
     if (res.ok) {
       window.location.href = `/s/${spaceSlug}`;
     } else {

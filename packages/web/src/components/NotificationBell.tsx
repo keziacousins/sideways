@@ -3,8 +3,8 @@ import { useState, useEffect, useRef } from "react";
 interface Notification {
   id: string;
   type: string;
-  spaceSlug: string;
-  docSlug: string;
+  /** Server-built canonical doc URL, or null if the doc has been deleted. */
+  url: string | null;
   commentId?: string;
   title: string;
   body?: string;
@@ -152,31 +152,36 @@ export default function NotificationBell({ apiUrl, accessToken, refreshToken }: 
             {notifications.length === 0 && (
               <div className="notif-empty">No notifications</div>
             )}
-            {notifications.map((n) => (
-              <div key={n.id} className={`notif-item ${n.read ? "read" : "unread"}`}>
-                <a
-                  href={`/s/${n.spaceSlug}/${n.docSlug}${n.commentId ? `#comment-${n.commentId}` : ""}`}
-                  className="notif-link"
-                  onClick={(e) => {
-                    // If already on the same doc page, use hash navigation instead of full reload
-                    const target = `/s/${n.spaceSlug}/${n.docSlug}`;
-                    if (window.location.pathname === target && n.commentId) {
-                      e.preventDefault();
-                      setOpen(false);
-                      window.location.hash = `comment-${n.commentId}`;
-                    }
-                  }}
-                >
-                  <span className="notif-icon" dangerouslySetInnerHTML={{ __html: TYPE_ICONS[n.type] || "•" }} />
-                  <div className="notif-content">
-                    <div className="notif-title">{n.title}</div>
-                    {n.body && <div className="notif-body">{n.body.slice(0, 100)}{n.body.length > 100 ? "…" : ""}</div>}
-                    <div className="notif-meta">{timeAgo(n.createdAt)}</div>
-                  </div>
-                </a>
-                <button className="notif-dismiss" onClick={(e) => { e.stopPropagation(); dismiss(n.id); }} title="Dismiss">×</button>
-              </div>
-            ))}
+            {notifications.map((n) => {
+              const href = n.url
+                ? `${n.url}${n.commentId ? `#comment-${n.commentId}` : ""}`
+                : "#";
+              return (
+                <div key={n.id} className={`notif-item ${n.read ? "read" : "unread"} ${n.url ? "" : "deleted"}`}>
+                  <a
+                    href={href}
+                    className="notif-link"
+                    onClick={(e) => {
+                      if (!n.url) { e.preventDefault(); return; }
+                      // If already on the same doc page, use hash navigation instead of full reload
+                      if (window.location.pathname === n.url && n.commentId) {
+                        e.preventDefault();
+                        setOpen(false);
+                        window.location.hash = `comment-${n.commentId}`;
+                      }
+                    }}
+                  >
+                    <span className="notif-icon" dangerouslySetInnerHTML={{ __html: TYPE_ICONS[n.type] || "•" }} />
+                    <div className="notif-content">
+                      <div className="notif-title">{n.title}{!n.url && <span className="notif-deleted-tag"> (deleted)</span>}</div>
+                      {n.body && <div className="notif-body">{n.body.slice(0, 100)}{n.body.length > 100 ? "…" : ""}</div>}
+                      <div className="notif-meta">{timeAgo(n.createdAt)}</div>
+                    </div>
+                  </a>
+                  <button className="notif-dismiss" onClick={(e) => { e.stopPropagation(); dismiss(n.id); }} title="Dismiss">×</button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

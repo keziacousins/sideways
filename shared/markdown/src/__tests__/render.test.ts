@@ -70,9 +70,13 @@ describe("renderMarkdown", () => {
     expect(html).toBe("");
   });
 
-  it("preserves raw HTML in markdown", async () => {
+  it("strips raw HTML in markdown (sanitiser strips raw nodes)", async () => {
+    // The sanitiser drops raw HTML nodes — by design, we don't trust user-
+    // provided HTML to bypass our allowlist. Inline content survives, the
+    // tags don't.
     const md = 'A <div class="custom">block</div> here.';
     const html = await renderMarkdown(md);
-    expect(html).toContain('<div class="custom">block</div>');
+    expect(html).not.toContain('<div class="custom">');
+    expect(html).toContain("block");
   });
 });

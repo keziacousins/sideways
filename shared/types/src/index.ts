@@ -31,9 +31,10 @@ export interface Section {
 export interface Document {
   id: string;
   spaceId: string;
-  sectionId: string | null;
+  sectionId: string;
   parentId: string | null;
-  slug: string;
+  /** Filesystem-shaped path within the section, e.g. "architecture/overview.md". */
+  path: string;
   title: string;
   position: number;
   tags: string[];
@@ -104,4 +105,33 @@ export interface SpaceMember {
   userId: string;
   role: "viewer" | "editor" | "admin";
   createdAt: string;
+}
+
+/** Reference to a document by its URL-shaping fields. */
+export interface DocRef {
+  spaceSlug: string;
+  sectionSlug: string;
+  /** Filesystem-shaped path within the section, e.g. "architecture/overview.md". */
+  path: string;
+}
+
+/**
+ * Build the canonical web URL for a document.
+ *
+ * Format: `/s/<space>/<section>/<...path>` with `.md` stripped and
+ * `index.md` collapsed to its containing directory (so a section's
+ * `index.md` lives at `/s/<space>/<section>` itself).
+ */
+export function docUrl(ref: DocRef): string {
+  const space = encodeURIComponent(ref.spaceSlug);
+  const section = encodeURIComponent(ref.sectionSlug);
+
+  const trimmed = ref.path
+    .replace(/\.md$/, "")
+    .replace(/(^|\/)index$/, "");
+
+  if (!trimmed) return `/s/${space}/${section}`;
+
+  const segments = trimmed.split("/").map(encodeURIComponent).join("/");
+  return `/s/${space}/${section}/${segments}`;
 }

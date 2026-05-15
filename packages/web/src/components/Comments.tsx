@@ -54,7 +54,8 @@ function renderCommentBody(body: string, spaceSlug: string): string {
 
 interface Props {
   spaceSlug: string;
-  docSlug: string;
+  sectionSlug: string;
+  path: string;
   apiUrl: string;
   accessToken: string | null;
   refreshToken: string | null;
@@ -62,7 +63,8 @@ interface Props {
 
 export default function Comments({
   spaceSlug,
-  docSlug,
+  sectionSlug,
+  path,
   apiUrl,
   accessToken: initialAccessToken,
   refreshToken: initialRefreshToken,
@@ -162,11 +164,11 @@ export default function Comments({
   const fetchComments = useCallback(async () => {
     try {
       const res = await authFetch(
-        `${apiUrl}/api/comments/${spaceSlug}/${docSlug}?include_resolved=true`,
+        `${apiUrl}/api/comments/${spaceSlug}/${sectionSlug}/${path}?include_resolved=true`,
       );
       if (res.ok) setComments(await res.json());
     } catch {}
-  }, [spaceSlug, docSlug, apiUrl, authFetch]);
+  }, [spaceSlug, sectionSlug, path, apiUrl, authFetch]);
 
   fetchRef.current = fetchComments;
 
@@ -294,7 +296,7 @@ export default function Comments({
 
     try {
       const res = await authFetch(
-        `${apiUrl}/api/comments/${spaceSlug}/${docSlug}`,
+        `${apiUrl}/api/comments/${spaceSlug}/${sectionSlug}/${path}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -330,7 +332,7 @@ export default function Comments({
 
   const resolveComment = async (id: string) => {
     const res = await authFetch(
-      `${apiUrl}/api/comments/${spaceSlug}/${docSlug}/${id}/resolve`,
+      `${apiUrl}/api/comments/${id}/resolve`,
       { method: "POST" },
     );
     if (res.ok) await fetchComments();
@@ -339,7 +341,7 @@ export default function Comments({
   const deleteComment = async (id: string) => {
     if (!confirm("Delete this comment?")) return;
     const res = await authFetch(
-      `${apiUrl}/api/comments/${spaceSlug}/${docSlug}/${id}`,
+      `${apiUrl}/api/comments/${id}`,
       { method: "DELETE" },
     );
     if (res.ok) {
@@ -353,7 +355,7 @@ export default function Comments({
     const newBody = prompt("Edit comment:", currentBody);
     if (!newBody || newBody === currentBody) return;
     const res = await authFetch(
-      `${apiUrl}/api/comments/${spaceSlug}/${docSlug}/${id}`,
+      `${apiUrl}/api/comments/${id}`,
       { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: newBody }) },
     );
     if (res.ok) {

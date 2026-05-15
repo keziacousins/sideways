@@ -109,6 +109,18 @@
 .sw-doc-content a.wiki-link:hover {
   text-decoration-style: solid;
 }
+.sw-doc-content .wiki-link-unresolved,
+.sw-doc-content .wiki-link-ambiguous {
+  color: var(--sw-text-muted, #888);
+  text-decoration: underline wavy;
+  cursor: help;
+}
+.sw-doc-content .wiki-link-ambiguous {
+  text-decoration-color: var(--sw-warn, #c08000);
+}
+.sw-doc-content .wiki-link-unresolved {
+  text-decoration-color: var(--sw-error, #a02020);
+}
 
 /* ── Lists ────────────────────────────────────────────────────── */
 .sw-doc-content ul,

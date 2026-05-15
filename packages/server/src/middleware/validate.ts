@@ -24,6 +24,26 @@ export function validateSlug(slug: string): string | null {
   return null;
 }
 
+/**
+ * Validate a document path. Filesystem-shaped: forward-slash-separated
+ * segments, each segment matches `[A-Za-z0-9._-]+`, no `..`, no leading/
+ * trailing slash, must end in `.md`. Tighter than a generic file path —
+ * we own the layout and want predictable, URL-safe characters.
+ */
+export function validatePath(path: string): string | null {
+  if (!path) return "Path is required";
+  if (path.length > LIMITS.slug * 4) return `Path is too long`;
+  if (!path.endsWith(".md")) return "Path must end in .md";
+  if (path.startsWith("/") || path.endsWith("/")) return "Path cannot have leading or trailing slash";
+  const segments = path.split("/");
+  for (const seg of segments) {
+    if (!seg) return "Path cannot contain empty segments";
+    if (seg === "." || seg === "..") return "Path cannot contain . or .. segments";
+    if (!/^[A-Za-z0-9._-]+$/.test(seg)) return `Path segment "${seg}" contains invalid characters`;
+  }
+  return null;
+}
+
 export function validateTags(tags: string[]): string | null {
   if (tags.length > LIMITS.tags) return `Maximum ${LIMITS.tags} tags`;
   for (const tag of tags) {
