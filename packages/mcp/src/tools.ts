@@ -19,10 +19,7 @@ const INSTRUCTIONS = `Sideways is a documentation platform. Capabilities:
 - Comments: add, list, resolve, reply (threaded, optionally anchored to text)
 - Search: full-text across documents
 
-Document refs:
-- Every doc has a canonical ref of the form \`<space>:<section>/<path>.md\` — e.g. \`engineering:architecture/api-design.md\`.
-- search and doc_list emit refs you can copy verbatim into doc_read, doc_edit, comment_add, etc.
-- The first segment after the colon is the section (a filesystem-shaped grouping); the rest is the path within that section.
+ALWAYS pass \`ref\` to doc and comment tools — never \`space\` + \`path\` separately. Refs have the form \`<space>:<section>/<path>.md\`, e.g. \`engineering:architecture/api-design.md\`. \`search\` and \`doc_list\` emit refs you can copy verbatim into doc_read, doc_edit, comment_add, etc. The first segment after the colon is the section (a filesystem-shaped grouping); the rest is the path within that section.
 
 Concepts:
 - doc_write is an upsert: creates the doc if its ref is new, updates otherwise.
@@ -117,7 +114,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "doc_read",
-    "Read a document's full markdown content. Comments are embedded at the end as HTML comment blocks unless disabled.",
+    'Read a document by ref (e.g. "engineering:architecture/api-design.md"). Comments are embedded at the end as HTML comment blocks unless disabled.',
     {
       ref: z.string().describe(REF_DESC),
       include_comments: z.boolean().optional().describe("Embed comments as <!-- @comment --> blocks at the end (default: true)"),
@@ -152,7 +149,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "doc_write",
-    "Create or update a document. Upserts on ref: existing docs get a new version, new refs create the doc. Title is auto-extracted from the first # heading if omitted.",
+    'Create or update a document by ref (e.g. "engineering:architecture/api-design.md"). Upserts on ref: existing docs get a new version, new refs create the doc. Title is auto-extracted from the first # heading if omitted.',
     {
       ref: z.string().describe(REF_DESC),
       content: z.string().describe("Full markdown content of the document"),
@@ -176,7 +173,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "doc_edit",
-    "Apply search-and-replace edits to a document without rewriting it. Edits run sequentially; if any `old` string is not found, the whole edit fails and nothing is saved. Use doc_read first to see current content.",
+    'Apply search-and-replace edits to a document by ref (e.g. "engineering:architecture/api-design.md") without rewriting it. Edits run sequentially; if any `old` string is not found, the whole edit fails and nothing is saved. Use doc_read first to see current content.',
     {
       ref: z.string().describe(REF_DESC),
       edits: z.array(z.object({
@@ -215,7 +212,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "doc_rename",
-    "Change a document's title. Path-changing renames go through doc_move.",
+    'Change a document\'s title by ref (e.g. "engineering:architecture/api-design.md"). Path-changing renames go through doc_move.',
     {
       ref: z.string().describe(REF_DESC),
       title: z.string().describe("New title"),
@@ -232,7 +229,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "doc_move",
-    "Move a document to a different space, section, or path. Each target_* arg is optional; omitted ones stay the same.",
+    'Move a document (identified by ref, e.g. "engineering:architecture/api-design.md") to a different space, section, or path. Each target_* arg is optional; omitted ones stay the same.',
     {
       ref: z.string().describe(REF_DESC),
       target_space: z.string().optional().describe("Destination space slug (omit to keep in same space)"),
@@ -258,7 +255,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "doc_duplicate",
-    "Copy a document, optionally into a different space, section, or path. Defaults to `<source>-copy.md` in the same place.",
+    'Copy a document (identified by ref, e.g. "engineering:architecture/api-design.md"), optionally into a different space, section, or path. Defaults to `<source>-copy.md` in the same place.',
     {
       ref: z.string().describe(REF_DESC),
       target_space: z.string().optional().describe("Destination space slug (default: same space)"),
@@ -284,7 +281,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "doc_delete",
-    "Permanently delete a document and all its versions. Cannot be undone.",
+    'Permanently delete a document by ref (e.g. "engineering:architecture/api-design.md") and all its versions. Cannot be undone.',
     {
       ref: z.string().describe(REF_DESC),
     },
@@ -297,7 +294,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "doc_versions",
-    "List a document's version history with version number, content hash, and creation date.",
+    'List a document\'s version history by ref (e.g. "engineering:architecture/api-design.md") with version number, content hash, and creation date.',
     {
       ref: z.string().describe(REF_DESC),
     },
@@ -315,7 +312,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "comment_add",
-    "Add a comment to a document, or reply to an existing thread. Optionally anchor to a specific text passage for inline review.",
+    'Add a comment to a document by ref (e.g. "engineering:architecture/api-design.md"), or reply to an existing thread. Optionally anchor to a specific text passage for inline review.',
     {
       ref: z.string().describe(REF_DESC),
       body: z.string().describe("Comment text (markdown supported)"),
@@ -341,7 +338,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "comment_list",
-    "List comments on a document, threaded by parent. Resolved comments are hidden unless include_resolved is set.",
+    'List comments on a document by ref (e.g. "engineering:architecture/api-design.md"), threaded by parent. Resolved comments are hidden unless include_resolved is set.',
     {
       ref: z.string().describe(REF_DESC),
       include_resolved: z.boolean().optional().describe("Include resolved/closed comments (default: false)"),
