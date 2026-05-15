@@ -50,11 +50,7 @@ describe("renderMarkdown", () => {
     expect(html).toContain("display");
   });
 
-  // TODO(phase-3-cleanup): rehype-sanitize prefixes IDs with `user-content-`
-  // by default (DOM-clobber defense). Either we accept the prefix and update
-  // the assertion (and CSS that targets these IDs), or override the schema
-  // with `clobberPrefix: ''`. Pre-existing; tests never ran in CI before.
-  it.skip("adds slugs to headings", async () => {
+  it("adds slugs to headings", async () => {
     const html = await renderMarkdown("## My Section");
     expect(html).toContain('id="my-section"');
   });
