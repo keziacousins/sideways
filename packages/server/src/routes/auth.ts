@@ -275,7 +275,7 @@ export function createAuthRoutes(db: Database) {
   async function resolveConsentUser(
     subject: string,
   ): Promise<{ user: { id: string; email: string; name: string } | null; conflict?: true }> {
-    let user = await db.query.users.findFirst({
+    const user = await db.query.users.findFirst({
       where: eq(users.hydraSubject, subject),
     });
     if (user) return { user };
