@@ -356,6 +356,16 @@ program
         const key = syncKey(r.sectionSlug, r.path);
         const tracked = syncState.files[key];
 
+        // Remote hasn't moved since last sync — skip without fetching or
+        // rewriting the local file. Without this, every pull re-fetches
+        // every doc and rewrites every file (touching mtimes and, more
+        // damagingly, exposing any silent push/pull lossiness like the
+        // frontmatter-strip bug).
+        if (tracked && r.contentHash === tracked.remoteHash && !opts.force) {
+          totalSkipped++;
+          continue;
+        }
+
         // Conflict check
         if (tracked && !opts.force) {
           try {
