@@ -25,12 +25,21 @@ export interface RenderOptions {
  * Create the shared remark/rehype processor.
  * Used by both the web viewer and the PDF pipeline.
  */
-// Sanitize schema: allow KaTeX, highlight.js classes, heading IDs, task list checkboxes
+// Sanitize schema: allow KaTeX, highlight.js classes, heading IDs, task list checkboxes.
+// hast-util-sanitize's per-tag attribute lists OVERRIDE the `*` wildcard (they
+// don't merge), so any tag we want className on needs it listed explicitly.
+// `<a>` defaults to allowing only `data-footnote-backref` as a className value;
+// we override to allow any class so wiki-link, etc. survive.
 const sanitizeSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] || []), "className", "id", "style"],
+    // hast-util-sanitize takes the FIRST matching attribute definition. The
+    // default schema for <a> has a restrictive [['className', 'data-footnote-
+    // backref']] entry that would match first and strip everything else, so
+    // we prepend the permissive 'className' so it wins.
+    a: ["className", ...(defaultSchema.attributes?.["a"] || [])],
     input: ["type", "checked", "disabled"],
     span: [...(defaultSchema.attributes?.["span"] || []), "className", "style"],
     div: [...(defaultSchema.attributes?.["div"] || []), "className", "style"],
