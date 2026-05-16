@@ -344,10 +344,15 @@ program
 
       let totalPulled = 0;
       let totalSkipped = 0;
+      const undeclaredSectionCounts = new Map<string, number>();
 
       for (const r of syncInfo) {
         const mountRel = sectionPathMap.get(r.sectionSlug);
         if (!mountRel) {
+          undeclaredSectionCounts.set(
+            r.sectionSlug,
+            (undeclaredSectionCounts.get(r.sectionSlug) ?? 0) + 1,
+          );
           totalSkipped++;
           continue;
         }
@@ -401,6 +406,16 @@ program
 
       syncState.lastSync = new Date().toISOString();
       writeSyncState(syncRoot, syncState);
+
+      if (undeclaredSectionCounts.size > 0) {
+        console.log("\nSections on remote not mapped in .sideways.yml (skipped):");
+        const sortedSections = [...undeclaredSectionCounts.entries()].sort(
+          (a, b) => a[0].localeCompare(b[0]),
+        );
+        for (const [section, count] of sortedSections) {
+          console.log(`  ${section} — ${count} doc${count !== 1 ? "s" : ""}`);
+        }
+      }
 
       if (totalPulled === 0) {
         console.log("Nothing to pull.");
@@ -709,13 +724,37 @@ program
       }
     }
 
-    // Check for remote-only files
+    // Check for remote-only files. Two cases:
+    //  - Section IS declared in .sideways.yml: show the new-remote file at
+    //    its local mount path (the same place pull will write it).
+    //  - Section is NOT declared: skip the per-file lines (pull won't touch
+    //    these — a single remote space can host docs from multiple local
+    //    repos), and emit one summary line per skipped section so the user
+    //    knows they exist.
     const localKeys = new Set(files.map(f => syncKey(f.sectionSlug, f.path)));
+    const undeclaredSectionCounts = new Map<string, number>();
     for (const remote of remoteFiles) {
       const key = syncKey(remote.sectionSlug, remote.path);
-      if (!localKeys.has(key)) {
-        show("new-remote", { relPath: `${remote.sectionSlug}/${remote.path}`, sectionSlug: remote.sectionSlug, path: remote.path });
+      if (localKeys.has(key)) continue;
+      const mountRel = config.sections[remote.sectionSlug];
+      if (mountRel) {
+        const relPath = normalise(join(mountRel, remote.path));
+        show("new-remote", { relPath, sectionSlug: remote.sectionSlug, path: remote.path });
         hasChanges = true;
+      } else {
+        undeclaredSectionCounts.set(
+          remote.sectionSlug,
+          (undeclaredSectionCounts.get(remote.sectionSlug) ?? 0) + 1,
+        );
+      }
+    }
+    if (undeclaredSectionCounts.size > 0) {
+      console.log("\nSections on remote not mapped in .sideways.yml (not pulled):");
+      const sortedSections = [...undeclaredSectionCounts.entries()].sort(
+        (a, b) => a[0].localeCompare(b[0]),
+      );
+      for (const [section, count] of sortedSections) {
+        console.log(`  ${section} — ${count} doc${count !== 1 ? "s" : ""}`);
       }
     }
 
