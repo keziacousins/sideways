@@ -32,11 +32,48 @@ import type { SyncInfo } from "./api.js";
 
 const program = new Command();
 
+const CLI_VERSION = process.env.SIDEWAYS_VERSION || "dev";
+
 program
   .name("sideways")
   .description("Sideways CLI — push, pull, and manage documentation")
-  .version(process.env.SIDEWAYS_VERSION || "dev")
+  .version(CLI_VERSION)
   .option("--as <name>", "Act as a named agent (e.g. --as Claude)");
+
+// ── version (verbose) ────────────────────────────────────────────────
+//
+// `sideways --version` (commander's built-in) prints just the bundle
+// version, no network. `sideways version` also prints the remote API's
+// version from /health, and flags drift — catches the "I'm running a
+// stale local CLI against a newer server" case.
+
+program
+  .command("version")
+  .description("Show CLI version and the configured remote's API version")
+  .action(async () => {
+    console.log(`cli:     ${CLI_VERSION}`);
+    const config = findConfig();
+    if (!config) {
+      console.log("remote:  (no .sideways.yml — run `sideways init` to configure)");
+      return;
+    }
+    try {
+      const res = await fetch(`${config.api}/health`);
+      if (!res.ok) {
+        console.log(`remote:  (${config.api} returned ${res.status})`);
+        return;
+      }
+      const body = await res.json();
+      const remoteVersion = body.version || "unknown";
+      console.log(`remote:  ${remoteVersion} (${config.api})`);
+      if (remoteVersion !== CLI_VERSION && CLI_VERSION !== "dev") {
+        console.log(`\n⚠ Local CLI and remote API versions differ.`);
+        console.log(`  Update the local CLI: curl -fsSL ${config.api}/install.sh | sh -s -- ${config.api}`);
+      }
+    } catch (e: any) {
+      console.log(`remote:  (could not reach ${config.api}: ${e.message})`);
+    }
+  });
 
 // ── init ──────────────────────────────────────────────────────────────
 
