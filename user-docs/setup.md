@@ -2,10 +2,10 @@
 
 ## Installing the CLI
 
-Run this in your terminal to install the Sideways CLI:
+Run this in your terminal to install the Sideways CLI (pass your instance URL as the script argument):
 
 ```bash
-curl -fsSL https://your-sideways-instance/install.sh | sh
+curl -fsSL https://your-sideways-instance/install.sh | sh -s -- https://your-sideways-instance
 ```
 
 Or download manually from the Setup page on your Sideways instance.
@@ -159,13 +159,14 @@ ignore:
 When an AI agent (like Claude) uses the CLI, identify it with `--as`:
 
 ```bash
-SIDEWAYS_ACTOR="Claude" sideways push
+sideways comment docs/api-design.md "Looks good" --as "Claude"
 ```
 
-Or per-command:
+Or set `SIDEWAYS_ACTOR` once for a whole session:
 
 ```bash
-sideways comment docs/api-design.md "Looks good" --as "Claude"
+export SIDEWAYS_ACTOR="Claude"
+sideways push
 ```
 
 Comments and notifications will show "Claude via Your Name".

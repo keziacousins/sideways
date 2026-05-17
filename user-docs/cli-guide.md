@@ -38,7 +38,7 @@ See [[setup|Setup]] for installation instructions.
 |---------|-------------|
 | `sideways comments <file>` | List comments (threaded) |
 | `sideways comment <file> <body>` | Add a comment |
-| `sideways resolve <file> <id>` | Toggle resolve/reopen |
+| `sideways resolve <comment-id>` | Toggle resolve/reopen (looked up by ID — no file path) |
 
 Comment options:
 - `--anchor <text>` — anchor to specific text
@@ -63,13 +63,23 @@ Comment options:
 | `sideways whoami` | Show current user |
 | `sideways keys` | List API keys |
 
+### Misc
+
+| Command | Description |
+|---------|-------------|
+| `sideways version` | Show CLI and configured-remote API versions (warns on drift) |
+| `sideways themes` | List print themes available on the configured remote |
+| `sideways section <file> <slug>` | Move a doc to a different section within the space |
+| `sideways migrate-config` | One-shot rewrite of a legacy `.sideways.yml` to the current schema |
+
 ### Global Options
 
 | Option | Description |
 |--------|-------------|
 | `--as <name>` | Act as a named agent (e.g. `--as Claude`) |
-| `--space <slug>` | Override space from config |
 | `--version` | Show version |
+
+Most subcommands also accept `--space <slug>` to override the space configured in `.sideways.yml` (pass it to the subcommand, not the program: `sideways status --space other-space`).
 
 ## File Identifiers
 
@@ -147,7 +157,7 @@ This fetches remote content for files with mismatched hashes and aligns sync sta
 
 ```yaml
 space: my-project
-spaceName: My Project
+name: My Project
 api: https://your-sideways-instance
 sections:
   default: .

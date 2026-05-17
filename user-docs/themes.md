@@ -29,7 +29,7 @@ A theme is a JSON object with these properties:
   "coverSubtitle": "Engineering Documentation",
   "fonts": {
     "display": "Georgia",
-    "displayWeight": "700",
+    "displayWeight": "500",
     "body": "Georgia",
     "mono": "Fira Code"
   },
