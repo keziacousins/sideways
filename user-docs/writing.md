@@ -61,7 +61,14 @@ Link to other documents in the same space using double brackets. Three forms, in
 See [[overview]] for details.
 ```
 
-The renderer looks for a doc named `overview.md`, preferring (in order): same directory as the linking doc → same section → space-wide. If exactly one matches, it links. Ambiguous matches (e.g. several `overview.md` files in different directories) render as marked-but-unresolved.
+The renderer looks for a doc named `overview.md`, preferring (in order):
+
+1. same directory as the linking doc,
+2. same section (any directory) — uses the unique basename if there's only one,
+3. a section slug whose section has an `index.md` (so `[[architecture]]` resolves to `architecture/index.md`),
+4. space-wide — uses the unique basename across the whole space.
+
+If exactly one matches, it links. Ambiguous matches (several `overview.md` files at the same precedence layer) render as marked-but-unresolved.
 
 **Path-qualified** — section-relative path, no `.md`:
 
@@ -116,10 +123,10 @@ If no frontmatter title is set, Sideways extracts the title from the first `# he
 Click the edit icon in the document toolbar to open the side-by-side editor:
 
 - **Left pane**: markdown textarea with monospace font
-- **Right pane**: live rendered preview
-- **Scroll sync**: clicking in the editor scrolls the preview to the corresponding heading
-- **Save**: Cmd+S or the Save button
-- **Cancel**: Escape or the Cancel button
+- **Right pane**: live rendered preview (debounced as you type)
+- **Scroll sync**: clicking or moving the cursor in the editor scrolls the preview to the nearest heading above the cursor
+- **Save**: click the Save button
+- **Cancel**: click the Cancel button
 
 The editor supports wiki-link autocomplete — type `[[` to insert links to other documents.
 

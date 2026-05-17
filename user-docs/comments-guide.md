@@ -60,10 +60,10 @@ Comments support inline markdown:
 
 - `**bold**` and `*italic*`
 - `` `inline code` ``
-- Wiki-links: `[[architecture/api-design|API Design Guide]]` (path-qualified, or bare `[[api-design]]` for same-section lookup)
+- Wiki-links: `[[section/path|Display text]]` — the target is used verbatim as the URL path after `/s/<space>/`, so include the section
 - Line breaks
 
-Wiki-links in comments render as clickable links to other documents.
+Wiki-link resolution in comments is simpler than in documents: there's no same-directory or same-section fallback. Use the full `section/path` form for a working link.
 
 ## Notifications
 

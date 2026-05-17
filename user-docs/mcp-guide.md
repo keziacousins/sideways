@@ -32,7 +32,7 @@ Add to `.mcp.json` in your project:
   "mcpServers": {
     "sideways": {
       "command": "node",
-      "args": ["/path/to/sideways.cjs"],
+      "args": ["/path/to/sideways-mcp.cjs"],
       "env": {
         "SIDEWAYS_API_URL": "https://your-sideways-instance",
         "SIDEWAYS_API_KEY": "sk-your-api-key"
@@ -41,6 +41,8 @@ Add to `.mcp.json` in your project:
   }
 }
 ```
+
+The installer drops `sideways-mcp.cjs` alongside `sideways.cjs` in `~/.local/bin/` — point `args` at that file (not the CLI bundle).
 
 ## Available Tools
 
