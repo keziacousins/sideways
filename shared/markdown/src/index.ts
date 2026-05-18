@@ -103,8 +103,9 @@ export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.
  * cached entries from previous renderer versions are no longer served.
  *
  * v3: restored DOM-clobber prefix on element IDs + autolink hrefs.
+ * v4: wikilinks now parse `#fragment` suffixes and emit prefixed hrefs.
  */
-export const RENDERER_VERSION = "v3";
+export const RENDERER_VERSION = "v4";
 
 /**
  * Render markdown to HTML string.
