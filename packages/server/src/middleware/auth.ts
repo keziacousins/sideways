@@ -22,15 +22,53 @@ declare module "hono" {
   }
 }
 
-/** Names a header-supplied actor cannot use — avoid impersonating built-ins. */
+/**
+ * Names an actor identity cannot impersonate. Three flavours of reserve:
+ *  - Built-in/admin identities the product itself uses or is likely to use.
+ *  - Vendor/AI brand names a DCR'd client's `client_name` would otherwise
+ *    let an attacker register and route into the actor field unchecked.
+ *  - The product name and common variations.
+ *
+ * Comparison is against the NFKC-normalised, lowercase, whitespace-collapsed
+ * form of the supplied name — homoglyph and spacing tricks don't bypass it.
+ */
 const RESERVED_ACTOR_NAMES = new Set([
+  // Built-in / admin
   "system",
   "sideways",
   "sideways system",
+  "sideways bot",
   "admin",
   "administrator",
   "root",
   "anonymous",
+  "moderator",
+  "support",
+  "owner",
+  "user",
+  "official",
+  // AI / agent brand names commonly impersonated in comment phishing
+  "claude",
+  "anthropic",
+  "openai",
+  "chatgpt",
+  "gpt",
+  "gpt-4",
+  "gpt-5",
+  "copilot",
+  "github copilot",
+  "gemini",
+  "google",
+  "deepmind",
+  "meta",
+  "llama",
+  "mistral",
+  "perplexity",
+  "ai",
+  "bot",
+  "assistant",
+  "agent",
+  "connector",
 ]);
 
 /**
@@ -38,11 +76,18 @@ const RESERVED_ACTOR_NAMES = new Set([
  * header or a DCR'd client's `client_name`. Returns the cleaned name, or
  * null if it's unusable (empty after stripping, too long, control
  * characters, or on the reserved list).
+ *
+ * Normalisation order matters: control-strip → NFKC → collapse internal
+ * whitespace → compare against reserved names in lowercase. Without NFKC,
+ * Cyrillic 'а' (U+0430) reading as Latin 'a' bypasses the list. Without
+ * whitespace collapse, "claude  bot" reaches the actor field.
  */
 export function sanitiseActorName(raw: string): string | null {
-  // \p{C} = Unicode "Other" category: control chars (C0/C1, DEL), format
-  // marks, surrogates. None of these belong in a display name.
-  const stripped = raw.replace(/\p{C}/gu, "").trim();
+  const stripped = raw
+    .replace(/\p{C}/gu, "")      // C0/C1 controls, format marks, surrogates
+    .normalize("NFKC")             // canonical compatibility form
+    .replace(/\s+/g, " ")         // collapse runs of whitespace
+    .trim();
   if (!stripped || stripped.length > 50) return null;
   if (RESERVED_ACTOR_NAMES.has(stripped.toLowerCase())) return null;
   return stripped;
