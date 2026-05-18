@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { getCookie, setCookie } from "hono/cookie";
 import { eq } from "drizzle-orm";
 import { Buffer } from "node:buffer";
 import { createHash, randomBytes, timingSafeEqual as nodeTimingSafeEqual } from "node:crypto";
@@ -57,6 +58,28 @@ function newPkcePair(): { verifier: string; challenge: string } {
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   return { verifier, challenge };
 }
+
+/**
+ * Active consent flows that have passed the GET /consent step. The cookie
+ * tying the browser to a session is set there, and POST /consent/decide
+ * validates it before accepting/rejecting on Hydra. Without this binding
+ * /consent/decide accepts any consent_challenge from any caller, which
+ * lets anyone with (or able to guess) a challenge grant tokens on behalf
+ * of its subject. Stored server-side so the cookie value itself is just
+ * an opaque random id.
+ */
+const consentSessions = new Map<
+  string,
+  { challenge: string; subject: string; expiresAt: number }
+>();
+
+const CONSENT_SESSION_COOKIE = "sw_consent_session";
+const CONSENT_SESSION_TTL_MS = 10 * 60_000; // 10 minutes
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of consentSessions) if (v.expiresAt < now) consentSessions.delete(k);
+}, 60_000);
 
 export function createAuthRoutes(db: Database) {
   const router = new Hono();
@@ -482,6 +505,23 @@ export function createAuthRoutes(db: Database) {
       // we have to check both.
       const shouldSkipUi = consentRequest.skip || consentRequest.client?.skip_consent;
       if (!shouldSkipUi) {
+        // Bind the browser session to this consent_challenge so
+        // /consent/decide can verify the caller actually walked through
+        // Hydra's login → consent flow rather than just posting a
+        // challenge string from elsewhere.
+        const sessionId = randomBytes(32).toString("base64url");
+        consentSessions.set(sessionId, {
+          challenge,
+          subject: consentRequest.subject,
+          expiresAt: Date.now() + CONSENT_SESSION_TTL_MS,
+        });
+        setCookie(c, CONSENT_SESSION_COOKIE, sessionId, {
+          httpOnly: true,
+          sameSite: "Lax",
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          maxAge: Math.floor(CONSENT_SESSION_TTL_MS / 1000),
+        });
         return c.redirect(`${env.publicUrl}/auth/consent?consent_challenge=${challenge}`);
       }
 
@@ -552,6 +592,33 @@ export function createAuthRoutes(db: Database) {
     const { consent_challenge: challenge, accept } = body;
     if (!challenge) return c.json({ error: "Missing consent_challenge" }, 400);
 
+    // Browser-session binding (M1): the consent UI handed this user the
+    // sw_consent_session cookie when /consent rendered. Refuse decisions
+    // whose cookie doesn't match the challenge in the body. Drops the
+    // attack surface to "an attacker holding both a valid consent
+    // challenge and the cookie tied to it".
+    const sessionId = getCookie(c, CONSENT_SESSION_COOKIE);
+    if (!sessionId) {
+      return c.json({ error: "Consent session expired. Please start the authorization again." }, 401);
+    }
+    const session = consentSessions.get(sessionId);
+    if (!session || session.expiresAt < Date.now()) {
+      consentSessions.delete(sessionId);
+      return c.json({ error: "Consent session expired. Please start the authorization again." }, 401);
+    }
+    if (session.challenge !== challenge) {
+      return c.json({ error: "Consent challenge does not match the current session." }, 403);
+    }
+    // The session is single-use whether the user accepts or rejects.
+    consentSessions.delete(sessionId);
+    setCookie(c, CONSENT_SESSION_COOKIE, "", {
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 0,
+    });
+
     try {
       if (!accept) {
         const completion = await hydraAdmin(
@@ -570,6 +637,12 @@ export function createAuthRoutes(db: Database) {
       const consentRequest = await hydraAdmin(
         `/admin/oauth2/auth/requests/consent?consent_challenge=${challenge}`,
       );
+      // Defensive: re-fetched challenge must still target the same subject
+      // we recorded when the UI was first shown. Mitigates any (unlikely)
+      // race where the underlying Hydra state shifted mid-flow.
+      if (consentRequest.subject !== session.subject) {
+        return c.json({ error: "Consent subject changed since this UI was opened." }, 403);
+      }
       const { user, conflict } = await resolveConsentUser(consentRequest.subject);
       if (conflict) {
         return c.json(
