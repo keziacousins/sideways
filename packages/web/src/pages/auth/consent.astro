@@ -9,7 +9,7 @@ const consentChallenge = Astro.url.searchParams.get("consent_challenge");
 // flash of "loading…" in front of the user's consent decision. If this
 // fails we render an error card instead.
 let details:
-  | { client_name: string; client_id: string; scopes: string[]; subject_email: string | null }
+  | { client_name: string; client_id: string; scopes: string[]; subject_email: string | null; is_dcr?: boolean }
   | null = null;
 let detailsError: string | null = null;
 
@@ -58,6 +58,16 @@ const SCOPE_LABELS: Record<string, string> = {
           <p class="auth-subtitle">
             <strong>{details.client_name}</strong> is requesting access to your Sideways account.
           </p>
+
+          {details.is_dcr && (
+            <div class="consent-warning">
+              <strong>Unverified third-party connector.</strong>
+              This application registered itself; Sideways hasn&apos;t verified
+              its identity. The name above was chosen by the application,
+              not us. Only continue if you started this connection from a
+              vendor you trust.
+            </div>
+          )}
 
           <ul class="consent-scopes">
             {details.scopes.map((s) => (
@@ -193,6 +203,23 @@ const SCOPE_LABELS: Record<string, string> = {
     font-size: var(--sw-text-xs);
     color: var(--sw-text-ghost);
     line-height: 1.5;
+  }
+
+  .consent-warning {
+    margin: 0 0 1.25rem;
+    padding: 0.85rem 1rem;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: var(--sw-radius-md);
+    color: var(--sw-text-primary);
+    font-size: var(--sw-text-xs);
+    line-height: 1.55;
+  }
+
+  .consent-warning strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--sw-text-primary);
   }
 
   .consent-actions {

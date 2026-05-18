@@ -13,6 +13,7 @@ import { createThemeRoutes } from "./routes/themes.js";
 import { createNotificationRoutes } from "./routes/notifications.js";
 import { createSearchRoutes } from "./routes/search.js";
 import { createShareRoutes, createInviteRoutes } from "./routes/share.js";
+import { createDcrRoutes } from "./routes/dcr.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { requestLogMiddleware } from "./middleware/requestLog.js";
 import { logger } from "./logger.js";
@@ -64,6 +65,7 @@ const PUBLIC_API_PATHS = new Set([
   "/api/auth/logout",                 // Hydra logout challenge redirect target
   "/api/auth/authorize",              // OAuth authorize redirect builder
   "/api/auth/token",                  // OAuth token exchange (client credentials)
+  "/api/oauth2/register",             // RFC 7591 DCR wrapper — own policy + rate limit
 ]);
 
 // Prefix-matched public surfaces (e.g. the MCP transport and invite tokens
@@ -150,12 +152,23 @@ app.all("/oauth2/*", async (c) => {
 // RFC 8414 alias. Hydra v2.3 only serves /.well-known/openid-configuration,
 // not /.well-known/oauth-authorization-server. The MCP spec permits either,
 // but advertising both removes a guessing-game on the client side.
+//
+// We also override the registration_endpoint Hydra would otherwise return
+// — public DCR has to land on our policy wrapper, not Hydra directly.
 app.get("/.well-known/oauth-authorization-server", async () => {
   const url = new URL("/.well-known/openid-configuration", env.hydraPublicUrl);
   const res = await fetch(url.toString());
-  return new Response(res.body, {
-    status: res.status,
-    headers: { "content-type": res.headers.get("content-type") || "application/json" },
+  if (!res.ok) {
+    return new Response(res.body, {
+      status: res.status,
+      headers: { "content-type": res.headers.get("content-type") || "application/json" },
+    });
+  }
+  const doc = await res.json();
+  doc.registration_endpoint = `${env.publicApiUrl}/oauth2/register`;
+  return new Response(JSON.stringify(doc), {
+    status: 200,
+    headers: { "content-type": "application/json" },
   });
 });
 
@@ -185,6 +198,7 @@ app.route("/api/notifications", createNotificationRoutes(db));
 app.route("/api/search", createSearchRoutes(db));
 app.route("/api/spaces", createShareRoutes(db));
 app.route("/api/invite", createInviteRoutes(db));
+app.route("/api/oauth2", createDcrRoutes());
 
 // Cleanup expired API keys every hour
 import { lt } from "drizzle-orm";
