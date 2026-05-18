@@ -46,14 +46,16 @@ describe("renderMarkdown", () => {
     expect(html).toContain("display");
   });
 
-  it("adds slugs to headings", async () => {
+  it("adds slugs to headings (with DOM-clobber prefix)", async () => {
     const html = await renderMarkdown("## My Section");
-    expect(html).toContain('id="my-section"');
+    // hast-util-sanitize prefixes element IDs with `user-content-` to
+    // defend against `document.<id>` DOM-clobber attacks via user content.
+    expect(html).toContain('id="user-content-my-section"');
   });
 
-  it("wraps headings in autolinks", async () => {
+  it("wraps headings in autolinks whose hrefs match the prefixed id", async () => {
     const html = await renderMarkdown("## My Section");
-    expect(html).toContain('href="#my-section"');
+    expect(html).toContain('href="#user-content-my-section"');
   });
 
   it("accepts web and pdf targets", async () => {

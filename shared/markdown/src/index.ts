@@ -25,6 +25,12 @@ export interface RenderOptions {
  * Create the shared remark/rehype processor.
  * Used by both the web viewer and the PDF pipeline.
  */
+// Prefix applied to element IDs in the rendered doc to defend against
+// DOM clobbering. Must match what hast-util-sanitize uses (its default).
+// Exposed so the rendering pages can ship a small client-side shim that
+// resolves external `#anchor` URLs after the prefix has been applied.
+export const ID_CLOBBER_PREFIX = "user-content-";
+
 // Sanitize schema: allow KaTeX, highlight.js classes, heading IDs, task list checkboxes.
 // hast-util-sanitize's per-tag attribute lists OVERRIDE the `*` wildcard (they
 // don't merge), so any tag we want className on needs it listed explicitly.
@@ -32,13 +38,11 @@ export interface RenderOptions {
 // we override to allow any class so wiki-link, etc. survive.
 const sanitizeSchema = {
   ...defaultSchema,
-  // Disable the DOM-clobber prefix. Default behaviour prefixes element IDs
-  // with `user-content-` to defend against `document.<id>`-style clobbering,
-  // but rehype-autolink-headings runs BEFORE sanitiser and emits hrefs
-  // without the prefix — so heading auto-links and external `#anchor` URLs
-  // never resolve to their headings. We trust author content enough to
-  // render arbitrary markdown; clobber defence isn't load-bearing here.
-  clobberPrefix: "",
+  // We keep hast-util-sanitize's default clobberPrefix ('user-content-').
+  // rehype-autolink-headings is configured below to emit hrefs with the
+  // same prefix so heading auto-links keep working. External '#foo' URLs
+  // are resolved by a small DOMContentLoaded shim in the doc-rendering
+  // page (looks for the prefixed id when the bare one isn't found).
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] || []), "className", "id", "style"],
@@ -71,7 +75,16 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
     .use(remarkWikiLinks(options.wikiLinks))
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeSlug)
-    .use(rehypeAutolinkHeadings, { behavior: "wrap" })
+    .use(rehypeAutolinkHeadings, {
+      behavior: "wrap",
+      // Emit hrefs that already include the clobber prefix the sanitiser
+      // will apply to the heading's id. Without this the autolink target
+      // (#foo) doesn't match the rendered id (#user-content-foo).
+      properties(element) {
+        const id = element.properties?.id;
+        return typeof id === "string" && id ? { href: `#${ID_CLOBBER_PREFIX}${id}` } : {};
+      },
+    })
     .use(rehypeHighlight)
     .use(rehypeKatex)
     .use(rehypeSanitize, sanitizeSchema)
@@ -88,8 +101,10 @@ export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.
  * Cache-key segment for rendered HTML. Bump whenever renderer output changes
  * meaningfully (new plugin, changed sanitiser, wikilink semantics, etc.) so
  * cached entries from previous renderer versions are no longer served.
+ *
+ * v3: restored DOM-clobber prefix on element IDs + autolink hrefs.
  */
-export const RENDERER_VERSION = "v2";
+export const RENDERER_VERSION = "v3";
 
 /**
  * Render markdown to HTML string.
