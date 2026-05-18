@@ -442,18 +442,18 @@ export function createAuthRoutes(db: Database) {
    * comments and edits get attributed as "Claude via Kezia" etc, the
    * same way API-key actorName works for the CLI.
    *
-   * BUT: DCR'd clients pick their own `client_name`. Letting that flow
-   * into the actor field — even with the sanitiser — lets a third-party
-   * connector show up in comments as a near-builtin identity. The audit's
-   * H4 finding called this out. So: only honour client_name → actorName
-   * for clients we registered ourselves (no `metadata.dcr` flag). DCR'd
-   * clients are anonymous in the actor sense; the user's own name is the
-   * attribution, and the connector identity surfaces separately in the
-   * consent UI / future "connected apps" view.
+   * DCR'd clients pick their own `client_name`. Letting it flow into
+   * the actor field — even via the sanitiser — lets a third-party
+   * connector show up as a near-builtin identity, so we don't trust it.
+   * Instead, every DCR'd client gets the generic "Connector" label. This
+   * preserves the "an agent wrote this" audit signal in comments and
+   * notifications without trusting an attacker-chosen name. The specific
+   * connector identity stays on the consent screen, where the user saw
+   * the unverified-badge before authorising.
    */
   function actorNameForConsent(consentRequest: any, grantScope: string[]): string | null {
     if (!grantScope.includes("mcp")) return null;
-    if (consentRequest.client?.metadata?.dcr) return null;
+    if (consentRequest.client?.metadata?.dcr) return "Connector";
     const raw = consentRequest.client?.client_name;
     if (typeof raw !== "string" || !raw) return null;
     return sanitiseActorName(raw);
