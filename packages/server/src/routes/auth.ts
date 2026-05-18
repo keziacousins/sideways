@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { Buffer } from "node:buffer";
-import { timingSafeEqual as nodeTimingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual as nodeTimingSafeEqual } from "node:crypto";
 import { type Database, users } from "@sideways/db";
 import { env } from "../env.js";
 import { sanitiseActorName, type AuthUser } from "../middleware/auth.js";
@@ -38,6 +38,25 @@ async function hydraAdmin(path: string, options?: RequestInit) {
 
 /** Map to store recent Kratos login nonces for the OAuth2 bridge */
 const recentLogins = new Map<string, { subject: string; expiresAt: number }>();
+
+/**
+ * Hydra now requires PKCE for all public clients (see hydra.yml). The
+ * sideways-web client runs its auth flow through these server-side routes,
+ * so we generate and store the code_verifier here, keyed by the state
+ * parameter — never returning it to the browser.
+ */
+const pendingPkce = new Map<string, { verifier: string; expiresAt: number }>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of pendingPkce) if (v.expiresAt < now) pendingPkce.delete(k);
+}, 60_000);
+
+function newPkcePair(): { verifier: string; challenge: string } {
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
 
 export function createAuthRoutes(db: Database) {
   const router = new Hono();
@@ -598,12 +617,20 @@ export function createAuthRoutes(db: Database) {
     // Encode returnTo in state so it survives the OAuth redirect chain
     const state = `${stateRandom}:${Buffer.from(returnTo).toString("base64url")}`;
 
+    // PKCE: stash the verifier server-side keyed by state. Hydra is now
+    // configured to require PKCE for all public clients (H3); without
+    // sending a code_challenge the authorize call would 400.
+    const { verifier, challenge } = newPkcePair();
+    pendingPkce.set(state, { verifier, expiresAt: Date.now() + 10 * 60_000 });
+
     const authUrl = new URL(`${env.publicApiUrl}/oauth2/auth`);
     authUrl.searchParams.set("client_id", "sideways-web");
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("scope", "openid offline_access");
     authUrl.searchParams.set("redirect_uri", `${env.publicUrl}/auth/callback`);
     authUrl.searchParams.set("state", state);
+    authUrl.searchParams.set("code_challenge", challenge);
+    authUrl.searchParams.set("code_challenge_method", "S256");
     authUrl.searchParams.set("prompt", "login"); // force fresh login, don't reuse stale sessions
     if (nonce) authUrl.searchParams.set("login_hint", nonce);
 
@@ -612,11 +639,28 @@ export function createAuthRoutes(db: Database) {
 
   router.post("/token", async (c) => {
     const body = await c.req.parseBody();
+    const params = new URLSearchParams(body as Record<string, string>);
+
+    // If the caller is the sideways-web flow it sent `state`; look up the
+    // PKCE verifier we stored at /authorize time and inject it. DCR'd
+    // clients run their own browser-side flow and supply code_verifier
+    // themselves — for them, we pass the body through untouched.
+    const state = params.get("state");
+    if (state) {
+      const pending = pendingPkce.get(state);
+      if (pending) {
+        pendingPkce.delete(state);
+        if (!params.has("code_verifier")) {
+          params.set("code_verifier", pending.verifier);
+        }
+      }
+      params.delete("state"); // Hydra doesn't accept state on the token endpoint
+    }
 
     const tokenRes = await fetch(`${env.hydraPublicUrl}/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(body as Record<string, string>),
+      body: params,
     });
 
     const tokens = await tokenRes.json();

@@ -34,6 +34,13 @@ ttl:
 
 oauth2:
   expose_internal_errors: true
+  # OAuth 2.1 requires PKCE for public clients. Hydra defaults to false for
+  # both flags, which would let DCR'd public clients complete the code flow
+  # without a code_challenge — the canonical code-interception attack when
+  # combined with attacker-controlled redirect URIs. Enforce both:
+  pkce:
+    enforced: true
+    enforced_for_public_clients: true
 
 oidc:
   dynamic_client_registration:
