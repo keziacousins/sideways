@@ -37,7 +37,17 @@ async function hydraAdmin(path: string, options?: RequestInit) {
   return res.json();
 }
 
-/** Map to store recent Kratos login nonces for the OAuth2 bridge */
+/**
+ * Map to store recent Kratos login nonces for the OAuth2 bridge.
+ *
+ * NB: process-local. The nonce is consumed by the very next request from
+ * the same browser, so we never lose state mid-flow in a single-process
+ * deploy. If we ever run multiple API replicas behind a load balancer
+ * without sticky sessions, login nonces minted on instance A and
+ * presented to instance B would silently miss — symptom is "the login
+ * page shows correctly but you bounce back to login after submitting".
+ * Move to a shared store (Redis, Postgres) before scaling out.
+ */
 const recentLogins = new Map<string, { subject: string; expiresAt: number }>();
 
 /**

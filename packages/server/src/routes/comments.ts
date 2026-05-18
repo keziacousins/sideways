@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { createNotification, autoWatch, parseMentions } from "../lib/notify.js";
 import { resolveSection, findDocByPath } from "../lib/doc-resolver.js";
+import { validatePath } from "../middleware/validate.js";
 
 export function createCommentRoutes(db: Database) {
   const router = new Hono();
@@ -34,7 +35,14 @@ export function createCommentRoutes(db: Database) {
     const section = await resolveSection(db, space.id, c.req.param("section"));
     if (!section) return { error: c.json({ error: "Section not found" }, 404) };
 
-    const doc = await findDocByPath(db, space.id, section.id, c.req.param("path"));
+    // Same path validation the doc write routes apply — keeps read and
+    // write surfaces consistent and fast-rejects obviously malformed
+    // paths (.. segments, leading slashes, invalid chars).
+    const path = c.req.param("path");
+    const pathErr = validatePath(path);
+    if (pathErr) return { error: c.json({ error: pathErr }, 400) };
+
+    const doc = await findDocByPath(db, space.id, section.id, path);
     if (!doc) return { error: c.json({ error: "Document not found" }, 404) };
 
     return { space, section, doc };

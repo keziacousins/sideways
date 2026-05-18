@@ -123,7 +123,13 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const section = await resolveSection(db, space.id, sectionSlug);
     if (!section) return { error: c.json({ error: "Section not found" }, 404) };
 
+    // Reject malformed paths up front — same rules write routes already
+    // enforce. The DB lookup is parameterised so this isn't a SQLi
+    // mitigation, just a consistency / fast-reject guard.
     const path = c.req.param("path");
+    const pathErr = validatePath(path);
+    if (pathErr) return { error: c.json({ error: pathErr }, 400) };
+
     const doc = await findDocByPath(db, space.id, section.id, path);
     if (!doc) return { error: c.json({ error: "Not found" }, 404) };
 
