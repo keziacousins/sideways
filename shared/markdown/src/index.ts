@@ -1,4 +1,5 @@
 import { unified } from "unified";
+import { visit } from "unist-util-visit";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -9,6 +10,7 @@ import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import type { Root, Element } from "hast";
 import { remarkWikiLinks, type WikiLinkContext } from "./wikilinks.js";
 
 export interface RenderOptions {
@@ -67,6 +69,28 @@ const sanitizeSchema = {
   ],
 };
 
+/**
+ * Prefix `<a href="#foo">` hrefs to match the clobber-prefixed element
+ * ids we render. Runs after rehype-autolink-headings (whose hardcoded
+ * href would otherwise win over a user `properties` callback) and
+ * before rehype-sanitize. Covers heading auto-links AND inline markdown
+ * anchors written like `[section](#section)`.
+ *
+ * `<a href="#">` (browser "scroll to top") and empty fragments are left
+ * alone. Already-prefixed hrefs (defensive) are also left alone.
+ */
+function rehypePrefixAnchorHrefs() {
+  return (tree: Root) => {
+    visit(tree, "element", (node: Element) => {
+      if (node.tagName !== "a") return;
+      const href = node.properties?.href;
+      if (typeof href !== "string" || href.length < 2 || !href.startsWith("#")) return;
+      if (href.startsWith(`#${ID_CLOBBER_PREFIX}`)) return;
+      node.properties = { ...node.properties, href: `#${ID_CLOBBER_PREFIX}${href.slice(1)}` };
+    });
+  };
+}
+
 export function createProcessor(options: RenderOptions = { target: "web" }) {
   const processor = unified()
     .use(remarkParse)
@@ -75,16 +99,8 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
     .use(remarkWikiLinks(options.wikiLinks))
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeSlug)
-    .use(rehypeAutolinkHeadings, {
-      behavior: "wrap",
-      // Emit hrefs that already include the clobber prefix the sanitiser
-      // will apply to the heading's id. Without this the autolink target
-      // (#foo) doesn't match the rendered id (#user-content-foo).
-      properties(element) {
-        const id = element.properties?.id;
-        return typeof id === "string" && id ? { href: `#${ID_CLOBBER_PREFIX}${id}` } : {};
-      },
-    })
+    .use(rehypeAutolinkHeadings, { behavior: "wrap" })
+    .use(rehypePrefixAnchorHrefs)
     .use(rehypeHighlight)
     .use(rehypeKatex)
     .use(rehypeSanitize, sanitizeSchema)
@@ -104,8 +120,11 @@ export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.
  *
  * v3: restored DOM-clobber prefix on element IDs + autolink hrefs.
  * v4: wikilinks now parse `#fragment` suffixes and emit prefixed hrefs.
+ * v5: inline `[text](#foo)` anchors also get the clobber prefix; heading
+ *     auto-links now actually carry the prefixed href (the v3 attempt
+ *     was a no-op — rehype-autolink-headings overrides `properties.href`).
  */
-export const RENDERER_VERSION = "v4";
+export const RENDERER_VERSION = "v5";
 
 /**
  * Render markdown to HTML string.
