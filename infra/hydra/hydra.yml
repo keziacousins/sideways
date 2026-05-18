@@ -33,7 +33,11 @@ ttl:
   auth_code: 10m
 
 oauth2:
-  expose_internal_errors: true
+  # `expose_internal_errors: true` leaks Hydra-internal detail (DB errors,
+  # schema info, version) in OAuth error responses to clients. Useful in
+  # dev — flip on via the OAUTH2_EXPOSE_INTERNAL_ERRORS env var in
+  # compose.yml when you need to debug locally.
+  expose_internal_errors: false
   # OAuth 2.1 requires PKCE for public clients. Hydra defaults to false for
   # both flags, which would let DCR'd public clients complete the code flow
   # without a code_challenge — the canonical code-interception attack when
