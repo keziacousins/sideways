@@ -51,6 +51,13 @@ export const env = {
   kratosWebhookSecret: process.env.KRATOS_WEBHOOK_SECRET || "",
 
   /**
+   * Allow http://localhost redirect URIs on DCR'd OAuth clients. Off by
+   * default — DCR is intended for production connector vendors (claude.ai
+   * etc.) whose redirect URIs are public HTTPS. Flip on for local testing.
+   */
+  dcrAllowLocalhost: process.env.DCR_ALLOW_LOCALHOST === "true",
+
+  /**
    * Additional CORS origins beyond the public/dev defaults.
    * Comma-separated list of exact origins (scheme + host [+ port], no path).
    * e.g. CORS_ORIGINS="https://docs.example.com,https://staging.example.com"

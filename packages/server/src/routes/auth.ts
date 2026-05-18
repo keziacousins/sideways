@@ -405,13 +405,22 @@ export function createAuthRoutes(db: Database) {
 
   /**
    * Derive the agent identity for a consent request. For OAuth clients
-   * with the `mcp` scope, the client_name from DCR becomes the actor —
+   * with the `mcp` scope, a vetted client_name can become the actor —
    * comments and edits get attributed as "Claude via Kezia" etc, the
-   * same way API-key actorName works for the CLI. Null if the scope
-   * doesn't include mcp or the client_name doesn't sanitise.
+   * same way API-key actorName works for the CLI.
+   *
+   * BUT: DCR'd clients pick their own `client_name`. Letting that flow
+   * into the actor field — even with the sanitiser — lets a third-party
+   * connector show up in comments as a near-builtin identity. The audit's
+   * H4 finding called this out. So: only honour client_name → actorName
+   * for clients we registered ourselves (no `metadata.dcr` flag). DCR'd
+   * clients are anonymous in the actor sense; the user's own name is the
+   * attribution, and the connector identity surfaces separately in the
+   * consent UI / future "connected apps" view.
    */
   function actorNameForConsent(consentRequest: any, grantScope: string[]): string | null {
     if (!grantScope.includes("mcp")) return null;
+    if (consentRequest.client?.metadata?.dcr) return null;
     const raw = consentRequest.client?.client_name;
     if (typeof raw !== "string" || !raw) return null;
     return sanitiseActorName(raw);
@@ -514,6 +523,10 @@ export function createAuthRoutes(db: Database) {
         client_id: consentRequest.client?.client_id,
         scopes: requestedScopes.filter((s) => KNOWN_SCOPES.has(s)),
         subject_email: consentRequest.context?.email || null,
+        // True for clients that came in through public DCR. The consent
+        // page renders an "Unverified third-party connector" badge for
+        // these so users don't trust a self-chosen client_name.
+        is_dcr: Boolean(consentRequest.client?.metadata?.dcr),
       });
     } catch (e: any) {
       console.error("Consent details error:", e.message);
