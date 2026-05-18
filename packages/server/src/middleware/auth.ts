@@ -93,6 +93,26 @@ export function sanitiseActorName(raw: string): string | null {
   return stripped;
 }
 
+/**
+ * Looser sanitiser for OAuth client_name (e.g. on DCR). Same hygiene as
+ * sanitiseActorName — control-strip, NFKC, whitespace collapse, length
+ * cap — but no reserved-name check. The reserved list exists to stop
+ * impersonation in the *actor* field; for DCR'd clients the client_name
+ * never reaches actor (see actorNameForConsent's `metadata.dcr` guard).
+ * It surfaces only on the consent UI alongside an "Unverified
+ * third-party connector" badge, so genuinely-named connectors ("Claude",
+ * "Anthropic", "Copilot") shouldn't be blocked at registration time.
+ */
+export function sanitiseClientName(raw: string, maxLength: number): string | null {
+  const stripped = raw
+    .replace(/\p{C}/gu, "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!stripped || stripped.length > maxLength) return null;
+  return stripped;
+}
+
 /** Cached JWKS fetcher — validates JWT signatures against Hydra's public keys */
 export const JWKS = createRemoteJWKSet(
   new URL(`${env.hydraPublicUrl}/.well-known/jwks.json`),

@@ -18,7 +18,7 @@
 
 import { Hono } from "hono";
 import { env } from "../env.js";
-import { sanitiseActorName } from "../middleware/auth.js";
+import { sanitiseClientName } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { logger } from "../logger.js";
 
@@ -133,9 +133,9 @@ export function createDcrRoutes() {
       if (body.client_name.length > MAX_CLIENT_NAME_LENGTH) {
         return c.json({ error: "invalid_client_metadata", error_description: `client_name exceeds ${MAX_CLIENT_NAME_LENGTH} chars` }, 400);
       }
-      const sanitised = sanitiseActorName(body.client_name);
+      const sanitised = sanitiseClientName(body.client_name, MAX_CLIENT_NAME_LENGTH);
       if (!sanitised) {
-        return c.json({ error: "invalid_client_metadata", error_description: "client_name is empty after normalisation or matches a reserved name" }, 400);
+        return c.json({ error: "invalid_client_metadata", error_description: "client_name is empty after normalisation" }, 400);
       }
       clientName = sanitised;
     }
