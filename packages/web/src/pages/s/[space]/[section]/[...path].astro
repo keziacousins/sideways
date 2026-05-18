@@ -593,6 +593,23 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
 {doc && (
 <script>
+  // External anchor links use bare fragments ('#foo'), but the markdown
+  // renderer prefixes all element ids with 'user-content-' to defend
+  // against DOM-clobber attacks via user content. When someone follows
+  // a deep link with a bare fragment, find the prefixed element and
+  // scroll to it.
+  function scrollToPrefixedAnchor(): void {
+    const hash = location.hash.slice(1);
+    if (!hash) return;
+    if (document.getElementById(hash)) return; // bare anchor already resolves
+    const prefixed = document.getElementById("user-content-" + hash);
+    if (prefixed) prefixed.scrollIntoView();
+  }
+  window.addEventListener("DOMContentLoaded", scrollToPrefixedAnchor);
+  window.addEventListener("hashchange", scrollToPrefixedAnchor);
+</script>
+
+<script>
   // Watch toggle — swap between outline and filled bell
   const watchBtn = document.getElementById("watch-toggle") as HTMLButtonElement | null;
   if (watchBtn) {
