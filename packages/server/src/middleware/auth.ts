@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { type Database, users, apiKeys } from "@sideways/db";
 import { env } from "../env.js";
+import { INTERNAL_AUTH_HEADER, isLoopback, verifyInternalToken } from "./internalAuth.js";
 
 export interface AuthUser {
   id: string;
@@ -64,6 +65,31 @@ export const JWKS = createRemoteJWKSet(
 export function authMiddleware(db: Database) {
   return createMiddleware<{ Variables: { user: AuthUser | null } }>(
     async (c, next) => {
+      // Internal loopback auth — used by the MCP layer to invoke /api/*
+      // routes on behalf of a JWT-validated user without forwarding the
+      // user's MCP-audience token (see middleware/internalAuth.ts).
+      const internalToken = c.req.header(INTERNAL_AUTH_HEADER);
+      if (internalToken) {
+        const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming;
+        if (isLoopback(incoming?.socket?.remoteAddress)) {
+          const userId = verifyInternalToken(internalToken);
+          if (userId) {
+            const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+            c.set(
+              "user",
+              user
+                ? { id: user.id, email: user.email, name: user.name, displayName: user.name }
+                : null,
+            );
+            return next();
+          }
+        }
+        // Don't fall through to JWT validation — an internal-auth header
+        // that fails verification is a request that should be rejected.
+        c.set("user", null);
+        return next();
+      }
+
       const authHeader = c.req.header("Authorization");
 
       if (!authHeader?.startsWith("Bearer ")) {
@@ -94,13 +120,15 @@ export function authMiddleware(db: Database) {
         return next();
       }
 
-      // JWT path. Accept both the web API audience and the MCP audience —
-      // identity-wise they're equivalent (same user, same Hydra issuer);
-      // the distinction is for log clarity and future per-surface policy.
+      // JWT path. The general API surface only accepts apiAudience tokens.
+      // MCP-audience tokens are rejected here so a connector's JWT cannot
+      // bypass /api/mcp and reach the REST API directly; the /api/mcp
+      // route runs its own jwtVerify with audience=mcpAudience and then
+      // uses internal-auth tokens to invoke /api/* (see internalAuth.ts).
       try {
         const { payload } = await jwtVerify(token, JWKS, {
           issuer: env.hydraIssuerUrl,
-          audience: [env.apiAudience, env.mcpAudience],
+          audience: env.apiAudience,
         });
 
         // Custom claims injected at consent

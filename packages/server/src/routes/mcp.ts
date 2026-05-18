@@ -14,6 +14,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { jwtVerify } from "jose";
 import { registerTools, INSTRUCTIONS } from "@sideways/mcp/tools";
 import { JWKS } from "../middleware/auth.js";
+import { INTERNAL_AUTH_HEADER, signInternalToken } from "../middleware/internalAuth.js";
 import { env } from "../env.js";
 import { logger } from "../logger.js";
 import type { Database } from "@sideways/db";
@@ -37,15 +38,28 @@ export function createMcpRoutes(_db: Database) {
     }),
   );
 
-  function makeApiFetch(token: string) {
+  /**
+   * Build the apiFetch closure used by MCP tools. Two auth shapes:
+   *  - API-key token (sk-…): forwarded through as Bearer; the loopback
+   *    request hits the auth middleware which validates the key as usual.
+   *  - JWT user (with userId from a successfully validated MCP-audience
+   *    token): an internal-auth token is signed for that userId and sent
+   *    instead of the JWT. The middleware accepts it on loopback only,
+   *    so MCP-audience JWTs cannot reach /api/* directly from the network.
+   */
+  function makeApiFetch(auth: { kind: "apikey"; token: string } | { kind: "jwt"; userId: string }) {
     const apiUrl = `http://localhost:${env.port}`;
     return async (path: string, options?: RequestInit) => {
-      const headers: Record<string, string> = {
+      const baseHeaders: Record<string, string> = {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
         ...((options?.headers as Record<string, string>) || {}),
       };
-      const res = await fetch(`${apiUrl}${path}`, { ...options, headers });
+      if (auth.kind === "apikey") {
+        baseHeaders["Authorization"] = `Bearer ${auth.token}`;
+      } else {
+        baseHeaders[INTERNAL_AUTH_HEADER] = signInternalToken(auth.userId);
+      }
+      const res = await fetch(`${apiUrl}${path}`, { ...options, headers: baseHeaders });
       if (!res.ok) {
         const body = await res.text();
         logger.error({ path, status: res.status, body }, "MCP apiFetch error");
@@ -73,19 +87,32 @@ export function createMcpRoutes(_db: Database) {
     if (!auth?.startsWith("Bearer ")) return unauthorized(c, "invalid_token");
     const token = auth.slice(7);
 
-    // API keys pass through unchanged — downstream authMiddleware validates.
-    // For JWTs we verify up front so 401s carry the right WWW-Authenticate
-    // (and so DCR'd-client failures don't surface as opaque downstream errors).
-    if (!token.startsWith("sk-")) {
+    // Branch the auth used by makeApiFetch downstream.
+    let fetchAuth: { kind: "apikey"; token: string } | { kind: "jwt"; userId: string };
+    if (token.startsWith("sk-")) {
+      // API keys: the loopback request will re-validate via authMiddleware.
+      fetchAuth = { kind: "apikey", token };
+    } else {
+      // JWTs: verify here (audience=sideways-mcp) and surface a proper
+      // 401 + WWW-Authenticate on failure. Downstream calls use a signed
+      // internal-auth token so the MCP JWT never reaches /api/*.
+      let userId: string;
       try {
-        await jwtVerify(token, JWKS, {
+        const { payload } = await jwtVerify(token, JWKS, {
           issuer: env.hydraIssuerUrl,
           audience: env.mcpAudience,
         });
+        const ext = (payload as any).ext || {};
+        userId = ext.user_id;
+        if (!userId) {
+          logger.debug("MCP JWT missing ext.user_id");
+          return unauthorized(c, "invalid_token");
+        }
       } catch (err: any) {
         logger.debug({ err: err.message }, "MCP JWT verification failed");
         return unauthorized(c, "invalid_token");
       }
+      fetchAuth = { kind: "jwt", userId };
     }
 
     const method = c.req.method;
@@ -100,7 +127,7 @@ export function createMcpRoutes(_db: Database) {
 
     // Stateless: fresh server + transport per request, no session tracking
     const server = new McpServer({ name: "sideways", version: pkg.version }, { instructions: INSTRUCTIONS });
-    registerTools(server, makeApiFetch(token));
+    registerTools(server, makeApiFetch(fetchAuth));
 
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // Stateless mode — no session validation

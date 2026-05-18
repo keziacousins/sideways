@@ -347,10 +347,19 @@ export function createAuthRoutes(db: Database) {
 
   /**
    * Compute the set of access-token audiences we want to grant for a
-   * given consent request. claude.ai (and most MCP clients) don't send
-   * RFC 8707 resource indicators, so the requested set is usually empty
-   * — we add `mcpAudience` based on scope instead, which is the only
-   * signal we have that this token is destined for /api/mcp.
+   * given consent request.
+   *
+   * Rules:
+   *  - Never grant an audience the client isn't registered to use. This is
+   *    the key guarantee: a DCR'd MCP client (audience=[mcpAudience]) cannot
+   *    receive a token usable as an API web-session (apiAudience).
+   *  - If the client requested an audience via RFC 8707 resource indicators
+   *    and is allowed to use it, grant it.
+   *  - Static web/CLI clients are registered with apiAudience in their
+   *    allow-list and rely on it being granted by default.
+   *  - MCP-scoped requests pick up mcpAudience automatically (claude.ai
+   *    doesn't send resource indicators), provided the client is registered
+   *    for it.
    */
   function audiencesForConsent(
     consentRequest: any,
@@ -358,9 +367,14 @@ export function createAuthRoutes(db: Database) {
   ): string[] {
     const requestedAudience: string[] =
       consentRequest.requested_access_token_audience || [];
-    const audiences = new Set<string>([env.apiAudience, ...requestedAudience]);
-    if (grantScope.includes("mcp")) audiences.add(env.mcpAudience);
-    return Array.from(audiences);
+    const clientAllowed = new Set<string>(consentRequest.client?.audience || []);
+
+    const candidates = new Set<string>(requestedAudience);
+    if (clientAllowed.has(env.apiAudience)) candidates.add(env.apiAudience);
+    if (grantScope.includes("mcp") && clientAllowed.has(env.mcpAudience)) {
+      candidates.add(env.mcpAudience);
+    }
+    return Array.from(candidates).filter((a) => clientAllowed.has(a));
   }
 
   /**
@@ -368,14 +382,18 @@ export function createAuthRoutes(db: Database) {
    * grants for audiences not in the client's allow-list. Patch the
    * client record so the audiences we're about to grant survive the
    * first refresh — otherwise the connector dies 24h after issuance.
+   *
+   * Only adds mcpAudience for mcp-scoped clients; never adds apiAudience
+   * — the apiAudience grant requires explicit static registration.
    */
   async function ensureClientAudiences(
     client: any,
     requiredAudiences: string[],
   ): Promise<void> {
     const current = new Set<string>(client.audience || []);
-    if (requiredAudiences.every((a) => current.has(a))) return;
-    const updated = [...new Set([...current, ...requiredAudiences])];
+    const safeAudiences = requiredAudiences.filter((a) => a === env.mcpAudience);
+    if (safeAudiences.every((a) => current.has(a))) return;
+    const updated = [...new Set([...current, ...safeAudiences])];
     await hydraAdmin(`/admin/clients/${client.client_id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json-patch+json" },
