@@ -58,7 +58,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
       if (description) body.description = description;
       if (visibility) body.visibility = visibility;
 
-      const space = await apiFetch(`/api/spaces/${slug}`, {
+      const space = await apiFetch(`/api/spaces/${encodeURIComponent(slug)}`, {
         method: "PUT",
         body: JSON.stringify(body),
       });
@@ -92,6 +92,16 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
     return `${space}:${sectionSlug}/${path}`;
   }
 
+  /**
+   * URL-encode each segment of a doc path (which contains slashes) without
+   * encoding the slashes themselves. encodeURIComponent on the whole path
+   * would break API routing; encodeURI is too permissive. This keeps each
+   * segment safe to interpolate into a URL.
+   */
+  function encodePath(p: string): string {
+    return p.split("/").map(encodeURIComponent).join("/");
+  }
+
   /** Schema description shared by every `ref` arg, so renames stay consistent. */
   const REF_DESC =
     'Document ref: "<space>:<section>/<path>.md", e.g. "engineering:architecture/api-design.md". Copy verbatim from search or doc_list output.';
@@ -101,7 +111,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
     "List documents in a space. Each line is a doc_read-ready ref followed by the title.",
     { space: z.string().describe('Space slug, e.g. "engineering"') },
     async ({ space }) => {
-      const docs = await apiFetch(`/api/documents?space=${space}`);
+      const docs = await apiFetch(`/api/documents?space=${encodeURIComponent(space)}`);
       const text = docs
         .map((d: any) => {
           const tags = d.tags?.length ? ` [${d.tags.join(", ")}]` : "";
@@ -121,12 +131,12 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
     },
     async ({ ref, include_comments }) => {
       const { space, section, rest } = parseRef(ref);
-      const doc = await apiFetch(`/api/documents/${space}/${section}/${rest}`);
+      const doc = await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`);
       let content = doc.content;
 
       if (include_comments !== false) {
         try {
-          const comments = await apiFetch(`/api/comments/${space}/${section}/${rest}`);
+          const comments = await apiFetch(`/api/comments/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`);
           if (comments.length > 0) {
             const lines: string[] = [];
             for (const c of comments) {
@@ -162,7 +172,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
       if (title) body.title = title;
       if (tags) body.tags = tags;
 
-      const doc = await apiFetch(`/api/documents/${space}/${section}/${rest}`, {
+      const doc = await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`, {
         method: "PUT",
         body: JSON.stringify(body),
       });
@@ -183,7 +193,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
     },
     async ({ ref, edits }) => {
       const { space, section, rest } = parseRef(ref);
-      const doc = await apiFetch(`/api/documents/${space}/${section}/${rest}`);
+      const doc = await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`);
       let content: string = doc.content;
 
       for (let i = 0; i < edits.length; i++) {
@@ -201,7 +211,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
         content = content.slice(0, idx) + edit.new + content.slice(idx + edit.old.length);
       }
 
-      await apiFetch(`/api/documents/${space}/${section}/${rest}`, {
+      await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`, {
         method: "PUT",
         body: JSON.stringify({ content }),
       });
@@ -219,7 +229,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
     },
     async ({ ref, title }) => {
       const { space, section, rest } = parseRef(ref);
-      const doc = await apiFetch(`/api/documents/${space}/${section}/${rest}`, {
+      const doc = await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`, {
         method: "PATCH",
         body: JSON.stringify({ title }),
       });
@@ -243,7 +253,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
       if (target_section) body.targetSection = target_section;
       if (target_path) body.targetPath = target_path;
 
-      const doc = await apiFetch(`/api/documents/${space}/${section}/${rest}`, {
+      const doc = await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       });
@@ -269,7 +279,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
       if (target_section) body.targetSection = target_section;
       if (target_path) body.targetPath = target_path;
 
-      const doc = await apiFetch(`/api/documents/${space}/${section}/_duplicate/${rest}`, {
+      const doc = await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/_duplicate/${encodePath(rest)}`, {
         method: "POST",
         body: JSON.stringify(body),
       });
@@ -287,7 +297,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
     },
     async ({ ref }) => {
       const { space, section, rest } = parseRef(ref);
-      await apiFetch(`/api/documents/${space}/${section}/${rest}`, { method: "DELETE" });
+      await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`, { method: "DELETE" });
       return { content: [{ type: "text" as const, text: `Deleted ${ref}` }] };
     },
   );
@@ -300,7 +310,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
     },
     async ({ ref }) => {
       const { space, section, rest } = parseRef(ref);
-      const versions = await apiFetch(`/api/documents/${space}/${section}/_versions/${rest}`);
+      const versions = await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/_versions/${encodePath(rest)}`);
       const text = versions
         .map((v: any) => `v${v.version} — ${v.contentHash} — ${new Date(v.createdAt).toLocaleString()}`)
         .join("\n");
@@ -327,7 +337,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
       if (anchor_section) payload.anchorSection = anchor_section;
       if (parent_id) payload.parentId = parent_id;
 
-      const comment = await apiFetch(`/api/comments/${space}/${section}/${rest}`, {
+      const comment = await apiFetch(`/api/comments/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -346,7 +356,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
     async ({ ref, include_resolved }) => {
       const { space, section, rest } = parseRef(ref);
       const qs = include_resolved ? "?include_resolved=true" : "";
-      const comments = await apiFetch(`/api/comments/${space}/${section}/${rest}${qs}`);
+      const comments = await apiFetch(`/api/comments/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}${qs}`);
 
       if (comments.length === 0) {
         return { content: [{ type: "text" as const, text: "No comments on this document." }] };
@@ -386,7 +396,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
       comment_id: z.string().describe("Comment ID (from comment_list output)"),
     },
     async ({ comment_id }) => {
-      const comment = await apiFetch(`/api/comments/${comment_id}/resolve`, { method: "POST" });
+      const comment = await apiFetch(`/api/comments/${encodeURIComponent(comment_id)}/resolve`, { method: "POST" });
       return { content: [{ type: "text" as const, text: `Comment ${comment.resolved ? "resolved" : "reopened"}` }] };
     },
   );
