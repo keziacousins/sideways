@@ -94,4 +94,22 @@ describe("wikilinks", () => {
     const html = await renderMarkdown("See [[../../escape]].", { target: "web", wikiLinks: ctx });
     expect(html).toContain("wiki-link-unresolved");
   });
+
+  it("appends an in-doc fragment, prefixed to match rendered ids", async () => {
+    const html = await renderMarkdown(
+      "See [[architecture/auth#oauth-flow|the auth doc]].",
+      { target: "web", wikiLinks: ctx },
+    );
+    expect(html).toContain('href="/s/shikasta/docs/architecture/auth#user-content-oauth-flow"');
+  });
+
+  it("resolves a [[#fragment]] same-doc anchor", async () => {
+    const html = await renderMarkdown("See [[#summary]].", { target: "web", wikiLinks: ctx });
+    expect(html).toContain('href="#user-content-summary"');
+  });
+
+  it("appends fragments to section-root links too", async () => {
+    const html = await renderMarkdown("See [[plans#roadmap]].", { target: "web", wikiLinks: ctx });
+    expect(html).toContain('href="/s/shikasta/plans#user-content-roadmap"');
+  });
 });

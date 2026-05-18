@@ -25,6 +25,29 @@ import { docUrl, type DocRef } from "@sideways/types";
 
 const WIKI_LINK_RE = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
 
+/**
+ * Must match the rehype-sanitize clobberPrefix configured in index.ts.
+ * Duplicated rather than imported so the deps stay top-down (index imports
+ * wikilinks, not the other way round) and we don't risk a circular load.
+ */
+const ID_CLOBBER_PREFIX = "user-content-";
+
+/**
+ * Split a wiki-link target into its doc-reference half and an optional
+ * in-doc fragment. `[[foo#bar]]` → `{ ref: "foo", fragment: "bar" }`.
+ * `[[#bar]]` → same-doc anchor with `ref: ""`. The fragment is URL-safe
+ * and gets the DOM-clobber prefix prepended so it lines up with the
+ * rendered heading ids on the target page.
+ */
+function splitTarget(raw: string): { ref: string; fragmentSuffix: string } {
+  const hashIdx = raw.indexOf("#");
+  if (hashIdx === -1) return { ref: raw, fragmentSuffix: "" };
+  const ref = raw.slice(0, hashIdx);
+  const fragment = raw.slice(hashIdx + 1).trim();
+  if (!fragment) return { ref, fragmentSuffix: "" };
+  return { ref, fragmentSuffix: `#${ID_CLOBBER_PREFIX}${encodeURIComponent(fragment)}` };
+}
+
 export interface WikiLinkDoc {
   sectionSlug: string;
   /** Filesystem-shaped path within the section, e.g. "architecture/overview.md". */
@@ -69,9 +92,9 @@ export function remarkWikiLinks(ctx?: WikiLinkContext) {
           children.push({ type: "text", value: text.slice(lastIdx, matchIdx) });
         }
 
-        const target = rawTarget.trim();
+        const { ref, fragmentSuffix } = splitTarget(rawTarget.trim());
         const display = (rawDisplay || rawTarget).trim();
-        const resolution = resolve(target, ctx);
+        const resolution = resolve(ref, ctx, fragmentSuffix);
 
         children.push(buildNode(resolution, display));
         lastIdx = matchIdx + full.length;
@@ -112,12 +135,23 @@ function buildNode(res: Resolution, label: string): any {
   };
 }
 
-function resolve(target: string, ctx?: WikiLinkContext): Resolution {
+function resolve(
+  target: string,
+  ctx?: WikiLinkContext,
+  fragmentSuffix: string = "",
+): Resolution {
+  // Same-doc anchor: `[[#bar]]` resolves to the current page's prefixed
+  // fragment. No doc lookup needed.
+  if (target === "" && fragmentSuffix !== "") {
+    return { kind: "resolved", href: fragmentSuffix };
+  }
   if (!ctx) return { kind: "unresolved" };
 
   const linkTo = (doc: WikiLinkDoc): Resolution => ({
     kind: "resolved",
-    href: docUrl({ spaceSlug: ctx.spaceSlug, sectionSlug: doc.sectionSlug, path: doc.path }),
+    href:
+      docUrl({ spaceSlug: ctx.spaceSlug, sectionSlug: doc.sectionSlug, path: doc.path }) +
+      fragmentSuffix,
   });
 
   // 1. Relative
@@ -173,7 +207,7 @@ function resolve(target: string, ctx?: WikiLinkContext): Resolution {
       sectionSlug: section.slug,
       path: "index.md",
     };
-    return { kind: "resolved", href: docUrl(ref) };
+    return { kind: "resolved", href: docUrl(ref) + fragmentSuffix };
   }
 
   // 3d. Space-wide, unique basename
