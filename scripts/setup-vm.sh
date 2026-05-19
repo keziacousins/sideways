@@ -80,6 +80,10 @@ WantedBy=multi-user.target
 EOF
 
 # Systemd service: sideways-web
+# StateDirectory= creates /var/lib/sideways/sessions owned by $SERVICE_USER,
+# which is where Astro's fs session driver (astro.config.mjs) writes session
+# blobs. Without it the service user can't write to /var/lib/sideways (root-
+# owned by default) and sessions silently fail to persist across restarts.
 cat > /etc/systemd/system/sideways-web.service <<EOF
 [Unit]
 Description=Sideways Web Frontend
@@ -89,6 +93,7 @@ After=network.target sideways-api.service
 Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$APP_DIR/packages/web
+StateDirectory=sideways/sessions
 ExecStart=/usr/bin/node dist/server/entry.mjs
 Environment=HOST=0.0.0.0
 Environment=PORT=4000

@@ -269,43 +269,53 @@ export function createAuthRoutes(db: Database) {
     const challenge = c.req.query("login_challenge");
     if (!challenge) return c.text("Missing login_challenge", 400);
 
-    const loginRequest = await hydraAdmin(
-      `/admin/oauth2/auth/requests/login?login_challenge=${challenge}`,
-    );
-
-    if (loginRequest.skip) {
-      const completion = await hydraAdmin(
-        `/admin/oauth2/auth/requests/login/accept?login_challenge=${challenge}`,
-        {
-          method: "PUT",
-          body: JSON.stringify({ subject: loginRequest.subject }),
-        },
+    try {
+      const loginRequest = await hydraAdmin(
+        `/admin/oauth2/auth/requests/login?login_challenge=${challenge}`,
       );
-      return c.redirect(rewriteHydraUrl(completion.redirect_to));
-    }
 
-    const hint = loginRequest.oidc_context?.login_hint;
-    if (hint && recentLogins.has(hint)) {
-      const login = recentLogins.get(hint)!;
-      recentLogins.delete(hint);
-
-      if (login.expiresAt > Date.now()) {
+      if (loginRequest.skip) {
         const completion = await hydraAdmin(
           `/admin/oauth2/auth/requests/login/accept?login_challenge=${challenge}`,
           {
             method: "PUT",
-            body: JSON.stringify({
-              subject: login.subject,
-              remember: true,
-              remember_for: 3600,
-            }),
+            body: JSON.stringify({ subject: loginRequest.subject }),
           },
         );
         return c.redirect(rewriteHydraUrl(completion.redirect_to));
       }
-    }
 
-    return c.redirect(`${env.publicUrl}/auth/login?login_challenge=${challenge}`);
+      const hint = loginRequest.oidc_context?.login_hint;
+      if (hint && recentLogins.has(hint)) {
+        const login = recentLogins.get(hint)!;
+        recentLogins.delete(hint);
+
+        if (login.expiresAt > Date.now()) {
+          const completion = await hydraAdmin(
+            `/admin/oauth2/auth/requests/login/accept?login_challenge=${challenge}`,
+            {
+              method: "PUT",
+              body: JSON.stringify({
+                subject: login.subject,
+                remember: true,
+                remember_for: 3600,
+              }),
+            },
+          );
+          return c.redirect(rewriteHydraUrl(completion.redirect_to));
+        }
+      }
+
+      return c.redirect(`${env.publicUrl}/auth/login?login_challenge=${challenge}`);
+    } catch (e: any) {
+      // Hydra returns 404 for unknown / expired / already-handled challenges.
+      // Anything else is genuinely a server problem on our end.
+      if (/error 404/.test(e.message)) {
+        return c.text("Unknown or expired login_challenge", 404);
+      }
+      console.error("Login flow error:", e.message);
+      return c.text("Could not start login flow", 500);
+    }
   });
 
   /**
