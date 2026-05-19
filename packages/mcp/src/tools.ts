@@ -15,6 +15,7 @@ type ApiFetch = (path: string, options?: RequestInit) => Promise<any>;
 
 const INSTRUCTIONS = `Sideways is a documentation platform. Capabilities:
 - Spaces: create, list (top-level containers)
+- Sections: create (the first path segment inside a space; must exist before doc_write)
 - Documents: read, write, edit (in-place), rename, move, duplicate, delete, version history
 - Comments: add, list, resolve, reply (threaded, optionally anchored to text)
 - Search: full-text across documents
@@ -22,7 +23,7 @@ const INSTRUCTIONS = `Sideways is a documentation platform. Capabilities:
 ALWAYS pass \`ref\` to doc and comment tools — never \`space\` + \`path\` separately. Refs have the form \`<space>:<section>/<path>.md\`, e.g. \`engineering:architecture/api-design.md\`. \`search\` and \`doc_list\` emit refs you can copy verbatim into doc_read, doc_edit, comment_add, etc. The first segment after the colon is the section (a filesystem-shaped grouping); the rest is the path within that section.
 
 Concepts:
-- doc_write is an upsert: creates the doc if its ref is new, updates otherwise.
+- doc_write is an upsert: creates the doc if its ref is new, updates otherwise. The section must exist first — use section_create if you're writing into a new section (every space starts with a \`default\` section).
 - doc_edit applies search/replace pairs sequentially; if any \`old\` string is not found the whole edit fails.
 - Comments can be anchored to exact text passages for inline review.
 
@@ -64,6 +65,34 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
       });
 
       return { content: [{ type: "text" as const, text: `Created space "${space.name}" (${space.slug}, ${space.visibility})` }] };
+    },
+  );
+
+  server.tool(
+    "section_create",
+    "Create a section within a space, or update an existing section's title/position (upsert by slug). Sections are the first path segment after the space colon in a ref (e.g. `architecture` in `engineering:architecture/api-design.md`) and must exist before doc_write can target them. Every space starts with a `default` section.",
+    {
+      space: z.string().describe('Space slug, e.g. "engineering"'),
+      slug: z.string().describe('URL-friendly section identifier, e.g. "architecture"'),
+      title: z.string().optional().describe("Display title (defaults to the slug)"),
+      position: z.number().int().optional().describe("Sort position in the space sidebar (default: 0)"),
+    },
+    async ({ space, slug, title, position }) => {
+      const body: Record<string, any> = {};
+      if (title) body.title = title;
+      if (position !== undefined) body.position = position;
+
+      const section = await apiFetch(
+        `/api/spaces/${encodeURIComponent(space)}/sections/${encodeURIComponent(slug)}`,
+        { method: "PUT", body: JSON.stringify(body) },
+      );
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: `Section ready: ${space}:${section.slug} — "${section.title}"`,
+        }],
+      };
     },
   );
 
