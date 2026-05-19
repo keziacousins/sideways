@@ -109,15 +109,33 @@ Versioning is **manual** — not bumped on every commit. The number in `package.
 ./scripts/bump-version.sh set 2.0.0-rc.1   # explicit override
 ```
 
-The script updates the root and every workspace package.json. After it runs:
+The script updates the root and every workspace package.json. Releases go through a PR so that linked GitHub issues auto-close on merge:
 
 ```bash
+# 1. On a feature/release branch, after ./scripts/bump-version.sh:
 git add package.json packages/*/package.json
-git commit -m "Release X.Y.Z"
+git commit -m "Release X.Y.Z — <short summary>"
+git push -u origin <branch>
+
+# 2. Open the PR. Body references every issue this release closes:
+#    Closes #15
+#    Closes #16
+gh pr create --title "Release X.Y.Z — <summary>" --body "Closes #N..."
+
+# 3. Merge the PR (web UI or gh pr merge). GitHub auto-closes referenced issues.
+
+# 4. Tag the merge commit on main, then deploy:
+git checkout main && git pull
 git tag vX.Y.Z
-git push origin main --tags
+git push origin vX.Y.Z
 ./scripts/deploy.sh
 ```
+
+Conventions:
+- **Commit messages reference issues** — inline like `(#15)` for partial mentions, or `Closes #15` / `Fixes #15` in the PR body for auto-close. The PR body is what triggers the close; commit references are for git history.
+- **Tag after merge, not on the PR branch.** Squash-merge changes the commit SHA, so a pre-merge tag would dangle. Tag the main HEAD after pulling.
+- **Deploy from main after tagging** for prod-like environments. For the dev VM (`admin@sideways-dev`) it's fine to deploy from the PR branch before merge — the deploy script rsyncs the working tree.
+- **`setup-vm.sh` changes don't propagate via `deploy.sh`.** If a release modifies the systemd units in `setup-vm.sh`, you have to manually `daemon-reload` + restart the relevant service on each host (or re-run the unit-writing portion of setup-vm.sh).
 
 Internal commits between releases should not touch `package.json` versions. If you find a per-commit auto-bump hook in `.git/hooks/pre-commit`, delete it — it predates the manual workflow.
 
