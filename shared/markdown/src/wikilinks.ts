@@ -26,6 +26,45 @@ import { docUrl, type DocRef } from "@sideways/types";
 const WIKI_LINK_RE = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
 
 /**
+ * Pre-escape `|` inside `[[…]]` on the raw source so GFM table parsing
+ * doesn't shred the wikilink across cells. CommonMark unescapes `\|` back
+ * to `|` in the text it emits, so by the time the visitor below runs the
+ * text node contains `[[target|display]]` again and matches WIKI_LINK_RE
+ * normally.
+ *
+ * Code-fence-aware: never mutates content inside ```/~~~ blocks, so
+ * wikilink-shaped sample text in code stays verbatim. Doesn't guard against
+ * inline code spans (single backticks) — wikilink syntax inside inline
+ * code is rare, and the worst case is a stray `\\|` showing up in code.
+ */
+export function escapeWikiLinkPipes(md: string): string {
+  const lines = md.split("\n");
+  let fence: "`" | "~" | null = null;
+
+  return lines
+    .map((line) => {
+      const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+      if (fenceMatch) {
+        const marker = fenceMatch[1][0] as "`" | "~";
+        if (fence === null) {
+          fence = marker;
+          return line;
+        }
+        if (fence === marker) {
+          fence = null;
+          return line;
+        }
+      }
+      if (fence !== null) return line;
+
+      return line.replace(/\[\[([^\]\n]+?)\]\]/g, (_m, inner) =>
+        `[[${inner.replace(/\|/g, "\\|")}]]`,
+      );
+    })
+    .join("\n");
+}
+
+/**
  * Must match the rehype-sanitize clobberPrefix configured in index.ts.
  * Duplicated rather than imported so the deps stay top-down (index imports
  * wikilinks, not the other way round) and we don't risk a circular load.

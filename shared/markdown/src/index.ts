@@ -11,7 +11,7 @@ import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Root, Element } from "hast";
-import { remarkWikiLinks, type WikiLinkContext } from "./wikilinks.js";
+import { remarkWikiLinks, escapeWikiLinkPipes, type WikiLinkContext } from "./wikilinks.js";
 
 export interface RenderOptions {
   /** "web" includes interactive features; "pdf" produces print-ready HTML */
@@ -125,8 +125,10 @@ export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.
  *     was a no-op — rehype-autolink-headings overrides `properties.href`).
  * v6: disabled single-`$` inline math — `$2k`-style currency in prose was
  *     being parsed as math. Use `$$...$$` for math now.
+ * v7: pre-escape `|` inside `[[…]]` so wikilinks with display labels
+ *     survive inside GFM table cells.
  */
-export const RENDERER_VERSION = "v6";
+export const RENDERER_VERSION = "v7";
 
 /**
  * Render markdown to HTML string.
@@ -136,6 +138,6 @@ export async function renderMarkdown(
   options: RenderOptions = { target: "web" },
 ): Promise<string> {
   const processor = createProcessor(options);
-  const result = await processor.process(markdown);
+  const result = await processor.process(escapeWikiLinkPipes(markdown));
   return String(result);
 }
