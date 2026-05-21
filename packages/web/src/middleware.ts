@@ -1,7 +1,25 @@
 import { defineMiddleware } from "astro:middleware";
+import { accessSync, constants } from "node:fs";
 
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const PUBLIC_URL = import.meta.env.PUBLIC_URL || "http://localhost:4000";
+
+// Startup smoke test: in production, the session fs driver must be writing
+// to /var/lib/sideways/sessions (systemd StateDirectory). If we ship a build
+// where that path isn't reachable, sessions land in the build dir instead
+// and every deploy logs every user out. The actual base is configured in
+// astro.config.mjs; this is the boundary check that catches a config drift.
+const PROD_SESSION_BASE = "/var/lib/sideways/sessions";
+if (import.meta.env.PROD) {
+  try {
+    accessSync(PROD_SESSION_BASE, constants.W_OK);
+    console.log(`[startup] Session storage OK at ${PROD_SESSION_BASE}`);
+  } catch {
+    console.error(
+      `[startup] FATAL: ${PROD_SESSION_BASE} not writable. Sessions will NOT persist across restarts — every deploy will log out all users. Check StateDirectory= in sideways-web.service and astro.config.mjs session.driver.config.base.`,
+    );
+  }
+}
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
