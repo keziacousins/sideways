@@ -23,19 +23,38 @@ import { visit } from "unist-util-visit";
 import type { Root, Text } from "mdast";
 import { docUrl, type DocRef } from "@sideways/types";
 
-const WIKI_LINK_RE = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
+// Placeholder used internally to replace `|` inside `[[…]]` on the raw source
+// before parsing. Two things break wikilinks otherwise: (1) GFM tables split
+// cells on `|`, so a wikilink with a display label inside a table cell gets
+// shredded; (2) using `\|` as the escape causes CommonMark to emit a separate
+// `escape` AST node and the wikilink text gets split across multiple text
+// nodes, so the visitor below — which only runs on `text` nodes — never sees
+// the full `[[…|…]]` token even outside tables. The placeholder character is
+// in the Unicode Private Use Area, has no syntactic meaning to either parser,
+// and keeps the wikilink as a single text node.
+//
+// Declared via `String.fromCharCode` (not a literal char in a string) so the
+// source file stays free of invisible characters — future text edits don't
+// have to match an unprintable byte. The regex below is built with `new
+// RegExp` for the same reason: interpolating PIPE_PLACEHOLDER keeps the
+// pattern string ASCII in source.
+const PIPE_PLACEHOLDER = String.fromCharCode(0xe000);
+
+// Target excludes `|` and the placeholder; separator accepts either.
+const WIKI_LINK_RE = new RegExp(
+  `\\[\\[([^\\]|${PIPE_PLACEHOLDER}]+?)(?:[|${PIPE_PLACEHOLDER}]([^\\]]+?))?\\]\\]`,
+  "g",
+);
 
 /**
- * Pre-escape `|` inside `[[…]]` on the raw source so GFM table parsing
- * doesn't shred the wikilink across cells. CommonMark unescapes `\|` back
- * to `|` in the text it emits, so by the time the visitor below runs the
- * text node contains `[[target|display]]` again and matches WIKI_LINK_RE
- * normally.
+ * Pre-process the raw source so wikilink `|` separators survive GFM table
+ * parsing and CommonMark text-node splitting. Replaces `|` inside `[[…]]`
+ * with PIPE_PLACEHOLDER; the visitor swaps it back to `|` before resolving.
  *
  * Code-fence-aware: never mutates content inside ```/~~~ blocks, so
  * wikilink-shaped sample text in code stays verbatim. Doesn't guard against
  * inline code spans (single backticks) — wikilink syntax inside inline
- * code is rare, and the worst case is a stray `\\|` showing up in code.
+ * code is rare, and a placeholder character there is an invisible glyph.
  */
 export function escapeWikiLinkPipes(md: string): string {
   const lines = md.split("\n");
@@ -58,7 +77,7 @@ export function escapeWikiLinkPipes(md: string): string {
       if (fence !== null) return line;
 
       return line.replace(/\[\[([^\]\n]+?)\]\]/g, (_m, inner) =>
-        `[[${inner.replace(/\|/g, "\\|")}]]`,
+        `[[${inner.replace(/\|/g, PIPE_PLACEHOLDER)}]]`,
       );
     })
     .join("\n");
@@ -132,7 +151,11 @@ export function remarkWikiLinks(ctx?: WikiLinkContext) {
         }
 
         const { ref, fragmentSuffix } = splitTarget(rawTarget.trim());
-        const display = (rawDisplay || rawTarget).trim();
+        // Any PIPE_PLACEHOLDER chars left in the display capture came from a
+        // multi-`|` wikilink like `[[foo|a|b]]` (first `|` is the separator,
+        // the rest land in display). Swap them back to `|` for the visible
+        // label so the placeholder never reaches HTML.
+        const display = (rawDisplay || rawTarget).replaceAll(PIPE_PLACEHOLDER, "|").trim();
         const resolution = resolve(ref, ctx, fragmentSuffix);
 
         children.push(buildNode(resolution, display));
@@ -291,4 +314,3 @@ function resolveRelative(fromPath: string, target: string): string | null {
   }
   return stripMd(segs.join("/"));
 }
-

@@ -127,8 +127,11 @@ export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.
  *     being parsed as math. Use `$$...$$` for math now.
  * v7: pre-escape `|` inside `[[…]]` so wikilinks with display labels
  *     survive inside GFM table cells.
+ * v8: visitor accepts the placeholder as a separator (v7 only updated
+ *     the preprocessor — the regex still required literal `|`, so
+ *     wikilinks with display labels were unresolved everywhere in v7).
  */
-export const RENDERER_VERSION = "v7";
+export const RENDERER_VERSION = "v8";
 
 /**
  * Render markdown to HTML string.
