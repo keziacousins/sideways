@@ -95,7 +95,7 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
-    .use(remarkMath, { singleDollarTextMath: true })
+    .use(remarkMath, { singleDollarTextMath: false })
     .use(remarkWikiLinks(options.wikiLinks))
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeSlug)
@@ -123,8 +123,10 @@ export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.
  * v5: inline `[text](#foo)` anchors also get the clobber prefix; heading
  *     auto-links now actually carry the prefixed href (the v3 attempt
  *     was a no-op — rehype-autolink-headings overrides `properties.href`).
+ * v6: disabled single-`$` inline math — `$2k`-style currency in prose was
+ *     being parsed as math. Use `$$...$$` for math now.
  */
-export const RENDERER_VERSION = "v5";
+export const RENDERER_VERSION = "v6";
 
 /**
  * Render markdown to HTML string.

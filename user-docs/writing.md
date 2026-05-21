@@ -41,7 +41,7 @@ def hello():
 
 **Math** (KaTeX):
 
-Inline: `$E = mc^2$`
+Inline: `$$E = mc^2$$`
 
 Block:
 
@@ -50,6 +50,8 @@ $$
 \int_0^\infty e^{-x} dx = 1
 $$
 ```
+
+Single-`$` is reserved for currency in prose (e.g. `$2k budget`) — it won't trigger math parsing. Wrap math in `$$...$$` whether inline or block.
 
 ## Wiki-Links
 
