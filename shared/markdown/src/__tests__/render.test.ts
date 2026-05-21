@@ -33,8 +33,8 @@ describe("renderMarkdown", () => {
     expect(html).toContain("42");
   });
 
-  it("renders KaTeX math", async () => {
-    const md = "Inline $E = mc^2$ math.";
+  it("renders KaTeX math with $$...$$", async () => {
+    const md = "Inline $$E = mc^2$$ math.";
     const html = await renderMarkdown(md);
     expect(html).toContain("katex");
   });
@@ -44,6 +44,14 @@ describe("renderMarkdown", () => {
     const html = await renderMarkdown(md);
     expect(html).toContain("katex");
     expect(html).toContain("display");
+  });
+
+  it("treats single-$ currency in prose as literal text", async () => {
+    const md = "We spent $2k on Cursor and $4k on Claude.";
+    const html = await renderMarkdown(md);
+    expect(html).not.toContain("katex");
+    expect(html).toContain("$2k");
+    expect(html).toContain("$4k");
   });
 
   it("adds slugs to headings (with DOM-clobber prefix)", async () => {
