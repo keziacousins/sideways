@@ -112,4 +112,34 @@ describe("wikilinks", () => {
     const html = await renderMarkdown("See [[plans#roadmap]].", { target: "web", wikiLinks: ctx });
     expect(html).toContain('href="/s/shikasta/plans#user-content-roadmap"');
   });
+
+  it("resolves a wikilink with display label inside a GFM table cell", async () => {
+    const md = [
+      "| State | Description |",
+      "|-------|-------------|",
+      "| open  | See ([[architecture/auth|the auth doc]]) for context. |",
+    ].join("\n");
+    const html = await renderMarkdown(md, { target: "web", wikiLinks: ctx });
+    expect(html).toContain('href="/s/shikasta/docs/architecture/auth"');
+    expect(html).toContain("the auth doc");
+    // Trailing cell text must also survive — the pre-fix bug dropped it.
+    expect(html).toContain("for context");
+  });
+
+  it("leaves wikilink-shaped tokens inside fenced code blocks untouched", async () => {
+    const md = [
+      "Outside: [[architecture/auth|the auth doc]].",
+      "",
+      "```",
+      "Inside: [[architecture/auth|the auth doc]]",
+      "```",
+    ].join("\n");
+    const html = await renderMarkdown(md, { target: "web", wikiLinks: ctx });
+    // Outside the fence the wikilink resolves.
+    expect(html).toContain('href="/s/shikasta/docs/architecture/auth"');
+    // Inside the fence the source text is preserved verbatim — no stray
+    // `\|` escapes leaking into the rendered code block.
+    expect(html).toContain("[[architecture/auth|the auth doc]]");
+    expect(html).not.toContain("\\|");
+  });
 });
