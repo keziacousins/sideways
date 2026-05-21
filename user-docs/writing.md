@@ -94,6 +94,8 @@ The most refactor-resilient form: relative links survive directory renames at th
 Read the [[architecture/overview|API Design Guide]] for more.
 ```
 
+Display labels are **plain text only** — markdown formatting (`` `code` ``, `**bold**`, `*italic*`, nested links) inside the display half of a wikilink is not supported. Backticks, in particular, will open an inline code span that splits the wikilink across AST nodes and the link silently fails to render. If you need a code-styled label, render it outside the link: `` the [[architecture/overview|overview]] (`MyClass`) ``.
+
 Resolved wiki-links render as dotted-underline links to the canonical doc URL. **Unresolved** wiki-links (target doesn't exist) render as a wavy red underline. **Ambiguous** wiki-links (multiple basename matches) render as a wavy amber underline.
 
 ### Autocomplete
