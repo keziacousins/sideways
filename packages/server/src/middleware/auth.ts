@@ -137,15 +137,27 @@ export function authMiddleware(db: Database) {
       if (internalToken) {
         const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming;
         if (isLoopback(incoming?.socket?.remoteAddress)) {
-          const userId = verifyInternalToken(internalToken);
-          if (userId) {
-            const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-            c.set(
-              "user",
-              user
-                ? { id: user.id, email: user.email, name: user.name, displayName: user.name }
-                : null,
-            );
+          const payload = verifyInternalToken(internalToken);
+          if (payload) {
+            const user = await db.query.users.findFirst({ where: eq(users.id, payload.userId) });
+            if (user) {
+              // Re-sanitise the actor as defence-in-depth: the value was
+              // already filtered at consent time, but the loopback boundary
+              // is where we'd want to catch any drift between issuance and
+              // consumption.
+              const actor = payload.actorName
+                ? sanitiseActorName(payload.actorName)
+                : null;
+              c.set("user", {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                actorName: actor || undefined,
+                displayName: actor ? `${actor} via ${user.name}` : user.name,
+              });
+            } else {
+              c.set("user", null);
+            }
             return next();
           }
         }

@@ -59,7 +59,13 @@ export const POST: APIRoute = async ({ request, session }) => {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ name: body.name || "Untitled" }),
+    body: JSON.stringify({
+      name: body.name || "Untitled",
+      // Pass actorName through — the form exposes an agent-name input
+      // (settings/keys.astro) and the API accepts it (routes/keys.ts).
+      // This proxy used to drop it silently; see issue #42.
+      actorName: body.actorName || null,
+    }),
   });
 
   const data = await res.json();
