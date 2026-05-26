@@ -141,12 +141,18 @@ export function authMiddleware(db: Database) {
           if (payload) {
             const user = await db.query.users.findFirst({ where: eq(users.id, payload.userId) });
             if (user) {
-              // Re-sanitise the actor as defence-in-depth: the value was
-              // already filtered at consent time, but the loopback boundary
-              // is where we'd want to catch any drift between issuance and
-              // consumption.
+              // Re-clean the actor as defence-in-depth on shape (control
+              // chars, NFKC, whitespace, length) but DON'T re-apply the
+              // reserved-name block — the canonical DCR'd label is
+              // "Connector", which is itself a reserved name (added in
+              // H4 to stop client_name impersonation). Applying the
+              // reserved list here would nuke the legit consent-set
+              // value. The label was authoritatively chosen server-side
+              // by `actorNameForConsent`, and the HMAC on the internal
+              // token binds it to userId+expiry — that's the boundary
+              // that matters.
               const actor = payload.actorName
-                ? sanitiseActorName(payload.actorName)
+                ? sanitiseClientName(payload.actorName, 50)
                 : null;
               c.set("user", {
                 id: user.id,
