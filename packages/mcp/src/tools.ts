@@ -15,7 +15,7 @@ type ApiFetch = (path: string, options?: RequestInit) => Promise<any>;
 
 const INSTRUCTIONS = `Sideways is a documentation platform. Capabilities:
 - Spaces: create, list (top-level containers)
-- Sections: create (the first path segment inside a space; must exist before doc_write)
+- Sections: create, list, empty, delete (the first path segment inside a space; must exist before doc_write). Deleting a section requires it to be empty — move or empty its documents into the \`default\` section first.
 - Documents: read, write, edit (in-place), rename, move, duplicate, delete, version history
 - Comments: add, list, resolve, reply (threaded, optionally anchored to text)
 - Search: full-text across documents
@@ -93,6 +93,60 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
           text: `Section ready: ${space}:${section.slug} — "${section.title}"`,
         }],
       };
+    },
+  );
+
+  server.tool(
+    "section_list",
+    "List the sections in a space. Returns each section's slug, title, and sort position. Use this to discover section slugs before section_empty or section_delete.",
+    {
+      space: z.string().describe('Space slug, e.g. "engineering"'),
+    },
+    async ({ space }) => {
+      const sections = await apiFetch(`/api/spaces/${encodeURIComponent(space)}/sections`);
+      const text = sections
+        .slice()
+        .sort((a: any, b: any) => a.position - b.position)
+        .map((s: any) => `${space}:${s.slug} — "${s.title}"`)
+        .join("\n");
+      return { content: [{ type: "text" as const, text: text || "No sections found." }] };
+    },
+  );
+
+  server.tool(
+    "section_empty",
+    "Move every document in a section into the space's `default` section, leaving the section empty. Use this before section_delete on a section that still has documents. Returns the number of documents moved.",
+    {
+      space: z.string().describe('Space slug, e.g. "engineering"'),
+      slug: z.string().describe('Section slug to empty, e.g. "architecture"'),
+    },
+    async ({ space, slug }) => {
+      const { moved } = await apiFetch(
+        `/api/spaces/${encodeURIComponent(space)}/sections/${encodeURIComponent(slug)}/empty`,
+        { method: "POST" },
+      );
+      return {
+        content: [{
+          type: "text" as const,
+          text: `Moved ${moved} document${moved === 1 ? "" : "s"} from ${space}:${slug} to the default section.`,
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    "section_delete",
+    "Delete a section from a space. The section must be empty first — if it still has documents the call fails; run section_empty (or move the docs) before deleting. The `default` section is permanent and cannot be deleted.",
+    {
+      space: z.string().describe('Space slug, e.g. "engineering"'),
+      slug: z.string().describe('Section slug to delete, e.g. "architecture"'),
+    },
+    async ({ space, slug }) => {
+      await apiFetch(
+        `/api/spaces/${encodeURIComponent(space)}/sections/${encodeURIComponent(slug)}`,
+        { method: "DELETE" },
+      );
+      return { content: [{ type: "text" as const, text: `Deleted section ${space}:${slug}` }] };
     },
   );
 
