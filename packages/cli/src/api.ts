@@ -260,6 +260,18 @@ export function createClient(baseUrl: string, actorName?: string) {
       });
     },
 
+    emptySection(space: string, slug: string) {
+      return request<{ moved: number }>(`/api/spaces/${space}/sections/${slug}/empty`, {
+        method: "POST",
+      });
+    },
+
+    deleteSection(space: string, slug: string) {
+      return request<{ deleted: true }>(`/api/spaces/${space}/sections/${slug}`, {
+        method: "DELETE",
+      });
+    },
+
     getVersions(space: string, sectionSlug: string, path: string) {
       return request<Array<{ version: number; contentHash: string; createdAt: string; createdBy: string }>>(
         `/api/documents/${space}/${sectionSlug}/_versions/${path}`,

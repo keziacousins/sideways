@@ -1167,6 +1167,60 @@ program
     console.log(`Moved ${sectionSlug}/${path} → section "${targetSection}" (${result.sectionSlug}/${result.path})`);
   });
 
+// ── sections (list / remove) ──────────────────────────────────────────
+
+program
+  .command("sections")
+  .description("List sections in the space")
+  .option("--space <space>", "Override space from config")
+  .action(async (opts: { space?: string }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = getClient(config.api);
+
+    const list = await client.listSections(space);
+    if (list.length === 0) {
+      console.log("No sections.");
+      return;
+    }
+    const sorted = list.slice().sort((a, b) => a.position - b.position);
+    const slugWidth = Math.max(...sorted.map((s) => s.slug.length));
+    for (const s of sorted) {
+      console.log(`  ${s.slug.padEnd(slugWidth)}  ${s.title}`);
+    }
+  });
+
+program
+  .command("section-remove <slug>")
+  .description("Delete a section. Use --empty to move its documents to the default section first.")
+  .option("--space <space>", "Override space from config")
+  .option("--empty", "Move documents to the default section before deleting")
+  .action(async (slug: string, opts: { space?: string; empty?: boolean }) => {
+    const config = requireConfig();
+    const space = opts.space ?? config.space;
+    const client = getClient(config.api);
+
+    await requireSpace(client, space);
+
+    if (opts.empty) {
+      const { moved } = await client.emptySection(space, slug);
+      if (moved > 0) {
+        console.log(`Moved ${moved} document${moved === 1 ? "" : "s"} to the default section.`);
+      }
+    }
+
+    try {
+      await client.deleteSection(space, slug);
+    } catch (e: any) {
+      if (String(e?.message).includes("not empty")) {
+        console.error(`Section "${slug}" still has documents. Re-run with --empty to move them to the default section first.`);
+        process.exit(1);
+      }
+      throw e;
+    }
+    console.log(`Deleted section ${space}:${slug}`);
+  });
+
 // ── duplicate ─────────────────────────────────────────────────────────
 
 program
@@ -1583,4 +1637,7 @@ program
     }
   });
 
-program.parse();
+program.parseAsync().catch((err) => {
+  console.error(err?.message ?? String(err));
+  process.exit(1);
+});
