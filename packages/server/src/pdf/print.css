@@ -54,7 +54,7 @@
 body {
   font-family: var(--th-font-body, "Inter", sans-serif);
   font-size: 11pt;
-  line-height: 1.65;
+  line-height: 1.5;
   color: var(--th-color-text, #1a1a1a);
   margin: 0;
   padding: 0;
