@@ -7,6 +7,12 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { coverLayouts } from "./covers.js";
+import {
+  isValidColor,
+  isValidFont,
+  isValidFontWeight,
+  trimToken,
+} from "@sideways/theme";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const printCSS = readFileSync(join(__dirname, "print.css"), "utf-8");
@@ -64,29 +70,14 @@ function extractHeadings(
   return headings;
 }
 
-/** Validate a CSS color value — hex, rgb(), hsl(), or named colors */
-function isValidColor(v: string): boolean {
-  return /^(#[0-9a-f]{3,8}|rgb\(\s*\d+[\s,]+\d+[\s,]+\d+\s*\)|rgba\(\s*\d+[\s,]+\d+[\s,]+\d+[\s,]+[\d.]+\s*\)|hsl\(\s*\d+[\s,]+\d+%[\s,]+\d+%\s*\)|[a-z]{3,20})$/i.test(v.trim());
-}
-
-/** Validate a font family name — alphanumeric, spaces, hyphens only */
-function isValidFont(v: string): boolean {
-  return /^[a-zA-Z0-9\s-]+$/.test(v.trim()) && v.length <= 60;
-}
-
-/** A single weight (400), a keyword, or a variable-font range ("100 900"). */
-function isValidFontWeight(v: string): boolean {
-  return /^([1-9]00|normal|bold)( [1-9]00)?$/.test(v.trim());
-}
-
 /** Validate paper size */
 function isValidPaperSize(v: string): boolean {
-  return /^(A[0-5]|B[0-5]|letter|legal|ledger|\d+mm\s+\d+mm|\d+in\s+\d+in)$/i.test(v.trim());
+  return /^(A[0-5]|B[0-5]|letter|legal|ledger|\d+mm\s+\d+mm|\d+in\s+\d+in)$/i.test(v);
 }
 
 /** Validate CSS margin value — 1-4 values like "1.5cm 2cm" */
 function isValidMargins(v: string): boolean {
-  const parts = v.trim().split(/\s+/);
+  const parts = v.split(/\s+/);
   if (parts.length < 1 || parts.length > 4) return false;
   return parts.every(p => /^\d+(\.\d+)?(cm|mm|in|pt|px)$/.test(p));
 }
@@ -95,28 +86,33 @@ function isValidMargins(v: string): boolean {
 function buildThemeCSS(theme: ThemeTokens): string {
   const vars: string[] = [];
 
-  if (theme.fonts?.display && isValidFont(theme.fonts.display))
-    vars.push(`--th-font-display: "${theme.fonts.display}", Georgia, serif`);
-  if (theme.fonts?.displayWeight && isValidFontWeight(String(theme.fonts.displayWeight)))
-    vars.push(`--th-font-display-weight: ${theme.fonts.displayWeight}`);
-  if (theme.fonts?.body && isValidFont(theme.fonts.body))
-    vars.push(`--th-font-body: "${theme.fonts.body}", sans-serif`);
-  if (theme.fonts?.mono && isValidFont(theme.fonts.mono))
-    vars.push(`--th-font-mono: "${theme.fonts.mono}", monospace`);
-  if (theme.colors?.text && isValidColor(theme.colors.text))
-    vars.push(`--th-color-text: ${theme.colors.text}`);
-  if (theme.colors?.accent && isValidColor(theme.colors.accent))
-    vars.push(`--th-color-accent: ${theme.colors.accent}`);
-  if (theme.colors?.mutedText && isValidColor(theme.colors.mutedText))
-    vars.push(`--th-color-muted: ${theme.colors.mutedText}`);
-  if (theme.colors?.rule && isValidColor(theme.colors.rule))
-    vars.push(`--th-color-rule: ${theme.colors.rule}`);
-  if (theme.print?.paperSize && isValidPaperSize(theme.print.paperSize))
-    vars.push(`--th-paper-size: ${theme.print.paperSize}`);
+  // Each token is trimmed once, then that same string is both validated and
+  // emitted. Validating a trimmed copy while emitting the raw value is how
+  // "Inter\n" used to reach the stylesheet — see the note in @sideways/theme.
+  const add = (
+    name: string,
+    raw: unknown,
+    valid: (v: string) => boolean,
+    render: (v: string) => string = (v) => v,
+  ) => {
+    const v = trimToken(raw);
+    if (v && valid(v)) vars.push(`${name}: ${render(v)}`);
+  };
+
+  add("--th-font-display", theme.fonts?.display, isValidFont, (v) => `"${v}", Georgia, serif`);
+  add("--th-font-display-weight", theme.fonts?.displayWeight, isValidFontWeight);
+  add("--th-font-body", theme.fonts?.body, isValidFont, (v) => `"${v}", sans-serif`);
+  add("--th-font-mono", theme.fonts?.mono, isValidFont, (v) => `"${v}", monospace`);
+  add("--th-color-text", theme.colors?.text, isValidColor);
+  add("--th-color-accent", theme.colors?.accent, isValidColor);
+  add("--th-color-muted", theme.colors?.mutedText, isValidColor);
+  add("--th-color-rule", theme.colors?.rule, isValidColor);
+  add("--th-paper-size", theme.print?.paperSize, isValidPaperSize);
 
   let extra = "";
-  if (theme.print?.margins && isValidMargins(theme.print.margins)) {
-    extra += `\n@page { margin: ${theme.print.margins}; }`;
+  const margins = trimToken(theme.print?.margins);
+  if (margins && isValidMargins(margins)) {
+    extra += `\n@page { margin: ${margins}; }`;
   }
 
   if (vars.length === 0 && !extra) return "";
@@ -147,6 +143,12 @@ export function buildPrintHTML(options: TemplateOptions): string {
   if (showTitlePage) {
     const layoutName = theme?.coverLayout || "left-aligned";
     const layoutFn = coverLayouts[layoutName] || coverLayouts.centered;
+    // The cover layouts interpolate these straight into style attributes, so
+    // they get the same allowlist check as the theme CSS above — an invalid
+    // value is dropped and the layout falls back to its own default.
+    const accent = trimToken(theme?.colors?.accent);
+    const displayFont = trimToken(theme?.fonts?.display);
+    const displayWeight = trimToken(theme?.fonts?.displayWeight);
     titlePage = layoutFn({
       title,
       spaceName,
@@ -154,9 +156,10 @@ export function buildPrintHTML(options: TemplateOptions): string {
       version: options.version,
       logo: theme?.logo,
       subtitle: theme?.coverSubtitle,
-      accent: theme?.colors?.accent,
-      displayFont: theme?.fonts?.display,
-      displayWeight: theme?.fonts?.displayWeight,
+      accent: accent && isValidColor(accent) ? accent : undefined,
+      displayFont: displayFont && isValidFont(displayFont) ? displayFont : undefined,
+      displayWeight:
+        displayWeight && isValidFontWeight(displayWeight) ? displayWeight : undefined,
     });
   }
 

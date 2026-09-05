@@ -98,6 +98,11 @@ describe("themeToCSS", () => {
 
     it("accepts a variable-font weight range", () => {
       expect(themeToCSS(font({ weight: "100 900" }))).toContain("font-weight: 100 900;");
+      // Real ranges are not all multiples of 100 — Roboto Flex ships 100–1000.
+      expect(themeToCSS(font({ weight: "100 1000" }))).toContain("font-weight: 100 1000;");
+      expect(themeToCSS(font({ weight: 350 }))).toContain("font-weight: 350;");
+      expect(themeToCSS(font({ weight: 1 }))).toContain("font-weight: 1;");
+      expect(themeToCSS(font({ weight: "bold" }))).toContain("font-weight: bold;");
     });
 
     it("omits weight and style when not supplied", () => {
@@ -145,7 +150,34 @@ describe("themeToCSS", () => {
       expect(themeToCSS(font({ family: 'Bad"; } body { display: none } @font-face { x: "' }))).toBe("");
       expect(themeToCSS(font({ weight: "400; } body { display: none } :root {" }))).toBe("");
       expect(themeToCSS(font({ style: "normal; } body { display: none } :root {" }))).toBe("");
-      expect(themeToCSS(font({ weight: 42 }))).toBe("");
+      expect(themeToCSS(font({ weight: 0 }))).toBe("");
+      expect(themeToCSS(font({ weight: 1001 }))).toBe("");
+      expect(themeToCSS(font({ weight: -400 }))).toBe("");
+    });
+
+    it("rejects a family name containing a newline", () => {
+      // A raw newline inside a CSS string is a parse error, and the parser
+      // recovers by discarding through the end of the rule — which would take
+      // whatever declaration follows with it.
+      expect(themeToCSS(font({ family: "Example\nSans" }))).toBe("");
+      expect(themeToCSS({ fonts: { body: "Inter\r\n} :root { display: none" } })).toBe("");
+    });
+
+    it("normalises surrounding whitespace instead of emitting it", () => {
+      // The value that gets validated has to be the value that gets emitted:
+      // trimming only inside the validator let "Inter\n" through as "Inter".
+      const css = themeToCSS({ fonts: { body: "  Inter\n" } });
+      expect(css).toContain('--sw-font-body: "Inter", system-ui, sans-serif;');
+      expect(css).not.toContain("\n\"");
+      expect(themeToCSS(font({ family: " Example Sans " }))).toContain(
+        'font-family: "Example Sans"',
+      );
+    });
+
+    it("rejects an uppercase file extension", () => {
+      // sync-brand-assets.sh lowercases extensions, so /fonts/x/A.WOFF2 is a
+      // URL that cannot exist. See isValidFontSrc.
+      expect(themeToCSS(font({ src: "/fonts/example/Example.WOFF2" }))).toBe("");
     });
 
     it("drops only the invalid entries, keeping valid ones", () => {

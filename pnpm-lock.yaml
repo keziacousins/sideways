@@ -122,6 +122,9 @@ importers:
       '@sideways/storage':
         specifier: workspace:*
         version: link:../../shared/storage
+      '@sideways/theme':
+        specifier: workspace:*
+        version: link:../../shared/theme
       '@sideways/types':
         specifier: workspace:*
         version: link:../../shared/types
@@ -177,6 +180,9 @@ importers:
       '@sideways/markdown':
         specifier: workspace:*
         version: link:../../shared/markdown
+      '@sideways/theme':
+        specifier: workspace:*
+        version: link:../../shared/theme
       '@sideways/types':
         specifier: workspace:*
         version: link:../../shared/types
@@ -276,6 +282,8 @@ importers:
       '@types/node':
         specifier: ^22.19.15
         version: 22.19.15
+
+  shared/theme: {}
 
   shared/types: {}
 

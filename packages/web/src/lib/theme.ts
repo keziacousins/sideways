@@ -1,15 +1,15 @@
 /**
  * Convert theme tokens to CSS variable overrides for the web.
- * Validates values to prevent CSS injection.
+ * Value validation lives in @sideways/theme, shared with the PDF renderer.
  */
 
-function isValidColor(v: string): boolean {
-  return /^(#[0-9a-f]{3,8}|rgb\(\s*\d+[\s,]+\d+[\s,]+\d+\s*\)|rgba\(\s*\d+[\s,]+\d+[\s,]+\d+[\s,]+[\d.]+\s*\)|[a-z]{3,20})$/i.test(v.trim());
-}
-
-function isValidFont(v: string): boolean {
-  return /^[a-zA-Z0-9\s-]+$/.test(v.trim()) && v.length <= 60;
-}
+import {
+  isValidColor,
+  isValidFont,
+  isValidFontStyle,
+  isValidFontWeight,
+  trimToken,
+} from "@sideways/theme";
 
 /**
  * Custom web fonts are declared per theme, in the theme's own tokens:
@@ -44,6 +44,11 @@ interface CustomFont {
 /**
  * Font URLs must be a relative path under /fonts/, with no way to break out
  * of the url() token or the surrounding rule. Anything else is rejected.
+ *
+ * Extensions are lowercase-only on purpose: sync-brand-assets.sh lowercases
+ * them on the way in, so there is exactly one spelling of any given file. On a
+ * case-insensitive filesystem, accepting both would let two theme entries point
+ * at "different" URLs backed by the same file.
  */
 function isValidFontSrc(v: string): boolean {
   if (!/^\/fonts\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\.(woff2|woff|otf|ttf)$/.test(v)) {
@@ -51,15 +56,6 @@ function isValidFontSrc(v: string): boolean {
   }
   // `..` satisfies the character class above, so exclude traversal explicitly.
   return !v.split("/").includes("..");
-}
-
-/** A single weight (400), a keyword, or a variable-font range ("100 900"). */
-function isValidFontWeight(v: string): boolean {
-  return /^([1-9]00|normal|bold)( [1-9]00)?$/.test(v.trim());
-}
-
-function isValidFontStyle(v: string): boolean {
-  return /^(normal|italic)$/.test(v.trim());
 }
 
 function fontExtension(src: string): string {
@@ -75,7 +71,8 @@ function fontFaceRules(custom: unknown): string[] {
     if (!entry || typeof entry !== "object") continue;
     const { family, weight, style, src } = entry as CustomFont;
 
-    if (typeof family !== "string" || !isValidFont(family)) continue;
+    const name = trimToken(family);
+    if (!name || !isValidFont(name)) continue;
     if (typeof src !== "string" || !isValidFontSrc(src)) continue;
 
     // Format comes from the extension we just validated, never from input.
@@ -83,18 +80,19 @@ function fontFaceRules(custom: unknown): string[] {
     if (!format) continue;
 
     const descriptors = [
-      `font-family: "${family.trim()}"`,
+      `font-family: "${name}"`,
       `src: url("${src}") format("${format}")`,
     ];
 
     if (weight !== undefined) {
-      const w = String(weight);
-      if (!isValidFontWeight(w)) continue;
-      descriptors.push(`font-weight: ${w.trim()}`);
+      const w = trimToken(weight);
+      if (!w || !isValidFontWeight(w)) continue;
+      descriptors.push(`font-weight: ${w}`);
     }
     if (style !== undefined) {
-      if (typeof style !== "string" || !isValidFontStyle(style)) continue;
-      descriptors.push(`font-style: ${style.trim()}`);
+      const st = trimToken(style);
+      if (!st || !isValidFontStyle(st)) continue;
+      descriptors.push(`font-style: ${st}`);
     }
 
     rules.push(`@font-face { ${descriptors.join("; ")}; }`);
@@ -106,23 +104,27 @@ export function themeToCSS(tokens: any): string {
   if (!tokens) return "";
   const rules: string[] = [];
 
-  if (tokens.fonts?.display && isValidFont(tokens.fonts.display)) {
-    rules.push(`--sw-font-display: "${tokens.fonts.display}", Georgia, serif;`);
-    if (
-      tokens.fonts.displayWeight &&
-      isValidFontWeight(String(tokens.fonts.displayWeight))
-    ) {
-      rules.push(`--sw-font-display-weight: ${tokens.fonts.displayWeight};`);
+  // Every branch below validates and emits the same trimmed string — see the
+  // note in @sideways/theme about why those must not be allowed to diverge.
+  const display = trimToken(tokens.fonts?.display);
+  if (display && isValidFont(display)) {
+    rules.push(`--sw-font-display: "${display}", Georgia, serif;`);
+    const weight = trimToken(tokens.fonts?.displayWeight);
+    if (weight && isValidFontWeight(weight)) {
+      rules.push(`--sw-font-display-weight: ${weight};`);
     }
   }
-  if (tokens.fonts?.body && isValidFont(tokens.fonts.body)) {
-    rules.push(`--sw-font-body: "${tokens.fonts.body}", system-ui, sans-serif;`);
+  const body = trimToken(tokens.fonts?.body);
+  if (body && isValidFont(body)) {
+    rules.push(`--sw-font-body: "${body}", system-ui, sans-serif;`);
   }
-  if (tokens.fonts?.mono && isValidFont(tokens.fonts.mono)) {
-    rules.push(`--sw-font-mono: "${tokens.fonts.mono}", ui-monospace, monospace;`);
+  const mono = trimToken(tokens.fonts?.mono);
+  if (mono && isValidFont(mono)) {
+    rules.push(`--sw-font-mono: "${mono}", ui-monospace, monospace;`);
   }
-  if (tokens.colors?.accent && isValidColor(tokens.colors.accent)) {
-    rules.push(`--sw-accent: ${tokens.colors.accent};`);
+  const accent = trimToken(tokens.colors?.accent);
+  if (accent && isValidColor(accent)) {
+    rules.push(`--sw-accent: ${accent};`);
   }
 
   const fontFaces = fontFaceRules(tokens.fonts?.custom);

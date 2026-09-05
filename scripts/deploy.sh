@@ -31,6 +31,31 @@ for arg in "$@"; do
   esac
 done
 
+# ── Brand fonts ──────────────────────────────────────────────────────
+#
+# Brand fonts are gitignored: they only exist in a checkout where
+# scripts/sync-brand-assets.sh has been run against a local brand/. So they
+# are excluded from the code syncs below and pushed separately, only when
+# this checkout actually has them.
+#
+# Otherwise a deploy from a fontless checkout (CI, a fresh clone, a second
+# machine) would hit them with --delete and strip the host's fonts, with no
+# error and no symptom beyond pages and PDFs quietly falling back to a
+# default face. Pushing them on their own keeps --delete meaningful where it
+# should be: sync-brand-assets.sh mirrors brand/ into the local tree, so a
+# font deleted there still propagates to the host.
+
+sync_fonts() {
+  local src=$1 dest=$2 label=$3
+  if [[ -n "$(ls -A "$src" 2>/dev/null | grep -v '^\.gitkeep$' || true)" ]]; then
+    echo "==> Syncing $label brand fonts..."
+    rsync -az --delete "$src/" "$VM:$dest/"
+  else
+    echo "==> No local $label brand fonts — leaving the host's copy untouched."
+    echo "    Run ./scripts/sync-brand-assets.sh first if this checkout should have them."
+  fi
+}
+
 # ── Sync infra (Docker compose, configs) ─────────────────────────────
 
 sync_infra() {
@@ -44,11 +69,15 @@ sync_infra() {
   rsync -az --delete infra/hydra/ $VM:$INFRA_DIR/hydra/
   rsync -az --delete infra/kratos/ $VM:$INFRA_DIR/kratos/
   rsync -az --delete infra/scripts/ $VM:$INFRA_DIR/scripts/
-  rsync -az --delete infra/weasyprint/ $VM:$INFRA_DIR/weasyprint/
+  rsync -az --delete --exclude fonts infra/weasyprint/ $VM:$INFRA_DIR/weasyprint/
+  sync_fonts infra/weasyprint/fonts "$INFRA_DIR/weasyprint/fonts" print
   rsync -az --delete infra/mermaid/ $VM:$INFRA_DIR/mermaid/
 
-  # Create infra .env if missing
-  ssh $VM "test -f $INFRA_DIR/.env || cp $INFRA_DIR/.env.example $INFRA_DIR/.env"
+  # Create infra .env if missing. The fonts directory is created here too:
+  # it is excluded from the rsync above and may have no fonts to push, but
+  # the WeasyPrint image's `COPY fonts/` fails the build without it.
+  ssh $VM "mkdir -p $INFRA_DIR/weasyprint/fonts; \
+    test -f $INFRA_DIR/.env || cp $INFRA_DIR/.env.example $INFRA_DIR/.env"
 }
 
 rebuild_infra() {
@@ -76,7 +105,10 @@ rsync -az --delete \
   --exclude ".env" \
   --exclude ".sessions" \
   --include ".env.example" \
+  --exclude "packages/web/public/fonts" \
   ./ $VM:$APP_DIR/
+
+sync_fonts packages/web/public/fonts "$APP_DIR/packages/web/public/fonts" web
 
 # ── Sync infra too ───────────────────────────────────────────────────
 sync_infra

@@ -46,10 +46,11 @@ RUN mkdir -p /usr/share/fonts/eb-garamond && \
     wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf" \
       -O /usr/share/fonts/eb-garamond/EBGaramond-Italic-Variable.ttf
 
-# Brand fonts for themed PDF export. The directory is populated by
-# scripts/sync-brand-assets.sh from the gitignored brand/ tree, so licensed
-# binaries never enter the repo — it ships with only a .gitkeep, and this
-# COPY is a no-op until the sync script has run.
+# Brand fonts for themed PDF export, one subdirectory per client. The tree is
+# mirrored here by scripts/sync-brand-assets.sh from the gitignored brand/
+# directory, so licensed binaries never enter the repo — it ships with only a
+# .gitkeep, and this COPY is a no-op until the sync script has run.
+# fc-cache below recurses, so the per-client nesting costs nothing.
 COPY fonts/ /usr/share/fonts/custom/
 
 # Register all fonts with fontconfig
