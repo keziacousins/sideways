@@ -595,15 +595,20 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   .sw-doc-content figure.mermaid-diagram {
     margin: 0 0 1.8em;
     padding: 1.25em 1.5em;
-    /* Mermaid draws with its default light palette on both surfaces, so the
-       diagram needs its own plate to stay legible against the dark chrome. */
-    background: #fdfdfb;
+    /* No plate: the diagram is drawn from the same tokens as the page (see
+       scripts/mermaid.ts), so it sits on the document background like any
+       other content rather than as a lit panel in the middle of it. */
     border: 1px solid var(--sw-doc-border);
     border-radius: var(--sw-radius-md);
     text-align: center;
     overflow-x: auto;
   }
   .sw-doc-content figure.mermaid-diagram svg {
+    /* Shrink-only. Mermaid emits width:100% capped by an inline max-width at
+       the diagram's natural size, which browsers honour — so a small diagram
+       is not blown up here the way it is in WeasyPrint (which ignores the
+       declaration; shared/markdown/src/mermaid.ts pins explicit dimensions for
+       the print path). These bound a diagram wider than the column. */
     max-width: 100%;
     height: auto;
   }

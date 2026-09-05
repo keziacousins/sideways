@@ -195,3 +195,51 @@ describe("mermaid diagrams", () => {
     expect(html).toContain("plain text");
   });
 });
+
+// WeasyPrint takes mermaid's width="100%" and ignores the inline max-width
+// that is supposed to cap it, so an unmodified diagram is stretched to the
+// column width with its labels scaled up to match. The renderer pins the
+// natural size from the viewBox instead; the stylesheets only shrink.
+describe("mermaid diagram sizing (pdf)", () => {
+  const render = (svg: string) =>
+    renderMarkdown(MD, { target: "pdf", renderMermaid: stubSvg(svg) });
+
+  it("replaces width=100% with the viewBox's intrinsic size", async () => {
+    const html = await render(SVG);
+    expect(html).not.toContain('width="100%"');
+    expect(html).toContain('width="100"');
+    expect(html).toContain('height="50"');
+  });
+
+  it("drops the max-width that stood in for the width attribute", async () => {
+    const html = await render(SVG);
+    expect(html).not.toContain("max-width");
+  });
+
+  it("keeps other inline declarations while dropping max-width", async () => {
+    const html = await render(
+      SVG.replace('style="max-width: 100px;"', 'style="max-width: 100px; background: transparent;"'),
+    );
+    expect(html).not.toContain("max-width");
+    expect(html).toContain("background: transparent");
+  });
+
+  it("leaves a diagram alone when the viewBox is missing or unusable", async () => {
+    const noViewBox = SVG.replace(' viewBox="0 0 100 50"', "");
+    expect(await render(noViewBox)).toContain('width="100%"');
+
+    const zeroWidth = SVG.replace('viewBox="0 0 100 50"', 'viewBox="0 0 0 50"');
+    expect(await render(zeroWidth)).toContain('width="100%"');
+
+    const junk = SVG.replace('viewBox="0 0 100 50"', 'viewBox="not a box"');
+    expect(await render(junk)).toContain('width="100%"');
+  });
+
+  it("still sanitises and rescopes a resized diagram", async () => {
+    const html = await render(SVG);
+    expect(html).toContain('width="100"');
+    expect(html).toContain("#user-content-mermaid-d1");
+    expect(html).toContain("url(#user-content-arrow)");
+    expect(html).not.toContain("<script");
+  });
+});

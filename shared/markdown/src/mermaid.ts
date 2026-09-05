@@ -138,7 +138,73 @@ function diagramFigure(svg: string): Element {
   };
   prefixInternalReferences(figure);
   rewriteEmbeddedCss(figure);
+  normaliseSize(figure);
   return figure;
+}
+
+/**
+ * Pin the diagram to its natural size so it is only ever scaled DOWN.
+ *
+ * Mermaid emits `width="100%"` plus an inline `max-width` holding the real
+ * width. WeasyPrint takes the attribute and ignores the declaration, so a
+ * 240pt diagram is stretched across the full content column and every label
+ * inside it grows with the viewBox — hence comically large text on simple
+ * diagrams, and a trivial flowchart tall enough to displace itself onto the
+ * next page and leave the rest of the previous one blank.
+ *
+ * So we drop `width="100%"`, drop the `max-width` declaration that was
+ * standing in for it, and set the intrinsic width/height from the viewBox.
+ * The stylesheets then apply `max-width: 100%; height: auto`, which shrinks
+ * an oversized diagram to fit and leaves everything else alone.
+ *
+ * Done here rather than with mermaid's own `useMaxWidth: false` because that
+ * flag is read per diagram type (`config.kanban.useMaxWidth`,
+ * `config.mindmap.useMaxWidth`, …), so configuring it means enumerating every
+ * type mermaid ships and silently missing any type added later. The viewBox
+ * is universal.
+ */
+function normaliseSize(figure: Element): void {
+  visit(figure, "element", (node: Element) => {
+    // Not SKIP: that would skip the node's children too, and the first node
+    // visited is the <figure> wrapping the diagram.
+    if (node.tagName !== "svg" || !node.properties) return;
+
+    const box = viewBoxSize(node.properties.viewBox);
+    if (!box) return SKIP;
+
+    node.properties.width = box.width;
+    node.properties.height = box.height;
+
+    const style = stripMaxWidth(node.properties.style);
+    if (style) node.properties.style = style;
+    else delete node.properties.style;
+
+    return SKIP;
+  });
+}
+
+/** `"0 0 239.45 339.36"` -> `{width: 239.45, height: 339.36}`; undefined if unusable. */
+function viewBoxSize(viewBox: unknown): { width: number; height: number } | undefined {
+  if (typeof viewBox !== "string") return undefined;
+  const parts = viewBox.trim().split(/[\s,]+/).map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return undefined;
+  const [, , width, height] = parts;
+  if (width <= 0 || height <= 0) return undefined;
+  return { width, height };
+}
+
+/**
+ * Remove `max-width` from an inline style, keeping every other declaration.
+ * Mermaid's is the width we just moved onto the attribute; leaving it would
+ * re-cap a diagram that the stylesheet is trying to scale down.
+ */
+function stripMaxWidth(style: unknown): string | undefined {
+  if (typeof style !== "string") return undefined;
+  const kept = style
+    .split(";")
+    .filter((d) => d.trim() && !/^\s*max-width\s*:/i.test(d))
+    .map((d) => d.trim());
+  return kept.length ? `${kept.join("; ")};` : undefined;
 }
 
 /**
