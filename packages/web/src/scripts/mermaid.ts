@@ -25,6 +25,50 @@ const MERMAID_CONFIG = {
 } as const;
 
 /**
+ * The whole diagram's size follows from this.
+ *
+ * Mermaid lays a diagram out around its text metrics — boxes are sized to fit
+ * their labels — so the font size is the master control for how large the
+ * finished drawing comes out, not just how large the words are. It defaults to
+ * 16px, which is bigger than this document's own body text, so diagrams read
+ * as oversized next to the prose they sit in.
+ *
+ * `--sw-text-sm` is the design system's step below body (13px against a 15px
+ * body): the size the app already uses for secondary content, which is what a
+ * diagram label is. Taken from the token rather than written as a ratio so it
+ * tracks the type scale.
+ */
+const LABEL_SIZE_TOKEN = "--sw-text-sm";
+
+/**
+ * Resolve a font-size token to pixels.
+ *
+ * `getPropertyValue` hands back the token as authored — `0.8125rem` — and
+ * mermaid wants a number of pixels. Rather than parse units ourselves, put the
+ * value on a throwaway element and let the browser do the conversion, which
+ * stays correct if the token is ever re-expressed in em, px or a clamp().
+ */
+function tokenPx(name: string, fallback: number): number {
+  const probe = document.createElement("span");
+  probe.style.cssText = `position:absolute;visibility:hidden;font-size:var(${name})`;
+  document.documentElement.appendChild(probe);
+  const px = Number.parseFloat(getComputedStyle(probe).fontSize);
+  probe.remove();
+  return Number.isFinite(px) && px > 0 ? px : fallback;
+}
+
+/** The full config, rebuilt per initialize so it tracks the live tokens. */
+function mermaidConfig() {
+  const fontSize = tokenPx(LABEL_SIZE_TOKEN, 13);
+  return {
+    ...MERMAID_CONFIG,
+    theme: "base" as const,
+    fontSize,
+    themeVariables: { ...themeVariables(), fontSize: `${fontSize}px` },
+  };
+}
+
+/**
  * Map the app's design tokens onto mermaid's `base` theme.
  *
  * Read from the live CSS custom properties rather than hardcoded, so this
@@ -104,7 +148,7 @@ let mermaidReady: Promise<Mermaid> | null = null;
 function loadMermaid(): Promise<Mermaid> {
   if (!mermaidReady) {
     mermaidReady = import("mermaid").then(({ default: mermaid }) => {
-      mermaid.initialize({ ...MERMAID_CONFIG, theme: "base", themeVariables: themeVariables() });
+      mermaid.initialize(mermaidConfig());
       return mermaid;
     });
   }
@@ -172,7 +216,7 @@ async function rethemeDiagrams(): Promise<void> {
   if (figures.length === 0) return;
 
   const mermaid = await loadMermaid();
-  mermaid.initialize({ ...MERMAID_CONFIG, theme: "base", themeVariables: themeVariables() });
+  mermaid.initialize(mermaidConfig());
 
   for (const figure of figures) {
     const source = figure.dataset.mermaidSource ?? "";
