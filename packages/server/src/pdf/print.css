@@ -412,6 +412,34 @@ body {
   page-break-inside: avoid;
 }
 
+/* ── Mermaid diagrams (see issue #47) ────────────────────────── */
+.print-content figure.mermaid-diagram {
+  margin: 1.4em 0;
+  text-align: center;
+  /* Splitting a diagram across a page boundary is never useful. The cost is
+     that one too tall to fit in the remaining space moves down whole, so we
+     cap the height below to stop that gap growing to a full page. */
+  page-break-inside: avoid;
+}
+
+.print-content figure.mermaid-diagram svg {
+  /* `normaliseSize` in shared/markdown put the diagram's natural size on the
+     width/height attributes. These two only ever shrink it: a diagram wider
+     than the column scales down, a small one is left at its own size rather
+     than being blown up to fill the width. */
+  max-width: 100%;
+  height: auto;
+  /* A diagram taller than most of the text block would strand the rest of the
+     page whichever way it broke, so bound it and let the aspect ratio follow. */
+  max-height: 180mm;
+}
+
+/* Mermaid's own theme CSS sets label colours for a light background, which is
+   what we print on — but the sidecar has no idea what the page font is. */
+.print-content figure.mermaid-diagram svg text {
+  font-family: var(--th-font-body, inherit);
+}
+
 /* ── KaTeX ───────────────────────────────────────────────────── */
 .print-content .katex {
   color: #1a1a1a;
