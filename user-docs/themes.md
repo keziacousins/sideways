@@ -103,8 +103,8 @@ allowed fonts in the source — adding one is pure configuration:
 | Field | Notes |
 |-------|-------|
 | `family` | Must match the family named in `fonts.body` / `fonts.display` / `fonts.mono` |
-| `src` | Must be `/fonts/<client>/<file>` with a `.woff2`, `.woff`, `.otf` or `.ttf` extension |
-| `weight` | `400`, `normal`, `bold`, or a variable range like `"100 900"` (optional) |
+| `src` | Must be `/fonts/<client>/<file>` with a lowercase `.woff2`, `.woff`, `.otf` or `.ttf` extension |
+| `weight` | `1`–`1000`, `normal`, `bold`, or a variable range like `"100 1000"` (optional) |
 | `style` | `normal` or `italic` (optional) |
 
 Entries that fail validation are dropped silently — if a font isn't applying,
@@ -119,7 +119,10 @@ both places; the workflow below does that in one step.
 Logos, licensed fonts and per-client theme config live in a gitignored
 `brand/` directory — the single source of truth for anything that must not be
 committed. It reaches the deploy host via `deploy.sh`, which rsyncs the
-working tree rather than a git checkout.
+working tree rather than a git checkout. Fonts are pushed as a separate step
+there, and only when the deploying checkout actually has them — a deploy from
+a machine without `brand/` leaves the host's fonts untouched instead of
+deleting them.
 
 ```
 brand/
@@ -140,7 +143,20 @@ Builds can't read from `brand/` directly — Astro serves web fonts only from
 
 Both destinations are gitignored, so licensed binaries stay out of the repo
 whichever path is used. Web fonts land at `/fonts/<client>/<file>`, which is
-what `src` must point at.
+what `src` must point at; print fonts land at `infra/weasyprint/fonts/<client>/`
+and are namespaced the same way, so two clients shipping a `Regular.woff2`
+don't overwrite each other.
+
+The script is a **mirror**, not an add-only copy. A font removed or renamed
+under `brand/` is removed from both destinations on the next run, and so is a
+client directory that no longer exists there. Nothing else may write to those
+two directories — a file placed there by hand will be pruned. File extensions
+are lowercased on the way in, so `Font.OTF` in `brand/` is served as
+`Font.otf`; that is the only spelling `src` will accept.
+
+If `brand/` has no fonts at all the script leaves the destinations alone rather
+than emptying them, on the grounds that an empty `brand/` is usually a
+half-finished setup and not a request to unbrand everything.
 
 PDF fonts are baked into the WeasyPrint image, so adding or changing one needs
 an image rebuild:
@@ -151,9 +167,11 @@ DEPLOY_HOST=... ./scripts/deploy.sh --infra
 
 ### Font licensing
 
-- **Redistributable fonts (OFL and similar)** can be committed, or fetched at
-  image-build time with `wget` like the built-in families in
-  `infra/weasyprint/Dockerfile`.
+- **Redistributable fonts (OFL and similar)** are fetched at image-build time
+  with `wget`, like the built-in families in `infra/weasyprint/Dockerfile`.
+  Don't commit binaries into the font directories: they are gitignored, and
+  `sync-brand-assets.sh` mirrors `brand/` over them, so anything committed
+  there would be both invisible to git and deleted on the next sync.
 - **Licensed or proprietary fonts** go in `brand/<client>/fonts/` and are
   never committed. Keep the licence file alongside them.
 

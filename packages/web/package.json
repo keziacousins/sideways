@@ -14,6 +14,7 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/newsreader": "^5.2.10",
     "@sideways/markdown": "workspace:*",
+    "@sideways/theme": "workspace:*",
     "@sideways/types": "workspace:*",
     "astro": "^6.3.1",
     "mermaid": "11.17.2",

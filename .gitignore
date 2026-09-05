@@ -29,7 +29,10 @@ backups/
 # into the build locations below. Reaches the deploy host via deploy.sh rsync.
 brand/
 
-# Populated by sync-brand-assets.sh — never commit font binaries here.
+# Mirrored from brand/ by sync-brand-assets.sh — never commit font binaries
+# here. The mirror prunes, so a committed file would be deleted on the next
+# sync as well as being invisible to git; redistributable fonts are fetched at
+# image-build time instead (see user-docs/themes.md).
 # The WeasyPrint directory itself stays tracked (via .gitkeep) because the
 # image's `COPY fonts/` fails the build if it is missing on a fresh clone.
 packages/web/public/fonts/
