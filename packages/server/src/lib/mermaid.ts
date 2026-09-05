@@ -15,18 +15,37 @@ import { env } from "../env.js";
 import { logger } from "../logger.js";
 
 /**
- * Mermaid config. Must stay identical to the browser-side config in the
- * web client — a diagram that renders one way on screen and another in
- * print is worse than one that doesn't render at all.
+ * Mermaid config. Structurally identical to the browser-side config in the
+ * web client — a diagram that lays out one way on screen and another in
+ * print is worse than one that doesn't render at all. Colour and label size
+ * are the two deliberate exceptions, each matched to its own medium.
  *
  * `htmlLabels: false` is load-bearing: it keeps Mermaid from emitting
  * <foreignObject>, which WeasyPrint cannot draw.
  */
+
+/**
+ * Label size, and so the size of the whole drawing: Mermaid sizes its boxes
+ * to fit their text, which makes this the master control over how large a
+ * diagram comes out.
+ *
+ * The printed page sets body text at 11pt and drops to 10pt for secondary
+ * content (see pdf/print.css) — a diagram label being secondary content. The
+ * SVG is placed at its intrinsic pixel size and CSS pixels are 3/4 of a
+ * point, so 10pt is 13.33px. Mermaid's own default is 16px, which prints at
+ * 12pt: larger than the body text it sits beside, which is what made
+ * diagrams read as oversized.
+ */
+const PRINT_LABEL_PT = 10;
+const LABEL_FONT_PX = PRINT_LABEL_PT / 0.75;
+
 const MERMAID_CONFIG = {
   startOnLoad: false,
   securityLevel: "strict",
   htmlLabels: false,
   flowchart: { htmlLabels: false },
+  fontSize: LABEL_FONT_PX,
+  themeVariables: { fontSize: `${LABEL_FONT_PX}px` },
 };
 
 /** A diagram slower than this is broken, not busy. */
