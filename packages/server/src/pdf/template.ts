@@ -74,6 +74,11 @@ function isValidFont(v: string): boolean {
   return /^[a-zA-Z0-9\s-]+$/.test(v.trim()) && v.length <= 60;
 }
 
+/** A single weight (400), a keyword, or a variable-font range ("100 900"). */
+function isValidFontWeight(v: string): boolean {
+  return /^([1-9]00|normal|bold)( [1-9]00)?$/.test(v.trim());
+}
+
 /** Validate paper size */
 function isValidPaperSize(v: string): boolean {
   return /^(A[0-5]|B[0-5]|letter|legal|ledger|\d+mm\s+\d+mm|\d+in\s+\d+in)$/i.test(v.trim());
@@ -92,7 +97,7 @@ function buildThemeCSS(theme: ThemeTokens): string {
 
   if (theme.fonts?.display && isValidFont(theme.fonts.display))
     vars.push(`--th-font-display: "${theme.fonts.display}", Georgia, serif`);
-  if (theme.fonts?.displayWeight)
+  if (theme.fonts?.displayWeight && isValidFontWeight(String(theme.fonts.displayWeight)))
     vars.push(`--th-font-display-weight: ${theme.fonts.displayWeight}`);
   if (theme.fonts?.body && isValidFont(theme.fonts.body))
     vars.push(`--th-font-body: "${theme.fonts.body}", sans-serif`);

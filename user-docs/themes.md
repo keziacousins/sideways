@@ -53,7 +53,9 @@ All fields are optional — unset fields fall back to the default Sideways theme
 | `fonts.body` | Body text, UI elements | Inter |
 | `fonts.mono` | Code blocks, inline code | Fira Code |
 
-Custom fonts must be installed on the server (in the WeasyPrint container for PDF, and served as web fonts for the browser).
+`fonts.display`, `fonts.body` and `fonts.mono` name a family. For anything
+beyond the built-in families, the font also has to be delivered — see
+[Custom fonts](#custom-fonts) below.
 
 ### Colors
 
@@ -70,13 +72,90 @@ Custom fonts must be installed on the server (in the WeasyPrint container for PD
 |-------|---------|
 | `coverLayout` | Cover style: `left-aligned`, `centered`, or `minimal` |
 | `coverSubtitle` | Text below the title (defaults to space name) |
-| `logo` | URL to logo image (uploaded via theme API) |
+| `logo` | URL to logo image (uploaded via theme API; PNG, JPEG, GIF or WebP — **not SVG**) |
 
 ### Print
 
 | Token | Affects | Default |
 |-------|---------|---------|
 | `print.paperSize` | Paper dimensions | A4 |
+
+## Custom fonts
+
+A theme declares its own web fonts under `fonts.custom`. There is no list of
+allowed fonts in the source — adding one is pure configuration:
+
+```json
+{
+  "fonts": {
+    "body": "Example Sans",
+    "display": "Example Sans",
+    "custom": [
+      { "family": "Example Sans", "weight": "100 900", "style": "normal",
+        "src": "/fonts/example/ExampleSans-Variable.ttf" },
+      { "family": "Example Sans", "weight": "100 900", "style": "italic",
+        "src": "/fonts/example/ExampleSans-Italic-Variable.ttf" }
+    ]
+  }
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `family` | Must match the family named in `fonts.body` / `fonts.display` / `fonts.mono` |
+| `src` | Must be `/fonts/<client>/<file>` with a `.woff2`, `.woff`, `.otf` or `.ttf` extension |
+| `weight` | `400`, `normal`, `bold`, or a variable range like `"100 900"` (optional) |
+| `style` | `normal` or `italic` (optional) |
+
+Entries that fail validation are dropped silently — if a font isn't applying,
+check `src` against the pattern above first. A theme is capped at 12 entries.
+
+`fonts.custom` drives the **web** only. PDF export resolves families through
+fontconfig inside the WeasyPrint container, so a font needs to be present in
+both places; the workflow below does that in one step.
+
+## Brand assets
+
+Logos, licensed fonts and per-client theme config live in a gitignored
+`brand/` directory — the single source of truth for anything that must not be
+committed. It reaches the deploy host via `deploy.sh`, which rsyncs the
+working tree rather than a git checkout.
+
+```
+brand/
+  <client>/
+    fonts/*.{woff2,woff,otf,ttf}   font files
+    logo.svg                        vector source
+    logo.png                        rasterised copy for upload
+    theme.json                      theme tokens
+```
+
+Builds can't read from `brand/` directly — Astro serves web fonts only from
+`packages/web/public/`, and Docker `COPY` can't reach outside the
+`infra/weasyprint/` build context — so a script copies fonts into both:
+
+```bash
+./scripts/sync-brand-assets.sh
+```
+
+Both destinations are gitignored, so licensed binaries stay out of the repo
+whichever path is used. Web fonts land at `/fonts/<client>/<file>`, which is
+what `src` must point at.
+
+PDF fonts are baked into the WeasyPrint image, so adding or changing one needs
+an image rebuild:
+
+```bash
+DEPLOY_HOST=... ./scripts/deploy.sh --infra
+```
+
+### Font licensing
+
+- **Redistributable fonts (OFL and similar)** can be committed, or fetched at
+  image-build time with `wget` like the built-in families in
+  `infra/weasyprint/Dockerfile`.
+- **Licensed or proprietary fonts** go in `brand/<client>/fonts/` and are
+  never committed. Keep the licence file alongside them.
 
 ## Creating a Theme via API
 

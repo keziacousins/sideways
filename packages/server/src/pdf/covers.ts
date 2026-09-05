@@ -73,7 +73,7 @@ function leftAligned(opts: CoverOptions): string {
     <div style="padding-top: 4cm;">
       <h1 style="
         font-family: '${opts.displayFont || "Newsreader"}', Georgia, serif;
-        font-size: 36pt;
+        font-size: 30pt;
         font-weight: 400;
         color: #1a1a1a;
         margin: 0 0 0.4em;

@@ -22,8 +22,19 @@ dist/
 
 # Local-only working files
 references/
-for-pf-theme/
 backups/
+
+# Uncommitted brand assets (logos, licensed fonts, per-client theme config).
+# Single source of truth; scripts/sync-brand-assets.sh copies fonts from here
+# into the build locations below. Reaches the deploy host via deploy.sh rsync.
+brand/
+
+# Populated by sync-brand-assets.sh — never commit font binaries here.
+# The WeasyPrint directory itself stays tracked (via .gitkeep) because the
+# image's `COPY fonts/` fails the build if it is missing on a fresh clone.
+packages/web/public/fonts/
+infra/weasyprint/fonts/*
+!infra/weasyprint/fonts/.gitkeep
 
 # Internal planning / scratch docs (kept out of public repo)
 PLAN.md
