@@ -46,9 +46,11 @@ RUN mkdir -p /usr/share/fonts/eb-garamond && \
     wget -q "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf" \
       -O /usr/share/fonts/eb-garamond/EBGaramond-Italic-Variable.ttf
 
-# To add your own licensed fonts (e.g. for branded themes), drop .otf/.ttf
-# files into infra/weasyprint/fonts/ before building, then uncomment:
-# COPY fonts/ /usr/share/fonts/custom/
+# Brand fonts for themed PDF export. The directory is populated by
+# scripts/sync-brand-assets.sh from the gitignored brand/ tree, so licensed
+# binaries never enter the repo — it ships with only a .gitkeep, and this
+# COPY is a no-op until the sync script has run.
+COPY fonts/ /usr/share/fonts/custom/
 
 # Register all fonts with fontconfig
 RUN fc-cache -f -v

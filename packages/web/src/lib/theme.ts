@@ -11,38 +11,112 @@ function isValidFont(v: string): boolean {
   return /^[a-zA-Z0-9\s-]+$/.test(v.trim()) && v.length <= 60;
 }
 
-/** Map of custom font names to their font file paths (served from /fonts/) */
-const CUSTOM_FONTS: Record<string, { regular: string; bold: string; italic?: string; boldItalic?: string }> = {};
+/**
+ * Custom web fonts are declared per theme, in the theme's own tokens:
+ *
+ *   fonts.custom: [
+ *     { family: "Example Sans", weight: 400, style: "normal",
+ *       src: "/fonts/example/ExampleSans-Regular.woff2" }
+ *   ]
+ *
+ * Theme tokens are attacker-influenced data from the database that ends up
+ * inside a <style> block, so every field is checked against an allowlist and
+ * a failing entry is dropped rather than sanitised. Font files are served
+ * from packages/web/public/fonts/<client>/, populated by
+ * scripts/sync-brand-assets.sh — keeping licensed binaries out of the repo.
+ */
+const MAX_CUSTOM_FONTS = 12;
 
-function fontFaceRules(fontName: string): string {
-  const font = CUSTOM_FONTS[fontName];
-  if (!font) return "";
-  const rules = [
-    `@font-face { font-family: "${fontName}"; src: url("${font.regular}") format("opentype"); font-weight: 400; font-style: normal; }`,
-    `@font-face { font-family: "${fontName}"; src: url("${font.bold}") format("opentype"); font-weight: 700; font-style: normal; }`,
-  ];
-  if (font.italic) rules.push(`@font-face { font-family: "${fontName}"; src: url("${font.italic}") format("opentype"); font-weight: 400; font-style: italic; }`);
-  if (font.boldItalic) rules.push(`@font-face { font-family: "${fontName}"; src: url("${font.boldItalic}") format("opentype"); font-weight: 700; font-style: italic; }`);
-  return rules.join("\n");
+const FONT_FORMATS: Record<string, string> = {
+  woff2: "woff2",
+  woff: "woff",
+  otf: "opentype",
+  ttf: "truetype",
+};
+
+interface CustomFont {
+  family: string;
+  weight?: string | number;
+  style?: string;
+  src: string;
+}
+
+/**
+ * Font URLs must be a relative path under /fonts/, with no way to break out
+ * of the url() token or the surrounding rule. Anything else is rejected.
+ */
+function isValidFontSrc(v: string): boolean {
+  if (!/^\/fonts\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\.(woff2|woff|otf|ttf)$/.test(v)) {
+    return false;
+  }
+  // `..` satisfies the character class above, so exclude traversal explicitly.
+  return !v.split("/").includes("..");
+}
+
+/** A single weight (400), a keyword, or a variable-font range ("100 900"). */
+function isValidFontWeight(v: string): boolean {
+  return /^([1-9]00|normal|bold)( [1-9]00)?$/.test(v.trim());
+}
+
+function isValidFontStyle(v: string): boolean {
+  return /^(normal|italic)$/.test(v.trim());
+}
+
+function fontExtension(src: string): string {
+  return src.slice(src.lastIndexOf(".") + 1).toLowerCase();
+}
+
+/** Build @font-face rules from a theme's declared custom fonts. */
+function fontFaceRules(custom: unknown): string[] {
+  if (!Array.isArray(custom)) return [];
+
+  const rules: string[] = [];
+  for (const entry of custom.slice(0, MAX_CUSTOM_FONTS)) {
+    if (!entry || typeof entry !== "object") continue;
+    const { family, weight, style, src } = entry as CustomFont;
+
+    if (typeof family !== "string" || !isValidFont(family)) continue;
+    if (typeof src !== "string" || !isValidFontSrc(src)) continue;
+
+    // Format comes from the extension we just validated, never from input.
+    const format = FONT_FORMATS[fontExtension(src)];
+    if (!format) continue;
+
+    const descriptors = [
+      `font-family: "${family.trim()}"`,
+      `src: url("${src}") format("${format}")`,
+    ];
+
+    if (weight !== undefined) {
+      const w = String(weight);
+      if (!isValidFontWeight(w)) continue;
+      descriptors.push(`font-weight: ${w.trim()}`);
+    }
+    if (style !== undefined) {
+      if (typeof style !== "string" || !isValidFontStyle(style)) continue;
+      descriptors.push(`font-style: ${style.trim()}`);
+    }
+
+    rules.push(`@font-face { ${descriptors.join("; ")}; }`);
+  }
+  return rules;
 }
 
 export function themeToCSS(tokens: any): string {
   if (!tokens) return "";
-  const fontFaces: string[] = [];
   const rules: string[] = [];
 
   if (tokens.fonts?.display && isValidFont(tokens.fonts.display)) {
     rules.push(`--sw-font-display: "${tokens.fonts.display}", Georgia, serif;`);
-    if (tokens.fonts.displayWeight) {
+    if (
+      tokens.fonts.displayWeight &&
+      isValidFontWeight(String(tokens.fonts.displayWeight))
+    ) {
       rules.push(`--sw-font-display-weight: ${tokens.fonts.displayWeight};`);
     }
-    const ff = fontFaceRules(tokens.fonts.display);
-    if (ff) fontFaces.push(ff);
   }
   if (tokens.fonts?.body && isValidFont(tokens.fonts.body)) {
     rules.push(`--sw-font-body: "${tokens.fonts.body}", system-ui, sans-serif;`);
-    const ff = fontFaceRules(tokens.fonts.body);
-    if (ff && !fontFaces.includes(ff)) fontFaces.push(ff);
   }
   if (tokens.fonts?.mono && isValidFont(tokens.fonts.mono)) {
     rules.push(`--sw-font-mono: "${tokens.fonts.mono}", ui-monospace, monospace;`);
@@ -50,6 +124,8 @@ export function themeToCSS(tokens: any): string {
   if (tokens.colors?.accent && isValidColor(tokens.colors.accent)) {
     rules.push(`--sw-accent: ${tokens.colors.accent};`);
   }
+
+  const fontFaces = fontFaceRules(tokens.fonts?.custom);
 
   if (rules.length === 0 && fontFaces.length === 0) return "";
   const varBlock = rules.length > 0 ? `:root { ${rules.join(" ")} }` : "";
