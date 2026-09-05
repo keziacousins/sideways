@@ -6,6 +6,7 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@sideways/types": "workspace:*",
+    "hast-util-from-html": "^2.0.3",
     "rehype-autolink-headings": "^7.1.0",
     "rehype-highlight": "^7.0.1",
     "rehype-katex": "^7.0.1",

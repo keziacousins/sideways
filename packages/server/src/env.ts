@@ -24,6 +24,10 @@ export const env = {
     process.env.KRATOS_ADMIN_URL || "http://localhost:4434",
   weasyPrintUrl:
     process.env.WEASYPRINT_URL || "http://localhost:5001",
+  // Headless-browser sidecar that pre-renders Mermaid diagrams to SVG.
+  // Only used on the PDF path — WeasyPrint has no JS runtime.
+  mermaidUrl:
+    process.env.MERMAID_URL || "http://localhost:5002",
 
   /**
    * Required audience claim on JWT access tokens. The consent route forces

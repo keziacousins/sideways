@@ -141,6 +141,22 @@ services:
     ports:
       - "127.0.0.1:5001:5001"
 
+  # --- Mermaid (diagram pre-rendering for PDF) ---
+  # The web surface renders diagrams in the reader's browser; WeasyPrint has no
+  # JS runtime, so PDF exports come through here for SVG first.
+
+  mermaid:
+    build: ./mermaid
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5002:5002"
+    # Chromium's zygote uses shared memory; the default 64MB shm crashes the
+    # renderer on larger diagrams even with --disable-dev-shm-usage.
+    shm_size: 512mb
+    # Chromium spawns a tree of processes — without an init, killed renderers
+    # accumulate as zombies under PID 1.
+    init: true
+
   # --- Mail (dev only) ---
 
   mailhog:

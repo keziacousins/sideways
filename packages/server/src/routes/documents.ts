@@ -21,6 +21,7 @@ import { env } from "../env.js";
 import { validateTitle, validatePath, validateTags, validateContent } from "../middleware/validate.js";
 import { notifyWatchers, notifySpaceWatchers } from "../lib/notify.js";
 import { loadWikiLinkContext } from "../lib/wikilinks-context.js";
+import { createMermaidRenderer } from "../lib/mermaid.js";
 import {
   resolveSection,
   findDocByPath,
@@ -645,7 +646,16 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       sectionSlug: section.slug,
       path: doc.path,
     });
-    const html = await renderMarkdown(latestVersion.content, { target: "pdf", wikiLinks });
+    // `renderMermaid` is passed on the PDF path only — WeasyPrint can't run
+    // the browser-side renderer. The `_render` routes deliberately omit it so
+    // the cached HTML keeps the raw code block for the browser to draw. The
+    // renderer is built per request so its diagram cap, shared deadline and
+    // concurrency limit scope to this one export.
+    const html = await renderMarkdown(latestVersion.content, {
+      target: "pdf",
+      wikiLinks,
+      renderMermaid: createMermaidRenderer(),
+    });
 
     let theme: ThemeTokens | undefined;
     const themeOverride = c.req.query("theme");
