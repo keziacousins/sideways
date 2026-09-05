@@ -1,0 +1,197 @@
+import { describe, it, expect } from "vitest";
+import { renderMarkdown } from "../index.js";
+
+const DIAGRAM = "graph TD\n  A[Start] --> B[End]";
+const MD = "```mermaid\n" + DIAGRAM + "\n```";
+
+// Stub sidecar. The real one is a headless browser; nothing here needs a
+// browser, a container or the network.
+const stubSvg = (svg: string) => async () => svg;
+const stubFailure = (message: string) => async () => {
+  throw new Error(message);
+};
+
+// Shaped like what mermaid.render() actually returns: an id-scoped <style>
+// block holding the theme (mermaid puts node fill, edge `fill:none` and label
+// colour there, NOT on the shapes), class hooks, an empty `style=""` on the
+// rect, and the marker the edges point at.
+const SVG_ID = "mermaid-d1";
+const SVG = `<svg id="${SVG_ID}" width="100%" viewBox="0 0 100 50" style="max-width: 100px;" role="graphics-document document" aria-roledescription="flowchart-v2">
+  <style>#${SVG_ID}{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}#${SVG_ID} .node rect{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#${SVG_ID} .flowchart-link{fill:none;stroke:#333333;}</style>
+  <defs><marker id="arrow" markerWidth="8" refX="5" orient="auto"><path d="M0,0 L8,4 L0,8z"/></marker></defs>
+  <g class="edges"><path class="edge flowchart-link" d="M0 0L50 25" marker-end="url(#arrow)" stroke="#333" stroke-width="2"/></g>
+  <g class="node"><rect class="basic label-container" style="" x="0" y="0" width="40" height="20"/></g>
+  <text x="10" y="20" text-anchor="middle" font-size="12px">Start</text>
+</svg>`;
+
+// A diagram author's lever on the style block: `themeCSS` is not on mermaid's
+// `secure` list, so `%%{init:{"themeCSS":"…"}}%%` in the fence lands here.
+// mermaid compiles it through stylis inside the `#<svg-id>{…}` wrapper, so
+// anything that comes out unscoped got there by escaping that wrapper.
+const svgWithThemeCss = (themeCss: string) =>
+  SVG.replace("<style>", `<style>#${SVG_ID}{}${themeCss}`);
+
+describe("mermaid diagrams", () => {
+  it("leaves the source in place for the browser on the web target", async () => {
+    const html = await renderMarkdown(MD, { target: "web" });
+    expect(html).toContain("data-mermaid");
+    expect(html).toContain('class="language-mermaid no-highlight"');
+    expect(html).toContain(DIAGRAM);
+    // no-highlight must actually keep rehype-highlight off the source.
+    expect(html).not.toContain("hljs");
+  });
+
+  it("emits the source form on the web target even when a renderer is supplied", async () => {
+    const html = await renderMarkdown(MD, { target: "web", renderMermaid: stubSvg(SVG) });
+    expect(html).toContain("data-mermaid");
+    expect(html).not.toContain("<svg");
+  });
+
+  it("emits the source form on the pdf target when no renderer is supplied", async () => {
+    const html = await renderMarkdown(MD, { target: "pdf" });
+    expect(html).toContain("data-mermaid");
+    expect(html).not.toContain("<svg");
+  });
+
+  it("substitutes pre-rendered SVG on the pdf target", async () => {
+    const html = await renderMarkdown(MD, { target: "pdf", renderMermaid: stubSvg(SVG) });
+    expect(html).toContain('<figure class="mermaid-diagram">');
+    expect(html).toContain("<svg");
+    expect(html).toContain('viewBox="0 0 100 50"');
+    expect(html).toContain('d="M0 0L50 25"');
+    expect(html).toContain('stroke-width="2"');
+    expect(html).toContain('text-anchor="middle"');
+    expect(html).not.toContain("data-mermaid");
+    expect(html).not.toContain("graph TD");
+  });
+
+  it("keeps SVG-internal references pointing at the clobber-prefixed ids", async () => {
+    const html = await renderMarkdown(MD, { target: "pdf", renderMermaid: stubSvg(SVG) });
+    // The sanitiser renames ids; the references have to follow.
+    expect(html).toContain('id="user-content-arrow"');
+    expect(html).toContain('marker-end="url(#user-content-arrow)"');
+  });
+
+  it("falls back to the source form, without throwing, when the renderer rejects", async () => {
+    const html = await renderMarkdown("Before\n\n" + MD + "\n\nAfter", {
+      target: "pdf",
+      renderMermaid: stubFailure("sidecar unreachable"),
+    });
+    expect(html).toContain("data-mermaid");
+    expect(html).toContain('<p class="mermaid-error">');
+    expect(html).toContain("sidecar unreachable");
+    // The rest of the document still renders.
+    expect(html).toContain("<p>Before</p>");
+    expect(html).toContain("<p>After</p>");
+  });
+
+  it("strips a script element smuggled through the rendered SVG", async () => {
+    const html = await renderMarkdown(MD, {
+      target: "pdf",
+      renderMermaid: stubSvg('<svg><script>alert(1)</script><rect width="1" height="1"/></svg>'),
+    });
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("alert(1)");
+    expect(html).toContain("<rect");
+  });
+
+  it("strips event handlers and off-site links smuggled through the rendered SVG", async () => {
+    const html = await renderMarkdown(MD, {
+      target: "pdf",
+      renderMermaid: stubSvg(
+        '<svg onload="alert(1)"><g onclick="alert(2)"><use href="https://evil.example/x"' +
+          ' xlink:href="javascript:alert(3)"/></g></svg>',
+      ),
+    });
+    expect(html).not.toContain("onload");
+    expect(html).not.toContain("onclick");
+    expect(html).not.toContain("alert");
+    expect(html).not.toContain("evil.example");
+    expect(html).not.toContain("javascript:");
+    expect(html).toContain("<svg");
+  });
+
+  it("strips foreignObject rather than unwrapping its contents", async () => {
+    const html = await renderMarkdown(MD, {
+      target: "pdf",
+      renderMermaid: stubSvg(
+        '<svg id="d"><foreignObject><div onclick="alert(1)">smuggled</div></foreignObject>' +
+          '<rect width="1" height="1"/></svg>',
+      ),
+    });
+    expect(html).not.toContain("foreignObject");
+    expect(html).not.toContain("smuggled");
+    expect(html).not.toContain("alert(1)");
+    expect(html).toContain("<rect");
+  });
+
+  it("keeps the diagram's theme CSS, rescoped to the clobber-prefixed id", async () => {
+    const html = await renderMarkdown(MD, { target: "pdf", renderMermaid: stubSvg(SVG) });
+    // Without this the shapes have no fill at all and print solid black.
+    expect(html).toContain("<style>");
+    expect(html).toContain(`id="user-content-${SVG_ID}"`);
+    expect(html).toContain(`#user-content-${SVG_ID} .node rect{fill:#ECECFF`);
+    expect(html).toContain(`#user-content-${SVG_ID} .flowchart-link{fill:none`);
+    // The unprefixed selectors would no longer match the renamed element.
+    expect(html).not.toContain(`#${SVG_ID} .node`);
+  });
+
+  it("drops theme CSS that isn't scoped to the diagram", async () => {
+    const html = await renderMarkdown(MD, {
+      target: "pdf",
+      // A stray `}` ends mermaid's `#<svg-id>{…}` wrapper; everything after it
+      // would otherwise be loose CSS over the whole printed document.
+      renderMermaid: stubSvg(svgWithThemeCss("}body{display:none}@page{size:A3}")),
+    });
+    expect(html).not.toContain("display:none");
+    expect(html).not.toContain("@page");
+    // The diagram's own rules are untouched by the neighbour's bad behaviour.
+    expect(html).toContain(`#user-content-${SVG_ID} .node rect{fill:#ECECFF`);
+  });
+
+  it("drops theme CSS that would fetch an external resource while printing", async () => {
+    const html = await renderMarkdown(MD, {
+      target: "pdf",
+      renderMermaid: stubSvg(
+        svgWithThemeCss(`#${SVG_ID} .node rect{background-image:url("https://evil.example/x")}`),
+      ),
+    });
+    expect(html).not.toContain("evil.example");
+    expect(html).not.toContain("background-image");
+  });
+
+  it("drops theme CSS that tries to close the style element", async () => {
+    const html = await renderMarkdown(MD, {
+      target: "pdf",
+      renderMermaid: stubSvg(
+        svgWithThemeCss(`#${SVG_ID}{content:"</style><script>alert(1)</script>"}`),
+      ),
+    });
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("alert(1)");
+    expect(html).not.toContain("</style><");
+  });
+
+  it("drops a style element that isn't inside an svg", async () => {
+    const html = await renderMarkdown(MD, {
+      target: "pdf",
+      renderMermaid: stubSvg('<style>body{display:none}</style><svg id="d"><rect/></svg>'),
+    });
+    expect(html).not.toContain("<style");
+    expect(html).not.toContain("display:none");
+    expect(html).toContain("<rect");
+  });
+
+  it("leaves other code blocks alone", async () => {
+    const html = await renderMarkdown("```typescript\nconst x = 42;\n```", { target: "pdf" });
+    expect(html).not.toContain("data-mermaid");
+    expect(html).toContain("hljs");
+    expect(html).toContain("42");
+  });
+
+  it("leaves plain fenced blocks alone", async () => {
+    const html = await renderMarkdown("```\nplain text\n```", { target: "web" });
+    expect(html).not.toContain("data-mermaid");
+    expect(html).toContain("plain text");
+  });
+});

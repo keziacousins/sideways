@@ -589,6 +589,31 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     color-scheme: dark; outline: none; width: 6em;
   }
   .doc-tags .tag-input:focus { border-color: var(--sw-accent); }
+
+  /* Mermaid diagrams are injected into rendered markdown after the fact
+     (doc view and editor preview alike), so scoped styles don't reach them. */
+  .sw-doc-content figure.mermaid-diagram {
+    margin: 0 0 1.8em;
+    padding: 1.25em 1.5em;
+    /* Mermaid draws with its default light palette on both surfaces, so the
+       diagram needs its own plate to stay legible against the dark chrome. */
+    background: #fdfdfb;
+    border: 1px solid var(--sw-doc-border);
+    border-radius: var(--sw-radius-md);
+    text-align: center;
+    overflow-x: auto;
+  }
+  .sw-doc-content figure.mermaid-diagram svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .sw-doc-content .mermaid-error {
+    margin: -1.4em 0 1.8em;
+    font-family: var(--sw-font-mono);
+    font-size: var(--sw-text-xs);
+    color: var(--sw-error);
+  }
 </style>
 
 {doc && (
@@ -607,6 +632,18 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   }
   window.addEventListener("DOMContentLoaded", scrollToPrefixedAnchor);
   window.addEventListener("hashchange", scrollToPrefixedAnchor);
+</script>
+
+<script>
+  // Mermaid fences arrive as `<pre data-mermaid>` placeholders and are drawn
+  // in the browser. The module below only fetches mermaid itself when the
+  // page really has a diagram, so most documents pay nothing for this.
+  import { renderMermaidDiagrams } from "../../../../scripts/mermaid.ts";
+
+  renderMermaidDiagrams();
+  // The editor's live preview swaps its pane's HTML wholesale on every
+  // keystroke-debounced re-render, which drops any SVG we drew before.
+  document.addEventListener("sideways:preview-rendered", () => renderMermaidDiagrams());
 </script>
 
 <script>
@@ -959,6 +996,9 @@ const themeCss = themeToCSS(space?.theme?.tokens);
         }
         const data = await res.json();
         preview.innerHTML = data.html || "";
+        // Anything that decorates rendered markdown client-side (mermaid) has
+        // to run again over the freshly replaced pane.
+        document.dispatchEvent(new CustomEvent("sideways:preview-rendered"));
       } catch {
         preview.innerHTML = `<pre style="white-space: pre-wrap;">${textarea.value.replace(/</g, "&lt;")}</pre>`;
       }

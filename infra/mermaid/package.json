@@ -1,0 +1,16 @@
+{
+  "name": "sideways-mermaid",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Headless-browser Mermaid renderer. Pre-renders diagrams to SVG for the PDF pipeline, which has no JS runtime.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "mermaid": "11.17.2",
+    "mermaid-isomorphic": "3.1.0",
+    "playwright": "1.62.1"
+  }
+}

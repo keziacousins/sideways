@@ -45,6 +45,7 @@ sync_infra() {
   rsync -az --delete infra/kratos/ $VM:$INFRA_DIR/kratos/
   rsync -az --delete infra/scripts/ $VM:$INFRA_DIR/scripts/
   rsync -az --delete infra/weasyprint/ $VM:$INFRA_DIR/weasyprint/
+  rsync -az --delete infra/mermaid/ $VM:$INFRA_DIR/mermaid/
 
   # Create infra .env if missing
   ssh $VM "test -f $INFRA_DIR/.env || cp $INFRA_DIR/.env.example $INFRA_DIR/.env"
