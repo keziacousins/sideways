@@ -196,6 +196,68 @@ describe("mermaid diagrams", () => {
   });
 });
 
+// A document with several diagrams is the case the PDF budgets were written
+// for, so it is the case worth pinning down: the renders have to overlap, and
+// the results still have to land back in the right places.
+describe("mermaid diagrams (several in one document)", () => {
+  const doc = (n: number) =>
+    Array.from({ length: n }, (_, i) => "```mermaid\ngraph TD\n  A --> B" + i + "\n```").join("\n\n");
+
+  const indexOf = (code: string) => Number(/B(\d+)/.exec(code)![1]);
+  const svgFor = (i: number) =>
+    `<svg id="d${i}" width="100%" viewBox="0 0 100 50" style="max-width: 100px;"><text>node-${i}</text></svg>`;
+
+  it("starts every render before awaiting any of them", async () => {
+    let inFlight = 0;
+    let peak = 0;
+
+    const renderMermaid = async (code: string) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return svgFor(indexOf(code));
+    };
+
+    await renderMarkdown(doc(4), { target: "pdf", renderMermaid });
+
+    // Awaiting one render at a time peaks at 1, which would leave the sidecar
+    // client's concurrency limiter inert and spend the per-document deadline
+    // serially — the bug this test exists to catch.
+    expect(peak).toBe(4);
+  });
+
+  it("puts each diagram back in its own place", async () => {
+    const html = await renderMarkdown(doc(3), {
+      target: "pdf",
+      renderMermaid: async (code) => svgFor(indexOf(code)),
+    });
+
+    expect(html.indexOf("node-0")).toBeGreaterThan(-1);
+    expect(html.indexOf("node-0")).toBeLessThan(html.indexOf("node-1"));
+    expect(html.indexOf("node-1")).toBeLessThan(html.indexOf("node-2"));
+  });
+
+  it("keeps the rest in place when a failure expands one block into two", async () => {
+    const html = await renderMarkdown(doc(3), {
+      target: "pdf",
+      renderMermaid: async (code) => {
+        const i = indexOf(code);
+        if (i === 1) throw new Error("diagram 1 is broken");
+        return svgFor(i);
+      },
+    });
+
+    // The failed one degrades to source + note; its neighbours are untouched
+    // and still in order around it.
+    expect(html).toContain('<p class="mermaid-error">');
+    expect(html).toContain("diagram 1 is broken");
+    expect(html.indexOf("node-0")).toBeLessThan(html.indexOf("mermaid-error"));
+    expect(html.indexOf("mermaid-error")).toBeLessThan(html.indexOf("node-2"));
+    expect(html).not.toContain("node-1");
+  });
+});
+
 // WeasyPrint takes mermaid's width="100%" and ignores the inline max-width
 // that is supposed to cap it, so an unmodified diagram is stretched to the
 // column width with its labels scaled up to match. The renderer pins the

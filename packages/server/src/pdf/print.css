@@ -435,9 +435,17 @@ body {
 }
 
 /* Mermaid's own theme CSS sets label colours for a light background, which is
-   what we print on — but the sidecar has no idea what the page font is. */
+   what we print on.
+
+   The font is pinned, NOT themed. Mermaid sizes every node box to fit its
+   label, so the container that measures the text (the headless-browser
+   sidecar) and the one that paints it (WeasyPrint) have to resolve the family
+   to the same metrics — otherwise labels overflow their boxes or sit in
+   over-padded ones. Themed body fonts are installed in the WeasyPrint image
+   only, so the two agree on exactly one family: DejaVu Sans, installed in
+   both. Keep this in step with MERMAID_CONFIG in server/src/lib/mermaid.ts. */
 .print-content figure.mermaid-diagram svg text {
-  font-family: var(--th-font-body, inherit);
+  font-family: "DejaVu Sans", sans-serif;
 }
 
 /* ── KaTeX ───────────────────────────────────────────────────── */

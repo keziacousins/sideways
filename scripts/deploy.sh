@@ -91,12 +91,18 @@ ssh $VM "test -f $APP_DIR/.env || cp $APP_DIR/.env.example $APP_DIR/.env"
 # VM's .env wasn't updated — failing here is much friendlier than a
 # cryptic interpolation error inside docker compose three steps later.
 
+# Keys that .env.example documents but the app supplies a working default for
+# (see packages/server/src/env.ts). A host that predates one of these must not
+# have its deploy aborted halfway for a value it does not need to set.
+OPTIONAL_ENV_KEYS="MERMAID_URL"
+
 check_env_keys() {
   local label="$1" example_path="$2" actual_path="$3"
   local example_keys actual_keys missing
   example_keys=$(ssh $VM "grep -E '^[A-Z_][A-Z0-9_]*=' $example_path | cut -d= -f1 | sort -u")
   actual_keys=$(ssh $VM "grep -E '^[A-Z_][A-Z0-9_]*=' $actual_path  | cut -d= -f1 | sort -u")
-  missing=$(comm -23 <(echo "$example_keys") <(echo "$actual_keys"))
+  missing=$(comm -23 <(echo "$example_keys") <(echo "$actual_keys") \
+    | grep -vxF "$(echo "$OPTIONAL_ENV_KEYS" | tr ' ' '\n')" || true)
   if [ -n "$missing" ]; then
     echo "==> Missing keys in $label ($actual_path):"
     echo "$missing" | sed 's/^/    - /'

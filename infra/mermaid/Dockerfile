@@ -20,6 +20,14 @@ RUN npx playwright install --with-deps chromium && \
     chmod -R a+rX /ms-playwright && \
     rm -rf /var/lib/apt/lists/*
 
+# Mermaid sizes every node box to fit its label, so this container measures the
+# text that WeasyPrint later paints. Both must resolve the family to the same
+# metrics or labels overflow their boxes — hence one font pinned in both images
+# rather than the theme's. Keep in step with infra/weasyprint/Dockerfile and
+# LABEL_FONT_FAMILY in packages/server/src/lib/mermaid.ts.
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY server.js /app/server.js
 
 # Untrusted diagram text goes to a real browser, so nothing here runs as root.

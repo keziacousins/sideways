@@ -49,6 +49,11 @@ const DEFAULT_MERMAID_CONFIG = {
   securityLevel: "strict",
   htmlLabels: false,
   flowchart: { htmlLabels: false },
+  // mermaid-isomorphic otherwise defaults to arial, which this image does not
+  // ship — so labels would be measured against a silent fontconfig fallback.
+  // The caller normally sends the same value; this keeps the service correct
+  // on its own. See the font note in the Dockerfile.
+  fontFamily: '"DejaVu Sans", sans-serif',
 };
 
 let browser;
