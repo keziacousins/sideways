@@ -64,10 +64,24 @@ export function rehypeMermaid(options: MermaidOptions) {
       found.push({ parent, index, source });
     });
 
-    // Back to front: a replacement can expand into two siblings (fallback
-    // block + error note), which would shift the indexes still to come.
-    for (const { parent, index, source } of found.reverse()) {
-      parent.children.splice(index, 1, ...(await replacement(source, options)));
+    // Start every render before awaiting any of them. Awaiting one at a time
+    // would serialise the document against the PDF sidecar: its concurrency
+    // limiter would never see more than one call in flight, and a diagram-heavy
+    // export would burn its shared deadline waiting in series — degrading the
+    // diagrams that had not started yet, which are not the ones the reader
+    // would expect to lose. `replacement` handles its own failures, so this
+    // never rejects.
+    const replacements = await Promise.all(
+      found.map(({ source }) => replacement(source, options)),
+    );
+
+    // Splice back to front: a replacement can expand into two siblings
+    // (fallback block + error note), which would shift the indexes still to
+    // come. `visit` reports a parent's children in ascending order, so walking
+    // `found` backwards is descending within every parent.
+    for (let i = found.length - 1; i >= 0; i--) {
+      const { parent, index } = found[i];
+      parent.children.splice(index, 1, ...replacements[i]);
     }
   };
 }

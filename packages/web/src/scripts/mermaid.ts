@@ -147,10 +147,19 @@ let mermaidReady: Promise<Mermaid> | null = null;
 
 function loadMermaid(): Promise<Mermaid> {
   if (!mermaidReady) {
-    mermaidReady = import("mermaid").then(({ default: mermaid }) => {
+    const loading = import("mermaid").then(({ default: mermaid }) => {
       mermaid.initialize(mermaidConfig());
       return mermaid;
     });
+    // A failed chunk fetch is usually transient — most often a deploy swapping
+    // the asset out from under an already-open tab — so don't let one failure
+    // poison every later attempt by leaving a rejected promise cached. The
+    // handler also keeps the cached rejection from surfacing as an unhandled
+    // one when a second caller arrives after the first has already dealt with it.
+    loading.catch(() => {
+      if (mermaidReady === loading) mermaidReady = null;
+    });
+    mermaidReady = loading;
   }
   return mermaidReady;
 }
@@ -169,11 +178,32 @@ function showError(pre: HTMLElement, err: unknown): void {
   pre.insertAdjacentElement("afterend", note);
 }
 
+/**
+ * Draw every un-drawn diagram under `root`.
+ *
+ * Never rejects: callers fire it without awaiting, so a rejection here would
+ * escape as an unhandled one and take the diagrams down silently. Every
+ * failure — including mermaid itself failing to load — is reported on the
+ * block it belongs to instead.
+ */
 export async function renderMermaidDiagrams(root: ParentNode = document): Promise<void> {
   const blocks = Array.from(root.querySelectorAll<HTMLElement>("pre[data-mermaid]"));
   if (blocks.length === 0) return; // nothing to draw — mermaid is never fetched
 
-  const mermaid = await loadMermaid();
+  let mermaid: Mermaid;
+  try {
+    mermaid = await loadMermaid();
+  } catch (err) {
+    // The library never arrived, so nothing on this pass can be drawn. Treat
+    // it exactly like a diagram that won't parse: every block keeps its source
+    // and says why, rather than sitting there looking like plain code.
+    for (const pre of blocks) {
+      if (pre.dataset.mermaid === undefined) continue;
+      delete pre.dataset.mermaid;
+      showError(pre, err);
+    }
+    return;
+  }
 
   for (const pre of blocks) {
     // Claim the node: two passes can overlap (an editor preview firing while
@@ -215,7 +245,16 @@ async function rethemeDiagrams(): Promise<void> {
   );
   if (figures.length === 0) return;
 
-  const mermaid = await loadMermaid();
+  let mermaid: Mermaid;
+  try {
+    mermaid = await loadMermaid();
+  } catch {
+    // Reachable only if the cached load was dropped after a failure. The
+    // drawings are already on the page, so leave them: a stale palette beats
+    // blanking them, and the observer fires this without awaiting, so a
+    // rejection here would escape unhandled.
+    return;
+  }
   mermaid.initialize(mermaidConfig());
 
   for (const figure of figures) {

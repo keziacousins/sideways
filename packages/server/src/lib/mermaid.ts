@@ -39,13 +39,31 @@ import { logger } from "../logger.js";
 const PRINT_LABEL_PT = 10;
 const LABEL_FONT_PX = PRINT_LABEL_PT / 0.75;
 
+/**
+ * The family the sidecar measures labels in, and so the family the PDF must
+ * paint them in — pdf/print.css pins the same one, and the two must move
+ * together.
+ *
+ * Deliberately not the theme's body font. Mermaid sizes each node box to fit
+ * its label, so the measuring container and the painting container have to
+ * resolve the family identically; the themed fonts are installed in the
+ * WeasyPrint image only, and asking the sidecar for one it does not have just
+ * moves the mismatch into a silent fallback. DejaVu Sans is installed in both
+ * images (see infra/mermaid/Dockerfile and infra/weasyprint/Dockerfile).
+ *
+ * mermaid-isomorphic otherwise defaults this to `arial,sans-serif`, which
+ * neither image ships.
+ */
+const LABEL_FONT_FAMILY = '"DejaVu Sans", sans-serif';
+
 const MERMAID_CONFIG = {
   startOnLoad: false,
   securityLevel: "strict",
   htmlLabels: false,
   flowchart: { htmlLabels: false },
   fontSize: LABEL_FONT_PX,
-  themeVariables: { fontSize: `${LABEL_FONT_PX}px` },
+  fontFamily: LABEL_FONT_FAMILY,
+  themeVariables: { fontSize: `${LABEL_FONT_PX}px`, fontFamily: LABEL_FONT_FAMILY },
 };
 
 /** A diagram slower than this is broken, not busy. */
@@ -62,19 +80,30 @@ const MAX_DIAGRAMS_PER_DOC = 50;
 const DOC_BUDGET_MS = 30_000;
 const MAX_CONCURRENT = 4;
 
-/** Run at most `max` tasks at once, queueing the rest in call order. */
+/**
+ * Run at most `max` tasks at once, queueing the rest in call order.
+ *
+ * A finishing task hands its slot straight to the next waiter rather than
+ * releasing it: resolving a promise only schedules a microtask, so between
+ * `waiting.shift()` and the woken caller resuming there is a gap in which a
+ * freshly arriving caller would see a free slot that is already spoken for
+ * and push `active` past `max`.
+ */
 function createLimiter(max: number) {
   let active = 0;
   const waiting: (() => void)[] = [];
 
   return async function run<T>(task: () => Promise<T>): Promise<T> {
+    // Claim the slot before yielding, or queue for one that is handed over.
     if (active >= max) await new Promise<void>((resolve) => waiting.push(resolve));
-    active++;
+    else active++;
+
     try {
       return await task();
     } finally {
-      active--;
-      waiting.shift()?.();
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
     }
   };
 }
