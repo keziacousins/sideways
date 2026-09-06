@@ -11,11 +11,26 @@ pnpm install
 ./scripts/start-server.sh --web-only   # just web on :4000
 ```
 
-Local dev expects the Docker infra (Postgres, SeaweedFS, Kratos, Hydra, WeasyPrint, Mailhog) to be running locally:
+Local dev expects the Docker infra (Postgres, SeaweedFS, Kratos, Hydra, WeasyPrint, Mermaid, Mailhog) to be running locally:
 
 ```bash
+docker context show    # must be 'default' — see below
 cd infra && cp .env.example .env && docker compose up -d
 ```
+
+**Check the docker context first.** `docker compose up` talks to whichever daemon
+the active context points at. If that is a remote daemon, the whole stack starts
+*on that host* instead: the containers come up healthy, `docker ps` reports
+`127.0.0.1:5432->5432/tcp`, and nothing is reachable locally, because those
+published ports are on the remote host's loopback. `docker exec` keeps working
+over the SSH transport, which makes it look less like a connection problem than
+it is. Three distinct targets worth keeping apart:
+
+| Target | How you reach it |
+|---|---|
+| Local workstation | `docker context use default` |
+| The `sideways-dev` VM, where the dev stack actually runs | `DEPLOY_HOST=admin@sideways-dev ./scripts/deploy.sh --infra` |
+| The `minimax` host's own daemon, which hosts that VM but runs no Sideways containers | `docker context use minimax` |
 
 ## Tests
 
@@ -36,6 +51,7 @@ Integration tests require a running Postgres (the infra `docker compose` brings 
 - 4433/4434: Kratos public/admin
 - 4444/4445: Hydra public/admin
 - 5001: WeasyPrint
+- 5002: Mermaid diagram sidecar
 - 8888: SeaweedFS filer
 - 1025/8025: Mailhog SMTP/UI
 
@@ -43,7 +59,7 @@ Integration tests require a running Postgres (the infra `docker compose` brings 
 
 - `shared/` — shared libraries (`@sideways/types`, `@sideways/markdown`, `@sideways/db`, `@sideways/storage`)
 - `packages/` — apps (`@sideways/server`, `@sideways/web`, `@sideways/cli`, `@sideways/mcp`)
-- `infra/` — Docker compose, nginx, Kratos/Hydra/WeasyPrint configs
+- `infra/` — Docker compose, nginx, Kratos/Hydra/WeasyPrint/Mermaid configs
 - `scripts/` — deployment and dev scripts
 
 Shared packages export raw `.ts` — no build step. The API server runs via `tsx` (both locally and in production).
@@ -52,11 +68,27 @@ Shared packages export raw `.ts` — no build step. The API server runs via `tsx
 
 Backing services run via Docker Compose (`infra/compose.yml`):
 
-- Postgres (5432), SeaweedFS (8888/9333), Ory Kratos (4433/4434), Ory Hydra (4444/4445), WeasyPrint (5001), Mailhog (1025/8025)
+- Postgres (5432), SeaweedFS (8888/9333), Ory Kratos (4433/4434), Ory Hydra (4444/4445), WeasyPrint (5001), Mermaid (5002), Mailhog (1025/8025)
 
 The same compose file is used locally and on the deploy host.
 
 ## Deployment
+
+**Host requirement: more than 2GB of RAM, or swap.** `astro build` needs more
+memory than a 2GB host has once Mermaid is in the bundle. Short of it, the build
+is OOM-killed partway — and the failure is worse than it sounds, because the kill
+lands between the server and client build steps, leaving `packages/web/dist` with
+a `server/` directory and no `client/`. `deploy.sh` then restarts `sideways-web`
+onto that half-built output and the service crash-loops with `ERR_INVALID_URL …
+deserializeManifest`. So a build failure becomes a downed site rather than an
+aborted deploy.
+
+`sideways-dev` runs on 1.9GB and carries a 1G swapfile for this (`/swapfile`, in
+`/etc/fstab`); peak usage during the build is around 580MB of swap. To recover a
+host that has already done this, build locally and rsync `packages/web/dist/` —
+but note `PUBLIC_URL` and `PUBLIC_API_URL` are baked in at build time via
+`import.meta.env`, so an off-host build must set both to the target's values or
+the bundle points at localhost.
 
 The deploy scripts target a remote host over SSH. Set `DEPLOY_HOST` to your SSH destination:
 
@@ -141,5 +173,8 @@ Internal commits between releases should not touch `package.json` versions. If y
 
 ## Notes
 
-- Astro is v5 with `@astrojs/node@9` — the v10 adapter requires Astro v6.
+- Astro is v6 with `@astrojs/node@10`. The two are coupled — the v10 adapter
+  requires Astro v6 — so neither moves without the other. Astro v7 pairs with
+  adapter v11; that upgrade is unstarted, and `sharp` is pinned through a root
+  override until it happens (see the overrides block in the root `package.json`).
 - Markdown rendering is in `shared/markdown` and shared between web (at build/request time) and API (`/render` endpoint). Changes there affect both.
