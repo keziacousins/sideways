@@ -100,6 +100,21 @@ export function isTracked(tracked: string[] | null, relativePath: string): boole
   });
 }
 
+/**
+ * Find the discovered files an `add` argument can refer to. An exact relPath
+ * match always wins. A bare name (no directory part) falls back to matching
+ * by filename or slug, which can return several candidates; the caller treats
+ * more than one as ambiguous. A path with a directory part never falls back,
+ * so `vendors/idee/README.md` can't resolve to a root `README.md`.
+ */
+export function matchAddArg(files: DiscoveredFile[], rel: string, arg: string): DiscoveredFile[] {
+  const exact = files.find(f => f.relPath === rel);
+  if (exact) return [exact];
+  if (arg.includes("/")) return [];
+  const slug = slugFromFilename(arg);
+  return files.filter(f => f.filename === arg || f.slug === slug);
+}
+
 export function hashContent(content: string): string {
   return createHash("sha256").update(content.trim()).digest("hex").slice(0, 16);
 }
