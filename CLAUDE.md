@@ -173,8 +173,7 @@ Internal commits between releases should not touch `package.json` versions. If y
 
 ## Notes
 
-- Astro is v6 with `@astrojs/node@10`. The two are coupled — the v10 adapter
-  requires Astro v6 — so neither moves without the other. Astro v7 pairs with
-  adapter v11; that upgrade is unstarted, and `sharp` is pinned through a root
-  override until it happens (see the overrides block in the root `package.json`).
+- Astro is v7 with `@astrojs/node@11` and `@astrojs/react@7`. The adapter and
+  Astro are coupled — adapter v11 requires Astro ^7.2.1 — so neither moves
+  without the other. Astro 7 builds with Vite 8 (Rolldown).
 - Markdown rendering is in `shared/markdown` and shared between web (at build/request time) and API (`/render` endpoint). Changes there affect both.
