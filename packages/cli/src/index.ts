@@ -18,6 +18,7 @@ import {
   serializeFrontmatter,
   discoverFiles,
   type DiscoveredFile,
+  matchAddArg,
   readTracked,
   writeTracked,
   isTracked,
@@ -241,7 +242,12 @@ program
       }
 
       // Single file
-      const file = allFiles.find(f => f.relPath === rel || f.filename === basename(p) || f.slug === slugFromFilename(basename(p)));
+      const candidates = matchAddArg(allFiles, rel, p);
+      if (candidates.length > 1) {
+        console.error(`  ambiguous: ${p} matches ${candidates.map(f => f.relPath).join(", ")} — give the path instead`);
+        continue;
+      }
+      const file = candidates[0];
       if (file) {
         if (!tracked.includes(file.relPath)) {
           tracked.push(file.relPath);
@@ -288,7 +294,7 @@ program
       const abs = resolve(p);
       const rel = relative(syncRoot, abs);
       const before = tracked.length;
-      tracked = tracked.filter(t => t !== rel && t !== rel + "/" && t !== basename(p));
+      tracked = tracked.filter(t => t !== rel && t !== rel + "/");
       if (tracked.length < before) {
         console.log(`  removed: ${rel}`);
         removed++;
