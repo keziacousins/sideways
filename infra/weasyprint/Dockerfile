@@ -13,7 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir weasyprint flask
+# Pinned: server.py subclasses weasyprint.URLFetcher, an API that arrived in 70
+# and replaced default_url_fetcher. An unpinned rebuild is how that change took
+# PDF export down, so bump these deliberately.
+RUN pip install --no-cache-dir weasyprint==70.0 flask==3.1.3
 
 # Download Inter Variable TTF (files are at zip root, no subdirectory)
 RUN mkdir -p /usr/share/fonts/inter && \

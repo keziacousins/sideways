@@ -10,14 +10,16 @@ import socket
 from urllib.parse import urlparse
 
 from flask import Flask, request, Response
-from weasyprint import HTML, default_url_fetcher
+from weasyprint import HTML, URLFetcher
 from weasyprint.text.fonts import FontConfiguration
 
 app = Flask(__name__)
 font_config = FontConfiguration()
 
+ALLOWED_SCHEMES = ("data", "http", "https")
 
-def safe_url_fetcher(url, timeout=10, ssl_context=None):
+
+class SafeURLFetcher(URLFetcher):
     """
     Restricted URL fetcher for WeasyPrint.
 
@@ -33,18 +35,36 @@ def safe_url_fetcher(url, timeout=10, ssl_context=None):
         non-private, non-loopback, non-link-local public address.
       - All other schemes (file://, gopher://, ftp://, …) are rejected.
 
+    Redirects are held to the same policy: URLFetcher routes each redirect
+    target back through fetch(), so a public host cannot bounce the request
+    to an internal address.
+
     Note: this checks addresses at the call site; a DNS rebind attack could
     in principle resolve to a different IP at fetch time. Mitigated by the
     container not having direct access to the host network unless the
     operator wires it that way.
+
+    Instances carry per-request state, so create one per render rather than
+    sharing one across threads.
     """
+
+    def __init__(self):
+        super().__init__(timeout=10, allowed_protocols=ALLOWED_SCHEMES)
+
+    def fetch(self, url, headers=None):
+        check_url_allowed(url)
+        return super().fetch(url, headers)
+
+
+def check_url_allowed(url):
+    """Raise ValueError unless the URL passes the SafeURLFetcher policy."""
     parsed = urlparse(url)
     scheme = parsed.scheme.lower()
 
     if scheme == "data":
-        return default_url_fetcher(url, timeout=timeout, ssl_context=ssl_context)
+        return
 
-    if scheme not in ("http", "https"):
+    if scheme not in ALLOWED_SCHEMES:
         raise ValueError(f"Refusing URL with disallowed scheme: {scheme!r}")
 
     host = parsed.hostname
@@ -77,8 +97,6 @@ def safe_url_fetcher(url, timeout=10, ssl_context=None):
                 f"Refusing URL {url!r}: resolves to non-public address {addr}"
             )
 
-    return default_url_fetcher(url, timeout=timeout, ssl_context=ssl_context)
-
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -108,7 +126,7 @@ def render():
         return {"error": "No HTML content provided"}, 400
 
     try:
-        html = HTML(string=html_content, url_fetcher=safe_url_fetcher)
+        html = HTML(string=html_content, url_fetcher=SafeURLFetcher())
         pdf_bytes = html.write_pdf(font_config=font_config)
 
         return Response(
