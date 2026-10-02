@@ -42,6 +42,8 @@ export interface ThemeTokens {
     compact?: boolean;
     defaultTitlePage?: boolean;
     defaultToc?: boolean;
+    /** Keep links to other documents and hosted files in the export. Off unless set. */
+    defaultSpaceLinks?: boolean;
   };
 }
 

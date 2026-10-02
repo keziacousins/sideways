@@ -40,9 +40,13 @@ export interface RenderOptions {
    */
   inlineAsset?: (path: string) => Promise<string | null>;
   /**
-   * Origin to prefix onto links to hosted files and to other documents, e.g.
-   * "https://docs.example". Set on the PDF path, where a root-relative href
-   * has nothing to resolve against.
+   * Origin to prefix onto links into the space — to other documents and to
+   * hosted files — e.g. "https://docs.example".
+   *
+   * It decides what those links are in a PDF, where a root-relative href has
+   * nothing to resolve against: with an origin they are absolute, without
+   * one they are plain text. Links within the document and links out to the
+   * web work either way.
    */
   origin?: string;
 }
@@ -226,7 +230,7 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
     })
     // Also after the sanitiser, for the same reason: every href it writes is
     // one we built from the document list.
-    .use(rehypeDocLinks, { context: options.wikiLinks, origin: options.origin })
+    .use(rehypeDocLinks, { target: options.target, context: options.wikiLinks, origin: options.origin })
     .use(rehypeStringify);
 
   return processor;

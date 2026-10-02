@@ -79,6 +79,7 @@ beyond the built-in families, the font also has to be delivered — see
 | Token | Affects | Default |
 |-------|---------|---------|
 | `print.paperSize` | Paper dimensions | A4 |
+| `print.defaultSpaceLinks` | Whether exports keep links to other documents and hosted files | false |
 
 ## Custom fonts
 

@@ -147,12 +147,74 @@ describe("relative links between documents", () => {
       .toContain('<a href="/s/sp/sec/guides/intro">the intro</a>');
   });
 
-  it("makes the URL absolute on the pdf path", async () => {
-    const html = await render("[t](intro.md#setup)", "guides/auth.md", {
-      target: "pdf",
-      origin: "https://docs.example",
+});
+
+describe("document links in a PDF", () => {
+  const pdf = (md: string, origin?: string, path = "guides/auth.md") =>
+    render(md, path, { target: "pdf", origin });
+
+  describe("with no origin — the default for an export", () => {
+    it("prints a link to another document as plain text", async () => {
+      const html = await pdf("See [the intro](intro.md#setup) first.");
+      expect(html).toContain("<p>See <span>the intro</span> first.</p>");
+      expect(html).not.toContain("/s/sp/");
     });
-    expect(html).toContain('href="https://docs.example/s/sp/sec/guides/intro#user-content-setup"');
+
+    it("prints a wikilink to another document as plain text", async () => {
+      const html = await pdf("See [[intro|the intro]] first.");
+      expect(html).toContain("<p>See <span>the intro</span> first.</p>");
+      expect(html).not.toContain("/s/sp/");
+    });
+
+    it("prints a link to a hosted file as plain text", async () => {
+      const html = await pdf("The [spec](spec.pdf) and ![the same, as an image](spec.pdf).");
+      expect(html).toContain("<span>spec</span>");
+      expect(html).toContain("<span>the same, as an image</span>");
+      expect(html).not.toContain("/a/sp/");
+    });
+
+    it("keeps links within the document working", async () => {
+      // Four ways to point at a heading on this same page.
+      const html = await pdf("[a](#setup) [b](auth.md#setup) [[auth#setup|c]] [[#setup|d]]");
+      expect(html.match(/href="#user-content-setup"/g)).toHaveLength(4);
+      expect(html).not.toContain("/s/sp/");
+    });
+
+    it("keeps links out to the web working", async () => {
+      expect(await pdf("[site](https://example.com/page)"))
+        .toContain('<a href="https://example.com/page">site</a>');
+    });
+
+    it("still marks a link whose target doesn't exist", async () => {
+      expect(await pdf("[t](missing.md)")).toContain('<span class="doc-link-unresolved">t</span>');
+    });
+  });
+
+  describe("with an origin — links into the space switched on", () => {
+    const origin = "https://docs.example";
+
+    it("makes a link to another document absolute", async () => {
+      expect(await pdf("[t](intro.md#setup)", origin))
+        .toContain('href="https://docs.example/s/sp/sec/guides/intro#user-content-setup"');
+    });
+
+    it("makes a wikilink absolute", async () => {
+      const html = await pdf("[[intro]]", origin);
+      expect(html).toContain('href="https://docs.example/s/sp/sec/guides/intro"');
+    });
+
+    it("makes a link to a hosted file absolute", async () => {
+      expect(await pdf("[spec](spec.pdf)", origin))
+        .toContain('href="https://docs.example/a/sp/sec/guides/spec.pdf"');
+    });
+
+    it("still keeps a link to a heading on this page inside the PDF", async () => {
+      expect(await pdf("[b](auth.md#setup)\n\n## Setup", origin)).toContain('href="#user-content-setup"');
+    });
+  });
+
+  it("leaves wikilinks root-relative on the web", async () => {
+    expect(await render("[[intro]]")).toContain('href="/s/sp/sec/guides/intro"');
   });
 });
 

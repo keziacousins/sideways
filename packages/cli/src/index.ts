@@ -1580,7 +1580,8 @@ program
   .option("--theme <id-or-name>", "Print theme ID or name (overrides space theme)")
   .option("--no-toc", "Omit table of contents")
   .option("--no-title-page", "Omit title page")
-  .action(async (input: string, opts: { space?: string; output?: string; theme?: string; toc?: boolean; titlePage?: boolean }) => {
+  .option("--space-links", "Keep links to other documents and hosted files (off by default)")
+  .action(async (input: string, opts: { space?: string; output?: string; theme?: string; toc?: boolean; titlePage?: boolean; spaceLinks?: boolean }) => {
     const config = requireConfig();
     const space = opts.space ?? config.space;
     const client = getClient(config.api);
@@ -1590,6 +1591,7 @@ program
       toc: opts.toc,
       titlePage: opts.titlePage,
       theme: opts.theme,
+      spaceLinks: opts.spaceLinks,
     });
 
     const baseName = path.replace(/\.md$/, "").split("/").pop() || "document";

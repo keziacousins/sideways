@@ -146,6 +146,12 @@ describe("hosted assets — pdf target", () => {
     expect(html).toContain('href="https://docs.example/a/sp/docs/guides/spec.pdf"');
   });
 
+  it("prints a file link as plain text when the export carries no origin", async () => {
+    const html = await render("[Spec](./spec.pdf)", "guides/auth.md", { target: "pdf" });
+    expect(html).toContain("<span>Spec</span>");
+    expect(html).not.toContain("href");
+  });
+
   it("makes file links absolute with the origin", async () => {
     const html = await render("[Spec](./spec.pdf)", "guides/auth.md", {
       target: "pdf",

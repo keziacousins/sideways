@@ -311,6 +311,10 @@ const themeCss = themeToCSS(space?.theme?.tokens);
             <input type="checkbox" id="pdf-toc" checked />
             Table of contents
           </label>
+          <label title="Links to other documents and attached files. Off, they print as plain text; links within the document and to other websites always work.">
+            <input type="checkbox" id="pdf-space-links" />
+            Links to other Sideways pages
+          </label>
         </div>
       </div>
       <div class="pdf-modal-footer">
@@ -464,7 +468,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     font-size: var(--sw-text-sm); padding: 0.4rem 0.5rem;
     font-family: var(--sw-font-body); width: 100%;
   }
-  .pdf-checks { flex-direction: row; gap: 1rem; }
+  .pdf-checks { flex-direction: row; flex-wrap: wrap; gap: 0.5rem 1rem; }
   .pdf-checks label {
     display: flex; align-items: center; gap: 0.35rem;
     font-size: var(--sw-text-sm); color: var(--sw-text-secondary);
@@ -1220,6 +1224,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   const pdfThemeSelect = document.getElementById("pdf-theme");
   const pdfCover = document.getElementById("pdf-cover");
   const pdfToc = document.getElementById("pdf-toc");
+  const pdfSpaceLinks = document.getElementById("pdf-space-links");
 
   function openPdfModal() { updatePdfDefaults(); pdfOverlay.style.display = "flex"; }
   function closePdfModal() { pdfOverlay.style.display = "none"; }
@@ -1234,6 +1239,8 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     } else {
       pdfCover.checked = true; pdfToc.checked = true;
     }
+    // Off unless the theme turns it on: an export is what gets sent outside.
+    if (pdfSpaceLinks) pdfSpaceLinks.checked = theme?.tokens?.print?.defaultSpaceLinks === true;
   }
 
   document.getElementById("action-pdf")?.addEventListener("click", () => {
@@ -1255,6 +1262,8 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     if (pdfThemeSelect?.value) params.set("theme", pdfThemeSelect.value);
     if (pdfCover && !pdfCover.checked) params.set("title-page", "false");
     if (pdfToc && !pdfToc.checked) params.set("toc", "false");
+    // Sent either way, so the box overrides the theme's default in both directions.
+    if (pdfSpaceLinks) params.set("space-links", pdfSpaceLinks.checked ? "true" : "false");
 
     const a = document.createElement("a");
     a.href = `/op/pdf?${params.toString()}`;

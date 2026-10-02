@@ -17,6 +17,26 @@ Options:
 - `--no-toc` — omit table of contents
 - `--no-title-page` — omit cover page
 - `--theme <id-or-name>` — print theme override
+- `--space-links` — keep links to other documents and hosted files (see [Links](#links))
+
+## Links
+
+A PDF is usually what gets sent to someone outside, so links are sorted by where they lead:
+
+| Link | In the export |
+|------|---------------|
+| To a heading in the same document | Works, and jumps within the PDF |
+| To another website | Works |
+| To another document in the space — a wiki-link or a relative link | Plain text, unless switched on |
+| To a hosted file, such as a PDF | Plain text, unless switched on |
+
+Links into the space are off by default because, to a reader without an account, each one is a sign-in page — and it carries your Sideways address into the document. Switch them on when the PDF is for people who can sign in:
+
+- **Web**: tick **Links to other Sideways pages** in the Download PDF dialog.
+- **CLI**: `sideways export docs/api-design.md --space-links`
+- **Theme**: set `print.defaultSpaceLinks` to `true` to make it the default for that theme.
+
+Switched on, they become full links to the page or file on Sideways.
 
 ## Cover Pages
 
@@ -54,7 +74,7 @@ If the space has a theme assigned, the PDF uses:
 - Blockquotes
 - Math (KaTeX)
 - Images — hosted ones are embedded in the file; images at a web address are fetched when the PDF is built
-- Wiki-links (rendered as regular links in PDF)
+- Links within the document and to other websites; links to other documents when switched on (see [Links](#links))
 
 ## Limitations
 
@@ -63,4 +83,4 @@ If the space has a theme assigned, the PDF uses:
 - Very large documents (100+ pages) may take a few seconds to render
 - An animated GIF prints its first frame
 - Hosted images are embedded up to 30 MB per export; past that, the remaining images print as their alt text
-- A linked PDF is not embedded. The link in the export points at the hosted file, so it only opens for readers who can sign in to the space
+- A linked PDF is never embedded. Its link prints as plain text unless links into the space are switched on
