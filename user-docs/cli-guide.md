@@ -15,8 +15,8 @@ See [[setup|Setup]] for installation instructions.
 | `sideways add <paths...>` | Track files or directories for sync |
 | `sideways add .` | Track everything (default behavior) |
 | `sideways remove <paths...>` | Stop tracking files |
-| `sideways push [path]` | Push tracked local changes to remote |
-| `sideways pull [path]` | Pull remote changes to local |
+| `sideways push [path]` | Push tracked local changes to remote, with the images and PDFs they reference |
+| `sideways pull [path]` | Pull remote changes to local, images and PDFs included |
 | `sideways sync` | Bidirectional: pull remote + push local |
 | `sideways status` | Show sync status + open comment counts |
 | `sideways diff <file>` | Show content differences with remote |
@@ -117,6 +117,32 @@ sideways remove docs/old-draft.md
 ```
 
 The tracking list is stored in `.sideways/tracked.json`.
+
+## Images and Files
+
+`push`, `pull`, `sync` and `status` carry the images and PDFs your documents use, as well as the documents themselves.
+
+A file is included because a tracked document **references it** with a relative link — `![flow](./img/flow.png)` or `[spec](./spec.pdf)` — not because it sits in a synced directory. Other files in the directory are left alone.
+
+```
+$ sideways push
+  pushed: docs/auth.md → default/auth.md (local-modified)
+  pushed: docs/img/flow.png → default/img/flow.png (new-local)
+```
+
+- **push** uploads referenced files that are new or have changed locally. A file is checked on every push, whether or not the document that references it changed.
+- **pull** downloads every file the server holds for the sections this repo owns, so a pulled document arrives with its images. Pulling a single document brings the files it references.
+- **status** lists them alongside documents, with the same labels.
+- A file changed both locally and on the server is a **conflict**; resolve it with `push --force` or `pull --force`, as for a document.
+
+Hosted types are PNG, JPEG, GIF, WebP, SVG and PDF. File names may contain only letters, digits, `.`, `_` and `-`; a push reports any file the server refuses and carries on with the rest:
+
+```
+  failed: docs/img/my diagram.png — Path segment "my diagram.png" contains invalid characters
+warning: docs/auth.md references docs/img/missing.png, which doesn't exist
+```
+
+Deleting a file locally does not delete it from the server, and a file no document references any more stays there until it is replaced.
 
 ## Status with Comments
 

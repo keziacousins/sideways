@@ -53,7 +53,7 @@ If the space has a theme assigned, the PDF uses:
 - Tables
 - Blockquotes
 - Math (KaTeX)
-- Images
+- Images — hosted ones are embedded in the file; images at a web address are fetched when the PDF is built
 - Wiki-links (rendered as regular links in PDF)
 
 ## Limitations
@@ -61,3 +61,6 @@ If the space has a theme assigned, the PDF uses:
 - No flexbox/grid in print layout (WeasyPrint uses block layout)
 - Box-drawing characters in code blocks may have vertical gaps depending on font
 - Very large documents (100+ pages) may take a few seconds to render
+- An animated GIF prints its first frame
+- Hosted images are embedded up to 30 MB per export; past that, the remaining images print as their alt text
+- A linked PDF is not embedded. The link in the export points at the hosted file, so it only opens for readers who can sign in to the space

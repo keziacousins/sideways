@@ -12,7 +12,7 @@ Sideways documents are written in standard markdown with GitHub Flavoured Markdo
 
 **Links**: `[text](url)` for external links
 
-**Images**: `![alt](url)`
+**Images**: `![alt](url)` — a web address, or a file beside the document (see [Images and Files](#images-and-files))
 
 **Lists**: unordered (`-`), ordered (`1.`), and task lists (`- [x]`)
 
@@ -102,6 +102,36 @@ Resolved wiki-links render as dotted-underline links to the canonical doc URL. *
 
 When editing in the web editor or writing a comment, type `[[` to trigger autocomplete. A dropdown shows matching documents — use arrow keys and Enter to select. The picker inserts the path-qualified form by default (e.g. `[[architecture/overview|Title]]`).
 
+## Images and Files
+
+Sideways hosts images and PDFs alongside your documents. Keep the file next to the markdown and reference it with an ordinary relative link:
+
+```markdown
+![Login flow](./img/flow.png)
+
+The full detail is in the [protocol spec](./spec.pdf).
+```
+
+The path is relative to the document, exactly as it is on disk — so the same markdown also renders on GitHub and in a local editor. From `guides/auth.md`, `./img/flow.png` is the file `guides/img/flow.png` in the same section. `../` climbs a directory, but a reference can't leave the section.
+
+| Type | On the web | In a PDF export |
+|------|------------|-----------------|
+| PNG, JPEG, GIF, WebP, SVG | Shown inline | Embedded (an animated GIF prints its first frame) |
+| PDF | A link that opens in a new tab | A link to the hosted file — never embedded |
+
+Images can be up to 10 MB and PDFs up to 20 MB. Images always scale to the width of the page; there is no syntax for sizing them.
+
+**File names** may contain only letters, digits, `.`, `_` and `-`, the same as document paths. A file called `my diagram.png` has to be renamed before it can be uploaded.
+
+**Getting files onto Sideways:**
+
+- **CLI** — `sideways push` uploads every image and PDF your tracked documents reference. See the [[cli-guide|CLI Guide]].
+- **Web editor** — paste or drop a file onto the editor (see [Web Editor](#web-editor)).
+
+A file is stored once per path and replaced in place, so there is no version history: an older version of a document shows the current image. Anyone who can read the space can open its files; nobody else can.
+
+Images from elsewhere on the web still work with a full `https://` address.
+
 ## Frontmatter
 
 Documents can include YAML frontmatter for metadata:
@@ -129,6 +159,7 @@ Click the edit icon in the document toolbar to open the side-by-side editor:
 - **Left pane**: markdown textarea with monospace font
 - **Right pane**: live rendered preview (debounced as you type)
 - **Scroll sync**: clicking or moving the cursor in the editor scrolls the preview to the nearest heading above the cursor
+- **Attach a file**: paste an image from the clipboard, or drop an image or PDF onto the editor. It is uploaded into an `assets/` folder beside the document and a reference is inserted at the cursor. A file whose name is already taken by a different file is stored as `name-2`, `name-3`, and so on
 - **Save**: click the Save button
 - **Cancel**: click the Cancel button
 

@@ -988,6 +988,109 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       previewTimer = setTimeout(() => updatePreview(), 300);
     });
 
+    // ── Attaching files ──────────────────────────────────────────────
+    // An image or PDF pasted or dropped onto the editor is uploaded as an
+    // asset in `assets/` beside this document, and a relative reference to
+    // it goes in where the cursor is — the same reference a file on disk
+    // would use, so the document still round-trips through the CLI.
+
+    // Hosted extensions and their size caps in MB. Mirrors the server, which
+    // enforces both; checking here just fails faster and says why.
+    const HOSTED = { png: 10, jpg: 10, jpeg: 10, gif: 10, webp: 10, svg: 10, pdf: 20 };
+    const docDir = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
+
+    /** Split a file's name into a stem the server will accept and its extension. */
+    function assetName(file) {
+      const dot = file.name.lastIndexOf(".");
+      const ext = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
+      const stem = (dot > 0 ? file.name.slice(0, dot) : file.name)
+        .replace(/[^A-Za-z0-9._-]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "file";
+      return { stem, ext };
+    }
+
+    /** Upload `file` beside this document; resolves to the name it was stored under. */
+    async function uploadAsset(file) {
+      const { stem, ext } = assetName(file);
+      // A pasted screenshot is always called "image.png", so names collide
+      // as a matter of course. `If-None-Match: *` has the server refuse to
+      // replace a different file of the same name; on that refusal, try
+      // image-2.png, image-3.png, …
+      for (let n = 1; n <= 50; n++) {
+        const name = `${n === 1 ? stem : `${stem}-${n}`}.${ext}`;
+        const assetPath = `${docDir}assets/${name}`.split("/").map(encodeURIComponent).join("/");
+        const res = await fetch(
+          `/a/${encodeURIComponent(spaceSlug)}/${encodeURIComponent(sectionSlug)}/${assetPath}`,
+          { method: "PUT", body: file, headers: { "If-None-Match": "*" } },
+        );
+        if (res.status === 412) continue;
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `upload failed (${res.status})`);
+        }
+        return name;
+      }
+      throw new Error("too many files already share that name");
+    }
+
+    function insertAtCursor(text) {
+      textarea.setRangeText(text, textarea.selectionStart, textarea.selectionEnd, "end");
+      textarea.dispatchEvent(new Event("input"));
+    }
+
+    async function attachFiles(files) {
+      for (const file of files) {
+        const { stem, ext } = assetName(file);
+        if (!(ext in HOSTED)) {
+          alert(`${file.name}: only images (PNG, JPEG, GIF, WebP, SVG) and PDFs can be attached.`);
+          continue;
+        }
+        if (file.size > HOSTED[ext] * 1024 * 1024) {
+          alert(`${file.name} is too large (max ${HOSTED[ext]} MB).`);
+          continue;
+        }
+
+        const placeholder = `![Uploading ${file.name}...]()`;
+        insertAtCursor(placeholder);
+
+        let reference = "";
+        try {
+          const name = await uploadAsset(file);
+          reference = ext === "pdf" ? `[${stem}](assets/${name})` : `![${stem}](assets/${name})`;
+        } catch (e) {
+          alert(`${file.name}: ${e.message}`);
+        }
+
+        // The text may have been edited while the upload ran, so find the
+        // placeholder again rather than trusting where it was put.
+        const at = textarea.value.indexOf(placeholder);
+        if (at >= 0) {
+          textarea.setRangeText(reference, at, at + placeholder.length, "end");
+          textarea.dispatchEvent(new Event("input"));
+        } else if (reference) {
+          insertAtCursor(reference);
+        }
+      }
+    }
+
+    textarea.addEventListener("paste", (e) => {
+      const files = [...(e.clipboardData?.files || [])];
+      // Copying from a spreadsheet or word processor puts a picture of the
+      // selection on the clipboard next to its text. The text is what's wanted.
+      if (files.length === 0 || e.clipboardData.getData("text/plain")) return;
+      e.preventDefault();
+      attachFiles(files);
+    });
+    textarea.addEventListener("dragover", (e) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    });
+    textarea.addEventListener("drop", (e) => {
+      const files = [...(e.dataTransfer?.files || [])];
+      if (files.length === 0) return;
+      e.preventDefault();
+      attachFiles(files);
+    });
+
     async function updatePreview() {
       try {
         const res = await fetch(`/op/render`, {

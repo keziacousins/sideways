@@ -160,7 +160,8 @@ export function createAssetRoutes(db: Database, storage: Storage) {
   /**
    * Upload an asset: the raw file as the request body, created or replaced at
    * the path. The Content-Type header is ignored; the type comes from the
-   * extension and has to match the bytes.
+   * extension and has to match the bytes. With `If-None-Match: *` an existing
+   * asset holding different bytes is kept, and the upload answers 412.
    */
   router.put("/:space/:section/:path{.+}", uploadLimit, async (c) => {
     const target = await resolveTarget(c, "write");
@@ -175,6 +176,12 @@ export function createAssetRoutes(db: Database, storage: Storage) {
     const existing = await findAssetByPath(db, space.id, section.id, path);
     if (existing?.contentHash === hash) {
       return c.json(present(existing, section.slug, space.slug), 200);
+    }
+    // `If-None-Match: *` asks for create-only: the web editor names a dropped
+    // file after the original, and must not replace a different file that
+    // happens to share the name. The same bytes again are fine — see above.
+    if (existing && c.req.header("If-None-Match") === "*") {
+      return c.json({ error: "An asset already exists at this path" }, 412);
     }
 
     const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
