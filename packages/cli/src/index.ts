@@ -31,6 +31,7 @@ import {
 } from "./resolve.js";
 import type { SyncInfo } from "./api.js";
 import { surveyAssets, planAssets, runAssetPlan, type AssetSurvey } from "./assets.js";
+import { findDocLinkGaps, reportDocLinkGaps } from "./doclinks.js";
 
 const program = new Command();
 
@@ -697,6 +698,15 @@ program
         includeRemote: false,
       });
       reportAssetGaps(survey);
+
+      // Links to other documents that the server won't be able to resolve:
+      // the target isn't tracked here and isn't on the server either.
+      reportDocLinkGaps(findDocLinkGaps({
+        files: sorted,
+        known: new Set([...allFiles, ...remoteFiles].map((f) => syncKey(f.sectionSlug, f.path))),
+        mounts: mountList,
+      }));
+
       const plan = planAssets(survey, { push: true, pull: false, force: opts.force ? "push" : undefined });
       const assets = await runAssetPlan(plan, { client, space, syncState, dryRun: opts.dryRun });
       totalPushed += assets.pushed;
@@ -1122,6 +1132,11 @@ program
     }
 
     reportAssetGaps(survey);
+    reportDocLinkGaps(findDocLinkGaps({
+      files: allFiles,
+      known: new Set([...allFiles, ...remoteFiles].map((f) => syncKey(f.sectionSlug, f.path))),
+      mounts: mountList,
+    }));
     if (assetWork > 0) {
       console.log(`\nAssets (${assetWork}):`);
     }

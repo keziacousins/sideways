@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assetUrl, assetMimeType, resolveRelativePath } from "../index.js";
+import { assetUrl, assetMimeType, resolveRelativePath, resolveRelativeRef } from "../index.js";
 
 describe("assetUrl", () => {
   it("keeps the extension and the directory structure", () => {
@@ -85,5 +85,44 @@ describe("resolveRelativePath", () => {
     expect(resolveRelativePath("guides/auth.md", "./")).toBeNull();
     expect(resolveRelativePath("guides/auth.md", "img/")).toBeNull();
     expect(resolveRelativePath("guides/auth.md", "..")).toBeNull();
+  });
+});
+
+describe("resolveRelativeRef", () => {
+  it("stays in the linking document's section by default", () => {
+    expect(resolveRelativeRef("guides/auth.md", "./intro.md"))
+      .toEqual({ sectionSlug: null, path: "guides/intro.md" });
+    expect(resolveRelativeRef("guides/auth.md", "../index.md"))
+      .toEqual({ sectionSlug: null, path: "index.md" });
+  });
+
+  it("takes the first segment above the section root as a section slug", () => {
+    expect(resolveRelativeRef("guides/auth.md", "../../platform/api.md"))
+      .toEqual({ sectionSlug: "platform", path: "api.md" });
+    expect(resolveRelativeRef("auth.md", "../platform/deep/api.md"))
+      .toEqual({ sectionSlug: "platform", path: "deep/api.md" });
+  });
+
+  it("can climb out of one section and into a third", () => {
+    expect(resolveRelativeRef("auth.md", "../platform/../ops/run.md"))
+      .toEqual({ sectionSlug: "ops", path: "run.md" });
+  });
+
+  it("refuses to climb above the space", () => {
+    expect(resolveRelativeRef("auth.md", "../../elsewhere/x.md")).toBeNull();
+    expect(resolveRelativeRef("guides/auth.md", "../../../elsewhere/x.md")).toBeNull();
+  });
+
+  it("returns null when it names a section but no file in it", () => {
+    expect(resolveRelativeRef("auth.md", "../platform")).toBeNull();
+    expect(resolveRelativeRef("auth.md", "../platform/")).toBeNull();
+    expect(resolveRelativeRef("auth.md", "..")).toBeNull();
+  });
+});
+
+describe("resolveRelativePath, for references that may not leave the section", () => {
+  it("returns null where resolveRelativeRef would cross into another section", () => {
+    expect(resolveRelativePath("guides/auth.md", "../../platform/a.png")).toBeNull();
+    expect(resolveRelativePath("auth.md", "../docs/a.png")).toBeNull();
   });
 });

@@ -144,6 +144,18 @@ warning: docs/auth.md references docs/img/missing.png, which doesn't exist
 
 Deleting a file locally does not delete it from the server, and a file no document references any more stays there until it is replaced.
 
+## Links Between Documents
+
+`push` and `sync` warn about a relative link to another markdown file that Sideways won't be able to resolve:
+
+```
+warning: docs/auth.md links to gone.md, which doesn't exist
+warning: docs/auth.md links to drafts/plan.md, which exists but isn't synced
+warning: docs/auth.md links to ../../other-repo/x.md, which is outside every section
+```
+
+The push still goes ahead; the link renders as unresolved until its target is on the server. "Exists but isn't synced" means the file is on disk but untracked or ignored — track it with `sideways add`, or expect the link to stay unresolved.
+
 ## Status with Comments
 
 `sideways status` shows open (unresolved) comment counts on remote files:

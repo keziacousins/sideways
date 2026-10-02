@@ -26,6 +26,7 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import type { Root, Element } from "hast";
 import { assetUrl, assetMimeType, resolveRelativePath } from "@sideways/types";
+import { splitRelativeRef } from "./relative.js";
 
 export interface AssetOptions {
   /** Same flag as `RenderOptions.target`. */
@@ -39,23 +40,18 @@ export interface AssetOptions {
 }
 
 /**
- * Split a reference into the section-relative path it names and whatever
- * trails it (`?query`, `#fragment` — `spec.pdf#page=3` is worth keeping).
- * Null for anything that isn't a relative path: a scheme (`https:`, `data:`),
- * a host (`//cdn`), a root (`/x`), or a bare fragment.
+ * The section-relative path a relative reference names, and whatever trails
+ * it (`?query`, `#fragment` — `spec.pdf#page=3` is worth keeping). Null if
+ * the reference isn't relative, or leaves the section.
  */
 function resolveRef(
   ref: unknown,
   fromPath: string,
 ): { path: string; suffix: string } | null {
-  if (typeof ref !== "string" || ref === "") return null;
-  if (/^([a-z][a-z0-9+.-]*:|\/|#|\?)/i.test(ref)) return null;
-
-  const cut = ref.search(/[?#]/);
-  const target = cut === -1 ? ref : ref.slice(0, cut);
-  const path = resolveRelativePath(fromPath, target);
-  if (path === null) return null;
-  return { path, suffix: cut === -1 ? "" : ref.slice(cut) };
+  const split = splitRelativeRef(ref);
+  if (!split) return null;
+  const path = resolveRelativePath(fromPath, split.target);
+  return path === null ? null : { path, suffix: split.suffix };
 }
 
 /**
@@ -108,8 +104,8 @@ export function rehypeAssets(options: AssetOptions) {
     visit(tree, "element", (node: Element) => {
       if (node.tagName === "a") {
         const ref = resolveRef(node.properties?.href, from.path);
-        // Hosted file types only. A relative link to anything else — another
-        // document, say — is not an asset reference and is left as written.
+        // Hosted file types only. A relative link to another document is
+        // rehypeDocLinks' to resolve; anything else is left as written.
         if (!ref || !assetMimeType(ref.path)) return;
         linkTo(node, ref.path, ref.suffix);
         return;

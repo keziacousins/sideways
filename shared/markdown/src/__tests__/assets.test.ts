@@ -77,9 +77,12 @@ describe("hosted assets — links", () => {
     expect(html).toContain('href="/a/sp/docs/guides/img/flow.png"');
   });
 
-  it("leaves a relative link to another document alone", async () => {
+  it("does not treat a relative link to another document as an asset", async () => {
+    // Document links have their own resolver (doclinks.ts); this space has no
+    // documents listed, so that one marks it unresolved.
     const html = await render("[Other](./other.md)");
-    expect(html).toContain('<a href="./other.md">Other</a>');
+    expect(html).not.toContain("/a/sp/docs/");
+    expect(html).not.toContain("asset-link");
   });
 
   it("leaves external links alone", async () => {

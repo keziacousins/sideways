@@ -176,23 +176,45 @@ export function assetUrl(ref: DocRef): string {
   return `/a/${space}/${section}/${segments}`;
 }
 
+/** Where a relative reference lands within a space. */
+export interface RelativeRef {
+  /** The section it lands in; null for the linking document's own. */
+  sectionSlug: string | null;
+  /** Path within that section. */
+  path: string;
+}
+
 /**
- * Resolve a relative reference written in a document (`./img/a.png`,
- * `img/a.png`, `../shared/a.png`) to a section-relative path, the way a
- * filesystem would from the document's directory.
+ * Resolve a relative reference written in a document (`./intro.md`,
+ * `img/a.png`, `../shared/a.png`) the way a filesystem would from the
+ * document's directory.
  *
  * `target` is the path part of the reference only, with no query or fragment,
- * and may be percent-encoded. Returns null when it isn't relative (a leading
- * `/`), is malformed, or climbs out of the section root.
+ * and may be percent-encoded.
+ *
+ * A reference may climb one level above the section root, and the segment it
+ * names there is taken as a section slug: `../../platform/api.md` from
+ * `guides/auth.md` is `api.md` in section `platform`. The server knows
+ * sections, not the directories they are mounted from, so this is right
+ * exactly when each section is mounted from a sibling directory named after
+ * its slug — the usual layout.
+ *
+ * Returns null when the reference isn't relative (a leading `/`), is
+ * malformed, names a directory, or climbs above the space.
  */
-export function resolveRelativePath(fromDocPath: string, target: string): string | null {
+export function resolveRelativeRef(fromDocPath: string, target: string): RelativeRef | null {
   if (!target || target.startsWith("/")) return null;
 
   const segs = fromDocPath.split("/");
   segs.pop(); // drop the file
 
+  let sectionSlug: string | null = null;
+  // True once the reference has climbed above the section root; the next
+  // name it gives is a section, and `segs` is empty until then.
+  let aboveSection = false;
   // False while the reference still ends on a directory (`./`, `..`, `img/`).
   let endsOnFile = false;
+
   for (const raw of target.split("/")) {
     let seg: string;
     try {
@@ -203,15 +225,31 @@ export function resolveRelativePath(fromDocPath: string, target: string): string
     endsOnFile = false;
     if (seg === "" || seg === ".") continue;
     if (seg === "..") {
-      if (segs.length === 0) return null;
-      segs.pop();
+      if (aboveSection) return null;
+      if (segs.length === 0) aboveSection = true;
+      else segs.pop();
     } else {
       // An encoded slash would smuggle in a segment boundary.
       if (seg.includes("/")) return null;
-      segs.push(seg);
-      endsOnFile = true;
+      if (aboveSection) {
+        sectionSlug = seg;
+        aboveSection = false;
+      } else {
+        segs.push(seg);
+        endsOnFile = true;
+      }
     }
   }
 
-  return endsOnFile ? segs.join("/") : null;
+  return endsOnFile ? { sectionSlug, path: segs.join("/") } : null;
+}
+
+/**
+ * `resolveRelativeRef` for references that have to stay in the linking
+ * document's section, as assets do. Returns the section-relative path, or
+ * null if the reference leaves the section.
+ */
+export function resolveRelativePath(fromDocPath: string, target: string): string | null {
+  const ref = resolveRelativeRef(fromDocPath, target);
+  return ref && ref.sectionSlug === null ? ref.path : null;
 }
