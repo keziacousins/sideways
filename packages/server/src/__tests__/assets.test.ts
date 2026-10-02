@@ -121,6 +121,20 @@ describe("hosted assets", () => {
       expect(new Uint8Array(await served.arrayBuffer())).toEqual(bytes);
     });
 
+    it("keeps an existing asset when asked to create only", async () => {
+      const createOnly = { ...auth, "If-None-Match": "*" };
+      const current = png("second");
+
+      const clash = await put(`${base}/guides/img/flow.png`, png("third"), createOnly);
+      expect(clash.status).toBe(412);
+      const served = await app.request(`${base}/guides/img/flow.png`);
+      expect(new Uint8Array(await served.arrayBuffer())).toEqual(current);
+
+      // The same bytes again are not a clash, and a free path is just a create.
+      expect((await put(`${base}/guides/img/flow.png`, current, createOnly)).status).toBe(200);
+      expect((await put(`${base}/guides/img/flow-2.png`, png("third"), createOnly)).status).toBe(201);
+    });
+
     it("refuses bytes that are not what the extension names", async () => {
       const res = await put(`${base}/disguised.png`, PDF);
       expect(res.status).toBe(415);
