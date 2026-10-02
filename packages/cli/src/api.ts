@@ -404,7 +404,7 @@ export function createClient(baseUrl: string, actorName?: string) {
       space: string,
       sectionSlug: string,
       path: string,
-      opts?: { toc?: boolean; titlePage?: boolean; theme?: string },
+      opts?: { toc?: boolean; titlePage?: boolean; theme?: string; spaceLinks?: boolean },
     ): Promise<Response> {
       const creds = getStoredCredentials();
       const headers: Record<string, string> = {};
@@ -414,6 +414,8 @@ export function createClient(baseUrl: string, actorName?: string) {
       if (opts?.toc === false) params.set("toc", "false");
       if (opts?.titlePage === false) params.set("title-page", "false");
       if (opts?.theme) params.set("theme", opts.theme);
+      // Only sent when asked for: left out, the theme's default applies.
+      if (opts?.spaceLinks) params.set("space-links", "true");
       const qs = params.toString() ? `?${params}` : "";
 
       const res = await fetch(

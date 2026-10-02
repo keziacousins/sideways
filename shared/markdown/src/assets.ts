@@ -14,7 +14,8 @@
  *          in a new tab.
  *   pdf  — `<img src>` becomes a `data:` URI from `inlineAsset`, because
  *          WeasyPrint has no way to fetch an access-controlled asset. A link
- *          becomes absolute, so it still leads somewhere from a PDF.
+ *          becomes absolute when the export is given an `origin`, and plain
+ *          text when it isn't: links into the space are opt-in for a PDF.
  *
  * Purely syntactic: it never checks that the asset exists, so the cached
  * HTML stays valid when assets are uploaded, replaced or deleted.
@@ -26,14 +27,17 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import type { Root, Element } from "hast";
 import { assetUrl, assetMimeType, resolveRelativePath } from "@sideways/types";
-import { splitRelativeRef } from "./relative.js";
+import { splitRelativeRef, unlink } from "./relative.js";
 
 export interface AssetOptions {
   /** Same flag as `RenderOptions.target`. */
   target: "web" | "pdf";
   /** The document being rendered. Without it nothing can be resolved. */
   from?: { spaceSlug: string; sectionSlug: string; path: string };
-  /** Prepended to link hrefs, which are otherwise root-relative. */
+  /**
+   * Prepended to link hrefs, which are otherwise root-relative. On the pdf
+   * target, leaving it out turns links to hosted files into plain text.
+   */
   origin?: string;
   /** Section-relative asset path in, `data:` URI out; null if it can't be embedded. */
   inlineAsset?: (path: string) => Promise<string | null>;
@@ -88,8 +92,12 @@ export function rehypeAssets(options: AssetOptions) {
     const urlFor = (path: string) =>
       assetUrl({ spaceSlug: from.spaceSlug, sectionSlug: from.sectionSlug, path });
 
-    /** Make `node` a link to a hosted file. */
+    /** Make `node` a link to a hosted file — or, in a PDF with no origin, its text. */
     const linkTo = (node: Element, path: string, suffix: string) => {
+      if (options.target === "pdf" && !options.origin) {
+        unlink(node);
+        return;
+      }
       node.properties = {
         ...node.properties,
         href: (options.origin ?? "") + urlFor(path) + suffix,

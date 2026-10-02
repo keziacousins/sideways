@@ -27,7 +27,7 @@ import remarkGfm from "remark-gfm";
 import type { Root, Element } from "hast";
 import { docUrl, resolveRelativeRef, type RelativeRef } from "@sideways/types";
 import type { WikiLinkContext } from "./wikilinks.js";
-import { splitRelativeRef } from "./relative.js";
+import { splitRelativeRef, unlink } from "./relative.js";
 
 /**
  * Must match the rehype-sanitize clobberPrefix configured in index.ts.
@@ -37,9 +37,15 @@ import { splitRelativeRef } from "./relative.js";
 const ID_CLOBBER_PREFIX = "user-content-";
 
 export interface DocLinkOptions {
+  /** Same flag as `RenderOptions.target`. */
+  target: "web" | "pdf";
   /** The space's documents, and the one being rendered. */
   context?: WikiLinkContext;
-  /** Prepended to resolved hrefs, which are otherwise root-relative. */
+  /**
+   * Prepended to resolved hrefs, which are otherwise root-relative. On the
+   * pdf target, leaving it out turns links to other documents into plain
+   * text.
+   */
   origin?: string;
 }
 
@@ -85,9 +91,46 @@ export function rehypeDocLinks(options: DocLinkOptions) {
     const from = ctx?.from;
     if (!ctx || !from) return;
 
+    const selfUrl = docUrl({ spaceSlug: ctx.spaceSlug, sectionSlug: from.sectionSlug, path: from.path });
+
+    /**
+     * Point `node` at a document's page: `url` is its root-relative URL and
+     * `suffix` any query and (already prefixed) fragment.
+     *
+     * On the web that is the whole job. A PDF has no site underneath it, so
+     * there the link is one of three things:
+     *   - to a heading in this same document: the fragment alone, which
+     *     works inside the PDF;
+     *   - absolute, when the export was given an `origin` to make it so;
+     *   - otherwise plain text. Links into the space are opt-in for a PDF.
+     */
+    const linkTo = (node: Element, url: string, suffix: string) => {
+      let href: string | null = url + suffix;
+      if (options.target === "pdf") {
+        const hash = suffix.indexOf("#");
+        if (url === selfUrl && hash !== -1) href = suffix.slice(hash);
+        else href = options.origin ? options.origin + url + suffix : null;
+      } else if (options.origin) {
+        href = options.origin + href;
+      }
+
+      if (href === null) unlink(node);
+      else node.properties = { ...node.properties, href };
+    };
+
     visit(tree, "element", (node: Element) => {
       if (node.tagName !== "a") return;
-      const link = resolveDocLink(node.properties?.href, from.path);
+      const href = node.properties?.href;
+
+      // A resolved wikilink already carries its document's root-relative
+      // URL. Only a PDF needs anything more done to it.
+      if (options.target === "pdf" && typeof href === "string" && href.startsWith("/") && isWikiLink(node)) {
+        const cut = href.search(/[?#]/);
+        linkTo(node, cut === -1 ? href : href.slice(0, cut), cut === -1 ? "" : href.slice(cut));
+        return;
+      }
+
+      const link = resolveDocLink(href, from.path);
       if (!link) return;
 
       const sectionSlug = link.ref?.sectionSlug ?? from.sectionSlug;
@@ -97,10 +140,7 @@ export function rehypeDocLinks(options: DocLinkOptions) {
 
       if (doc) {
         const url = docUrl({ spaceSlug: ctx.spaceSlug, sectionSlug: doc.sectionSlug, path: doc.path });
-        node.properties = {
-          ...node.properties,
-          href: (options.origin ?? "") + url + prefixFragment(link.suffix),
-        };
+        linkTo(node, url, prefixFragment(link.suffix));
         return;
       }
 
@@ -117,6 +157,11 @@ export function rehypeDocLinks(options: DocLinkOptions) {
       };
     });
   };
+}
+
+function isWikiLink(node: Element): boolean {
+  const className = node.properties?.className;
+  return Array.isArray(className) && className.includes("wiki-link");
 }
 
 /** One relative link from a document to another markdown file. */

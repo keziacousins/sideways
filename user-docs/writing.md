@@ -65,7 +65,7 @@ The path is relative to the document that contains the link, and ends in `.md`. 
 
 - **Another section**: climb one level above the section and name it — from `guides/auth.md`, `../../platform/api.md` is `api.md` in the `platform` section. This matches the layout on disk when each section is a sibling directory named after its slug.
 - **A target that doesn't exist** renders with a wavy red underline and is not clickable, like an unresolved wiki-link. It starts working once the target is pushed. `sideways push` warns about these.
-- **In a PDF export** the link points at the document's page on Sideways.
+- **In a PDF export** links to other documents print as plain text unless they are switched on for that export; a link to a heading in the same document always works. See [[pdf-export|PDF Export]].
 
 A link that climbs above the space — into another repository, say — can't be resolved.
 
@@ -135,7 +135,7 @@ The path is relative to the document, exactly as it is on disk — so the same m
 | Type | On the web | In a PDF export |
 |------|------------|-----------------|
 | PNG, JPEG, GIF, WebP, SVG | Shown inline | Embedded (an animated GIF prints its first frame) |
-| PDF | A link that opens in a new tab | A link to the hosted file — never embedded |
+| PDF | A link that opens in a new tab | Never embedded; plain text unless links into the space are switched on |
 
 Images can be up to 10 MB and PDFs up to 20 MB. Images always scale to the width of the page; there is no syntax for sizing them.
 

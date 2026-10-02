@@ -647,22 +647,6 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       sectionSlug: section.slug,
       path: doc.path,
     });
-    // `renderMermaid` is passed on the PDF path only — WeasyPrint can't run
-    // the browser-side renderer. The `_render` routes deliberately omit it so
-    // the cached HTML keeps the raw code block for the browser to draw. The
-    // renderer is built per request so its diagram cap, shared deadline and
-    // concurrency limit scope to this one export.
-    // Hosted images take the same route in: embedded as `data:` URIs, since
-    // WeasyPrint cannot fetch an access-controlled asset. Links to hosted
-    // files are made absolute so they still lead somewhere from the PDF.
-    const html = await renderMarkdown(latestVersion.content, {
-      target: "pdf",
-      wikiLinks,
-      renderMermaid: createMermaidRenderer(),
-      inlineAsset: createAssetInliner(db, storage, space.id, section.id),
-      origin: env.publicUrl,
-    });
-
     let theme: ThemeTokens | undefined;
     const themeOverride = c.req.query("theme");
     const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -717,6 +701,29 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     const showTitlePage = titlePageParam !== undefined
       ? titlePageParam !== "false"
       : theme?.print?.defaultTitlePage ?? true;
+    // Links into the space — to other documents and to hosted files — are
+    // off unless asked for. A PDF is what gets sent outside, where such a
+    // link is a login wall and carries this instance's hostname with it.
+    // Links within the document and out to the web are unaffected.
+    const spaceLinksParam = c.req.query("space-links");
+    const spaceLinks = spaceLinksParam !== undefined
+      ? spaceLinksParam === "true"
+      : theme?.print?.defaultSpaceLinks ?? false;
+
+    // `renderMermaid` is passed on the PDF path only — WeasyPrint can't run
+    // the browser-side renderer. The `_render` routes deliberately omit it so
+    // the cached HTML keeps the raw code block for the browser to draw. The
+    // renderer is built per request so its diagram cap, shared deadline and
+    // concurrency limit scope to this one export.
+    // Hosted images take the same route in: embedded as `data:` URIs, since
+    // WeasyPrint cannot fetch an access-controlled asset.
+    const html = await renderMarkdown(latestVersion.content, {
+      target: "pdf",
+      wikiLinks,
+      renderMermaid: createMermaidRenderer(),
+      inlineAsset: createAssetInliner(db, storage, space.id, section.id),
+      origin: spaceLinks ? env.publicUrl : undefined,
+    });
 
     const printHTML = buildPrintHTML({
       title: doc.title,
