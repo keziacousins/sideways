@@ -13,6 +13,7 @@ import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from "r
 import type { Root, Element } from "hast";
 import { remarkWikiLinks, escapeWikiLinkPipes, type WikiLinkContext } from "./wikilinks.js";
 import { rehypeMermaid } from "./mermaid.js";
+import { rehypeAssets } from "./assets.js";
 
 export interface RenderOptions {
   /** "web" includes interactive features; "pdf" produces print-ready HTML */
@@ -30,6 +31,19 @@ export interface RenderOptions {
    * diagram itself from the source we leave in the document.
    */
   renderMermaid?: (code: string) => Promise<string>;
+  /**
+   * Turns a section-relative asset path into a `data:` URI, or null if the
+   * asset is missing or too large to embed. Supplied by the PDF pipeline
+   * only, for the same reason as `renderMermaid`: WeasyPrint cannot fetch an
+   * access-controlled asset, so images have to arrive inside the HTML.
+   */
+  inlineAsset?: (path: string) => Promise<string | null>;
+  /**
+   * Origin to prefix onto links to hosted files, e.g. "https://docs.example".
+   * Set on the PDF path, where a root-relative href has nothing to resolve
+   * against.
+   */
+  origin?: string;
 }
 
 /**
@@ -196,6 +210,19 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
     .use(rehypeHighlight)
     .use(rehypeKatex)
     .use(rehypeSanitize, sanitizeSchema)
+    // After the sanitiser, unlike everything above: this one only writes
+    // URLs we built ourselves, and on the pdf path `data:` URIs of bytes we
+    // stored — which the sanitiser, rightly, would strip from an `<img>`.
+    .use(rehypeAssets, {
+      target: options.target,
+      // The wikilink context already names the document being rendered.
+      from: options.wikiLinks?.from && {
+        spaceSlug: options.wikiLinks.spaceSlug,
+        ...options.wikiLinks.from,
+      },
+      origin: options.origin,
+      inlineAsset: options.inlineAsset,
+    })
     .use(rehypeStringify);
 
   return processor;
@@ -224,8 +251,9 @@ export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.
  *     wikilinks with display labels were unresolved everywhere in v7).
  * v9: mermaid fences now render as diagrams — `pre[data-mermaid]` on the web
  *     path (drawn client-side), inlined SVG on the pdf path.
+ * v10: relative image and file-link targets resolve to hosted asset URLs.
  */
-export const RENDERER_VERSION = "v9";
+export const RENDERER_VERSION = "v10";
 
 /**
  * Render markdown to HTML string.

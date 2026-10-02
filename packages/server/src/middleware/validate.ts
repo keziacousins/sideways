@@ -2,6 +2,8 @@
  * Input validation helpers for API routes.
  */
 
+import { assetMimeType } from "@sideways/types";
+
 export const LIMITS = {
   title: 500,
   slug: 200,
@@ -34,6 +36,24 @@ export function validatePath(path: string): string | null {
   if (!path) return "Path is required";
   if (path.length > LIMITS.slug * 4) return `Path is too long`;
   if (!path.endsWith(".md")) return "Path must end in .md";
+  return validatePathSegments(path);
+}
+
+/**
+ * Validate an asset path. The same shape as a document path, except that the
+ * extension names a hosted file type (see `ASSET_MIME_TYPES`) rather than
+ * `.md`. Whether the bytes match that extension is checked at upload.
+ */
+export function validateAssetPath(path: string): string | null {
+  if (!path) return "Path is required";
+  if (path.length > LIMITS.slug * 4) return `Path is too long`;
+  if (!assetMimeType(path)) {
+    return "Unsupported file type. Allowed: PNG, JPEG, GIF, WebP, SVG, PDF.";
+  }
+  return validatePathSegments(path);
+}
+
+function validatePathSegments(path: string): string | null {
   if (path.startsWith("/") || path.endsWith("/")) return "Path cannot have leading or trailing slash";
   const segments = path.split("/");
   for (const seg of segments) {

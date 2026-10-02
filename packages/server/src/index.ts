@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { createDb } from "@sideways/db";
 import { createStorage } from "@sideways/storage";
 import { createDocumentRoutes } from "./routes/documents.js";
+import { createAssetRoutes } from "./routes/assets.js";
 import { createSpaceRoutes } from "./routes/spaces.js";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createKeyRoutes } from "./routes/keys.js";
@@ -190,6 +191,7 @@ app.get("/.well-known/*", async (c) => {
 app.route("/api/auth", createAuthRoutes(db));
 app.route("/api/spaces", createSpaceRoutes(db));
 app.route("/api/documents", createDocumentRoutes(db, storage));
+app.route("/api/assets", createAssetRoutes(db, storage));
 app.route("/api/keys", createKeyRoutes(db));
 app.route("/api/comments", createCommentRoutes(db));
 app.route("/api/mcp", createMcpRoutes(db));

@@ -122,6 +122,14 @@
   text-decoration-color: var(--sw-error, #a02020);
 }
 
+/* A link to a hosted file (a PDF, say). It opens in a new tab, so mark it. */
+.sw-doc-content a.asset-link::after {
+  content: "\2197";
+  margin-left: 0.15em;
+  font-size: 0.8em;
+  color: var(--sw-text-muted, #888);
+}
+
 /* ── Lists ────────────────────────────────────────────────────── */
 .sw-doc-content ul,
 .sw-doc-content ol {

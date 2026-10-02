@@ -22,6 +22,7 @@ import { validateTitle, validatePath, validateTags, validateContent } from "../m
 import { notifyWatchers, notifySpaceWatchers } from "../lib/notify.js";
 import { loadWikiLinkContext } from "../lib/wikilinks-context.js";
 import { createMermaidRenderer } from "../lib/mermaid.js";
+import { createAssetInliner } from "../lib/assets.js";
 import {
   resolveSection,
   findDocByPath,
@@ -651,10 +652,15 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     // the cached HTML keeps the raw code block for the browser to draw. The
     // renderer is built per request so its diagram cap, shared deadline and
     // concurrency limit scope to this one export.
+    // Hosted images take the same route in: embedded as `data:` URIs, since
+    // WeasyPrint cannot fetch an access-controlled asset. Links to hosted
+    // files are made absolute so they still lead somewhere from the PDF.
     const html = await renderMarkdown(latestVersion.content, {
       target: "pdf",
       wikiLinks,
       renderMermaid: createMermaidRenderer(),
+      inlineAsset: createAssetInliner(db, storage, space.id, section.id),
+      origin: env.publicUrl,
     });
 
     let theme: ThemeTokens | undefined;
