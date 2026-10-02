@@ -4,6 +4,7 @@ import { type Database, spaces, sections, documents, spaceMembers, spaceWatches,
 import type { AuthUser } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { autoWatchSpace } from "../lib/notify.js";
+import { bustWikiLinkRenderCache } from "../lib/doc-resolver.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -317,6 +318,21 @@ export function createSpaceRoutes(db: Database) {
       .set({ sectionId: defaultSection.id, updatedAt: new Date() })
       .where(eq(documents.sectionId, section.id))
       .returning({ id: documents.id });
+
+    // Assets go with the documents that reference them: paths are kept, so
+    // every relative reference still resolves on the other side. Where the
+    // default section already has an asset at the same path, that one stays.
+    await db.execute(sql`
+      UPDATE assets SET section_id = ${defaultSection.id}
+      WHERE section_id = ${section.id}
+        AND NOT EXISTS (
+          SELECT 1 FROM assets kept
+          WHERE kept.section_id = ${defaultSection.id} AND kept.path = assets.path
+        )
+    `);
+    // The moved documents' cached HTML names the old section in every asset
+    // URL and wikilink.
+    await bustWikiLinkRenderCache(db, space.id);
 
     return c.json({ moved: moved.length });
   });

@@ -166,6 +166,12 @@ fi
 # We don't get an interactive TTY over SSH, so push would otherwise hang
 # on any destructive change. Before destructive deploys, run
 # `./scripts/backup-db.sh` first.
+#
+# `--force` does NOT answer the rename prompt. When one table both loses and
+# gains columns in the same push, drizzle asks whether each new column is a
+# rename, and with no TTY it aborts ("Interactive prompts require a TTY").
+# A change shaped like that needs its SQL applied by hand first, so the push
+# finds nothing to ask about — see shared/db/drizzle/0012 for an example.
 
 echo "==> Pushing database schema..."
 ssh $VM "set -a && source $APP_DIR/.env && set +a && cd $APP_DIR/shared/db && npx drizzle-kit push --force"

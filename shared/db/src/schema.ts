@@ -142,20 +142,29 @@ export const themes = pgTable("themes", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+/**
+ * Files hosted beside the documents: images, and PDFs that documents link to.
+ * Addressed the way documents are — `path` is filesystem-shaped within the
+ * section — so `![](./img/flow.png)` in `guides/auth.md` names the asset at
+ * `guides/img/flow.png`. Mutable by path, with no version history.
+ */
 export const assets = pgTable("assets", {
   id: uuid("id").primaryKey().defaultRandom(),
-  filename: text("filename").notNull(),
+  spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
+  sectionId: uuid("section_id").notNull().references(() => sections.id, { onDelete: "cascade" }),
+  path: text("path").notNull(),
   mimeType: text("mime_type").notNull(),
-  /** SeaweedFS file ID */
+  size: integer("size").notNull(),
+  /** SHA-256 of the bytes, hex. Served as the ETag; the CLI syncs on it. */
+  contentHash: text("content_hash").notNull(),
+  /** SeaweedFS path. Content-addressed, so paths holding the same bytes share one. */
   storageKey: text("storage_key").notNull(),
-  ownerId: uuid("owner_id").notNull().references(() => users.id),
-  spaceId: uuid("space_id").references(() => spaces.id, { onDelete: "set null" }),
-  documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
+  uploadedBy: uuid("uploaded_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
-  index("assets_doc_idx").on(t.documentId),
-  index("assets_owner_idx").on(t.ownerId),
-  index("assets_space_idx").on(t.spaceId),
+  uniqueIndex("assets_space_section_path_idx").on(t.spaceId, t.sectionId, t.path),
+  index("assets_storage_key_idx").on(t.storageKey),
 ]);
 
 /** Personal access tokens for API/CLI auth */
