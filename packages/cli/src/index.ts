@@ -30,6 +30,7 @@ import {
   normalise,
 } from "./resolve.js";
 import type { SyncInfo } from "./api.js";
+import { surveyAssets, planAssets, runAssetPlan, type AssetSurvey } from "./assets.js";
 
 const program = new Command();
 
@@ -204,6 +205,21 @@ function prepareFileForPush(filePath: string): { content: string; tags: string[]
   return { content, tags, title: frontmatter.title };
 }
 
+/**
+ * Say what a push can't do about the assets its documents reference: files
+ * that are nowhere to be found, or a server too old to host any.
+ */
+function reportAssetGaps(survey: AssetSurvey): void {
+  for (const m of survey.missing) {
+    console.warn(`warning: ${m.docRelPath} references ${m.relPath}, which doesn't exist`);
+  }
+  if (!survey.supported && survey.candidates.length > 0) {
+    console.warn(
+      `warning: this server doesn't host assets — ${survey.candidates.length} referenced file(s) not pushed`,
+    );
+  }
+}
+
 // ── add / remove ──────────────────────────────────────────────────────
 
 program
@@ -373,6 +389,20 @@ program
         }
 
         console.log(`Pulled ${space}/${resolved.sectionSlug}/${resolved.path} → ${filePath}`);
+
+        // The images and PDFs the pulled document references come with it.
+        const assetState = readSyncState(syncRoot, space);
+        const survey = await surveyAssets({
+          client, space, rootDir: syncRoot, mounts: buildMounts(config), syncState: assetState,
+          files: [{ sectionSlug: resolved.sectionSlug, path: resolved.path, absPath: filePath, relPath }],
+          includeRemote: false,
+        });
+        const plan = planAssets(survey, { push: false, pull: true, force: opts.force ? "pull" : undefined });
+        await runAssetPlan(plan, { client, space, syncState: assetState });
+        for (const c of plan.conflicts) {
+          console.log(`  conflict: ${c.relPath} (use --force to overwrite)`);
+        }
+        writeSyncState(syncRoot, assetState);
         return;
       }
 
@@ -445,6 +475,21 @@ program
         const isNew = !tracked;
         console.log(`  ${isNew ? "new" : "updated"}: ${relativePath}`);
         totalPulled++;
+      }
+
+      // Hosted assets: everything the server holds for the sections this
+      // repo owns, so a pulled document arrives with its images.
+      const survey = await surveyAssets({
+        client, space, rootDir: syncRoot, mounts: buildMounts(config), syncState,
+        files: [],
+        includeRemote: true,
+      });
+      const plan = planAssets(survey, { push: false, pull: true, force: opts.force ? "pull" : undefined });
+      const assets = await runAssetPlan(plan, { client, space, syncState });
+      totalPulled += assets.pulled;
+      for (const c of plan.conflicts) {
+        console.log(`  conflict: ${c.relPath} (use --force to overwrite)`);
+        totalSkipped++;
       }
 
       syncState.lastSync = new Date().toISOString();
@@ -643,6 +688,22 @@ program
         totalPushed++;
       }
 
+      // Hosted assets: the images and PDFs these documents reference. Every
+      // document in scope counts, not only the ones just pushed — an image
+      // can change while the markdown around it stays the same.
+      const survey = await surveyAssets({
+        client, space, rootDir: syncRoot, mounts: mountList, syncState,
+        files: sorted,
+        includeRemote: false,
+      });
+      reportAssetGaps(survey);
+      const plan = planAssets(survey, { push: true, pull: false, force: opts.force ? "push" : undefined });
+      const assets = await runAssetPlan(plan, { client, space, syncState, dryRun: opts.dryRun });
+      totalPushed += assets.pushed;
+      for (const c of plan.conflicts) {
+        console.log(`  conflict: ${c.relPath} (use --force to overwrite)`);
+      }
+
       if (!opts.dryRun) {
         // Refresh remote state and ensure ALL local files are tracked
         const updatedRemote = await client.getSyncInfo(space);
@@ -801,6 +862,19 @@ program
       }
     }
 
+    // Hosted assets: those the tracked documents reference, plus whatever
+    // the server holds for an owned section that isn't on disk yet.
+    const survey = await surveyAssets({
+      client, space, rootDir: syncRoot, mounts: mountList, syncState,
+      files: sorted,
+      includeRemote: true,
+    });
+    for (const asset of survey.candidates) {
+      if (asset.status === "unchanged" || asset.status === "deleted-local") continue;
+      show(asset.status, asset);
+      hasChanges = true;
+    }
+
     // Show unchanged files that have open comments
     for (const file of sorted) {
       const cc = commentCounts.get(syncKey(file.sectionSlug, file.path));
@@ -956,7 +1030,20 @@ program
       }
     }
 
-    if (toPull.length === 0 && toPush.length === 0 && conflicts.length === 0) {
+    // Hosted assets, in both directions: what the tracked documents
+    // reference, and what the server holds for the sections this repo owns.
+    // Surveyed before any document moves, which is still complete — a
+    // document about to be pulled can only reference assets the server has.
+    const survey = await surveyAssets({
+      client, space, rootDir: syncRoot, mounts: mountList, syncState,
+      files: allFiles,
+      includeRemote: true,
+    });
+    const assetPlan = planAssets(survey, { push: true, pull: true });
+    const assetWork = assetPlan.uploads.length + assetPlan.downloads.length;
+    conflicts.push(...assetPlan.conflicts.map((c) => c.relPath));
+
+    if (toPull.length === 0 && toPush.length === 0 && assetWork === 0 && conflicts.length === 0) {
       console.log("Everything up to date.");
       return;
     }
@@ -1033,6 +1120,12 @@ program
         console.log(`  pushed: ${file.relPath}`);
       }
     }
+
+    reportAssetGaps(survey);
+    if (assetWork > 0) {
+      console.log(`\nAssets (${assetWork}):`);
+    }
+    await runAssetPlan(assetPlan, { client, space, syncState, dryRun: opts.dryRun });
 
     // Show conflicts
     if (conflicts.length > 0) {

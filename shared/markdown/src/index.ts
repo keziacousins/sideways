@@ -229,6 +229,7 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
 }
 
 export { extractComments, embedComments } from "./comments.js";
+export { extractAssetRefs } from "./assets.js";
 export type { SerializedComment } from "./comments.js";
 export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.js";
 

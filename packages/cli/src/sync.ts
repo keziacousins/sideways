@@ -35,6 +35,15 @@ export interface SyncFileEntry {
   remoteHash: string;
 }
 
+/** A hosted asset (image, PDF) in the local sync cache. */
+export interface SyncAssetEntry {
+  sectionSlug: string;
+  /** Asset path within its section (POSIX-style). */
+  path: string;
+  /** SHA-256 of the bytes that local and remote agreed on at last reconcile. */
+  hash: string;
+}
+
 export interface SyncState {
   /** Space slug — sanity-check against config to detect stale cache. */
   space: string;
@@ -42,6 +51,8 @@ export interface SyncState {
   lastSync: string;
   /** Cache entries keyed by "<sectionSlug>:<path>" for fast lookup. */
   files: Record<string, SyncFileEntry>;
+  /** Hosted assets, keyed the same way. Absent in caches written before 1.8. */
+  assets?: Record<string, SyncAssetEntry>;
   /** Schema version — bumped when the file shape changes. */
   schema: number;
 }
