@@ -10,7 +10,7 @@ Sideways documents are written in standard markdown with GitHub Flavoured Markdo
 
 **Headings**: `# H1` through `###### H6`
 
-**Links**: `[text](url)` for external links
+**Links**: `[text](url)` for external links, or a relative path to another document (see [Links Between Documents](#links-between-documents))
 
 **Images**: `![alt](url)` — a web address, or a file beside the document (see [Images and Files](#images-and-files))
 
@@ -52,6 +52,24 @@ $$
 ```
 
 Single-`$` is reserved for currency in prose (e.g. `$2k budget`) — it won't trigger math parsing. Wrap math in `$$...$$` whether inline or block.
+
+## Links Between Documents
+
+An ordinary relative link to another markdown file works the way it does on disk:
+
+```markdown
+See the [setup guide](./intro.md), or go [back to the overview](../index.md#contents).
+```
+
+The path is relative to the document that contains the link, and ends in `.md`. Sideways resolves it to the target's page, so the same link works on GitHub, in a local editor and here. A `#fragment` is kept and points at the heading on the target page.
+
+- **Another section**: climb one level above the section and name it — from `guides/auth.md`, `../../platform/api.md` is `api.md` in the `platform` section. This matches the layout on disk when each section is a sibling directory named after its slug.
+- **A target that doesn't exist** renders with a wavy red underline and is not clickable, like an unresolved wiki-link. It starts working once the target is pushed. `sideways push` warns about these.
+- **In a PDF export** the link points at the document's page on Sideways.
+
+A link that climbs above the space — into another repository, say — can't be resolved.
+
+Wiki-links, below, are the shorter alternative when you don't need the file to work outside Sideways.
 
 ## Wiki-Links
 

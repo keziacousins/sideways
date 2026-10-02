@@ -14,6 +14,7 @@ import type { Root, Element } from "hast";
 import { remarkWikiLinks, escapeWikiLinkPipes, type WikiLinkContext } from "./wikilinks.js";
 import { rehypeMermaid } from "./mermaid.js";
 import { rehypeAssets } from "./assets.js";
+import { rehypeDocLinks } from "./doclinks.js";
 
 export interface RenderOptions {
   /** "web" includes interactive features; "pdf" produces print-ready HTML */
@@ -39,9 +40,9 @@ export interface RenderOptions {
    */
   inlineAsset?: (path: string) => Promise<string | null>;
   /**
-   * Origin to prefix onto links to hosted files, e.g. "https://docs.example".
-   * Set on the PDF path, where a root-relative href has nothing to resolve
-   * against.
+   * Origin to prefix onto links to hosted files and to other documents, e.g.
+   * "https://docs.example". Set on the PDF path, where a root-relative href
+   * has nothing to resolve against.
    */
   origin?: string;
 }
@@ -223,6 +224,9 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
       origin: options.origin,
       inlineAsset: options.inlineAsset,
     })
+    // Also after the sanitiser, for the same reason: every href it writes is
+    // one we built from the document list.
+    .use(rehypeDocLinks, { context: options.wikiLinks, origin: options.origin })
     .use(rehypeStringify);
 
   return processor;
@@ -230,6 +234,8 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
 
 export { extractComments, embedComments } from "./comments.js";
 export { extractAssetRefs } from "./assets.js";
+export { extractDocLinks } from "./doclinks.js";
+export type { DocLinkRef } from "./doclinks.js";
 export type { SerializedComment } from "./comments.js";
 export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.js";
 
@@ -253,8 +259,10 @@ export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.
  * v9: mermaid fences now render as diagrams — `pre[data-mermaid]` on the web
  *     path (drawn client-side), inlined SVG on the pdf path.
  * v10: relative image and file-link targets resolve to hosted asset URLs.
+ * v11: relative links to other documents resolve to their canonical URLs,
+ *      or render as unresolved markers when the target doesn't exist.
  */
-export const RENDERER_VERSION = "v10";
+export const RENDERER_VERSION = "v11";
 
 /**
  * Render markdown to HTML string.
