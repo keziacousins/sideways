@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderMarkdown, type WikiLinkContext } from "../index.js";
+import { renderMarkdown, extractAssetRefs, type WikiLinkContext } from "../index.js";
 
 /** Render `md` as the document at `path` in space "sp", section "docs". */
 function render(
@@ -157,5 +157,46 @@ describe("hosted assets — pdf target", () => {
       inlineAsset: async () => dataUri,
     });
     expect(html).toContain('src="https://example.com/a.png"');
+  });
+});
+
+describe("extractAssetRefs", () => {
+  it("lists the hosted files a document references, as section-relative paths", () => {
+    const md = "![Flow](./img/flow.png)\n\nSee the [spec](../spec.pdf#page=2).";
+    expect(extractAssetRefs(md, "guides/auth.md")).toEqual(["guides/img/flow.png", "spec.pdf"]);
+  });
+
+  it("follows reference-style links to their definitions", () => {
+    const md = "See the [spec][s] and ![the flow][f].\n\n[s]: ./spec.pdf\n[f]: img/flow.png";
+    expect(extractAssetRefs(md, "auth.md").sort()).toEqual(["img/flow.png", "spec.pdf"]);
+  });
+
+  it("lists each file once", () => {
+    const md = "![a](logo.png) ![b](./logo.png) [c](logo.png)";
+    expect(extractAssetRefs(md, "auth.md")).toEqual(["logo.png"]);
+  });
+
+  it("skips code, external URLs, other documents and unhosted types", () => {
+    const md = [
+      "```",
+      "![fenced](./fenced.png)",
+      "```",
+      "`![inline](./inline.png)`",
+      "![remote](https://example.com/a.png)",
+      "[doc](./other.md) [zip](./files.zip) [root](/static/a.png)",
+    ].join("\n");
+    expect(extractAssetRefs(md, "auth.md")).toEqual([]);
+  });
+
+  it("skips a reference that climbs out of the section", () => {
+    expect(extractAssetRefs("![x](../../x.png)", "guides/auth.md")).toEqual([]);
+  });
+
+  it("agrees with the renderer about what a document references", async () => {
+    const md = "![Flow](./img/flow.png) and [spec](spec.pdf)";
+    const html = await render(md, "guides/index.md");
+    for (const path of extractAssetRefs(md, "guides/index.md")) {
+      expect(html).toContain(`/a/sp/docs/${path}`);
+    }
   });
 });

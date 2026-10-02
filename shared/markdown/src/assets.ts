@@ -20,7 +20,10 @@
  * HTML stays valid when assets are uploaded, replaced or deleted.
  */
 
+import { unified } from "unified";
 import { visit } from "unist-util-visit";
+import remarkParse from "remark-parse";
+import remarkGfm from "remark-gfm";
 import type { Root, Element } from "hast";
 import { assetUrl, assetMimeType, resolveRelativePath } from "@sideways/types";
 
@@ -53,6 +56,26 @@ function resolveRef(
   const path = resolveRelativePath(fromPath, target);
   if (path === null) return null;
   return { path, suffix: cut === -1 ? "" : ref.slice(cut) };
+}
+
+/**
+ * The hosted files a document references: every relative image or link
+ * target of a hosted type, as section-relative paths, each listed once.
+ *
+ * This is how the CLI decides which files beside a document belong with it.
+ * It parses rather than pattern-matches so that it agrees with the renderer
+ * below — a reference inside a code fence is not a reference.
+ */
+export function extractAssetRefs(markdown: string, docPath: string): string[] {
+  const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown);
+  const paths = new Set<string>();
+  visit(tree, (node) => {
+    // `definition` covers reference-style links: `[spec]: ./spec.pdf`.
+    if (node.type !== "image" && node.type !== "link" && node.type !== "definition") return;
+    const ref = resolveRef(node.url, docPath);
+    if (ref && assetMimeType(ref.path)) paths.add(ref.path);
+  });
+  return [...paths];
 }
 
 /** The classes already on a node. hast holds `className` as a list. */

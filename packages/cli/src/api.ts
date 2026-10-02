@@ -66,6 +66,36 @@ export interface ThemeSummary {
   name: string;
 }
 
+/** A hosted asset, as listed by /api/assets/{space} */
+export interface AssetInfo {
+  sectionSlug: string;
+  path: string;
+  mimeType: string;
+  size: number;
+  /** SHA-256 of the bytes, hex. */
+  contentHash: string;
+  updatedAt: string;
+  url: string;
+}
+
+/**
+ * A local file name can hold characters a URL can't. The server refuses such
+ * a name, but the request has to arrive intact for it to say so.
+ */
+function encodePath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
+/** The server's `{ error }` message for a failed response, or its raw body. */
+async function errorMessage(res: Response): Promise<string> {
+  const body = await res.text();
+  try {
+    return JSON.parse(body).error || body;
+  } catch {
+    return body || `HTTP ${res.status}`;
+  }
+}
+
 export function createClient(baseUrl: string, actorName?: string) {
   async function request<T = unknown>(path: string, options?: RequestInit): Promise<T> {
     const creds = getStoredCredentials();
@@ -123,6 +153,21 @@ export function createClient(baseUrl: string, actorName?: string) {
 
     if (res.status === 204) return undefined as T;
     return res.json();
+  }
+
+  /**
+   * Authenticated fetch for the asset routes, which carry bytes rather than
+   * JSON. Unlike `request` it never exits the process: one asset failing —
+   * a name the server won't take, a file over the size cap — shouldn't stop
+   * the rest of a push.
+   */
+  function rawRequest(path: string, options?: RequestInit): Promise<Response> {
+    const creds = getStoredCredentials();
+    const headers: Record<string, string> = {};
+    if (creds?.api_key) headers["Authorization"] = `Bearer ${creds.api_key}`;
+    const actor = actorName || process.env.SIDEWAYS_ACTOR;
+    if (actor) headers["X-Sideways-Actor"] = actor;
+    return fetch(`${baseUrl}${path}`, { ...options, headers });
   }
 
   return {
@@ -316,6 +361,42 @@ export function createClient(baseUrl: string, actorName?: string) {
 
     deleteKey(id: string) {
       return request<void>(`/api/keys/${id}`, { method: "DELETE" });
+    },
+
+    /**
+     * List the hosted assets in a space. Null when the server has no asset
+     * routes at all — an older release — so callers can skip assets rather
+     * than fail a push that would otherwise have worked.
+     */
+    async listAssets(space: string): Promise<AssetInfo[] | null> {
+      const res = await rawRequest(`/api/assets/${space}`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(await errorMessage(res));
+      return res.json();
+    },
+
+    /** Upload a file as the asset at `path`, creating or replacing it. */
+    async putAsset(
+      space: string,
+      sectionSlug: string,
+      path: string,
+      bytes: Uint8Array,
+    ): Promise<AssetInfo> {
+      const res = await rawRequest(`/api/assets/${space}/${sectionSlug}/${encodePath(path)}`, {
+        method: "PUT",
+        // Node's Buffer is a valid body at runtime; its TS type (ArrayBufferLike
+        // vs. ArrayBuffer) trips the lib.dom BodyInit constraint.
+        body: bytes as unknown as BodyInit,
+      });
+      if (!res.ok) throw new Error(await errorMessage(res));
+      return res.json();
+    },
+
+    /** Download an asset's bytes. */
+    async getAsset(space: string, sectionSlug: string, path: string): Promise<Buffer> {
+      const res = await rawRequest(`/api/assets/${space}/${sectionSlug}/${encodePath(path)}`);
+      if (!res.ok) throw new Error(await errorMessage(res));
+      return Buffer.from(await res.arrayBuffer());
     },
 
     /** Download PDF — returns raw Response (not parsed JSON) */
