@@ -13,16 +13,23 @@ register_client() {
 
   STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${HYDRA_ADMIN_URL}/admin/clients/${CLIENT_ID}")
 
+  # Update in place — never delete. Deleting a client cascades to every
+  # refresh token issued to it, and this script runs on every deploy, so a
+  # delete+recreate signs everyone out once their access token expires.
+  # PUT replaces the whole client, so CLIENT_JSON must be the full definition.
   if [ "$STATUS" = "200" ]; then
-    echo "Client '${CLIENT_ID}' exists, deleting and recreating..."
-    curl -sf -X DELETE "${HYDRA_ADMIN_URL}/admin/clients/${CLIENT_ID}" > /dev/null
+    echo "Client '${CLIENT_ID}' exists, updating..."
+    curl -sf -X PUT \
+      -H "Content-Type: application/json" \
+      -d "${CLIENT_JSON}" \
+      "${HYDRA_ADMIN_URL}/admin/clients/${CLIENT_ID}" > /dev/null
+  else
+    echo "Creating client '${CLIENT_ID}'..."
+    curl -sf -X POST \
+      -H "Content-Type: application/json" \
+      -d "${CLIENT_JSON}" \
+      "${HYDRA_ADMIN_URL}/admin/clients" > /dev/null
   fi
-
-  echo "Creating client '${CLIENT_ID}'..."
-  curl -sf -X POST \
-    -H "Content-Type: application/json" \
-    -d "${CLIENT_JSON}" \
-    "${HYDRA_ADMIN_URL}/admin/clients" > /dev/null
   echo "  Done."
 }
 
