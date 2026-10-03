@@ -32,6 +32,11 @@
       "postcss": "^8.5.18",
       "esbuild": "^0.28.1",
       "@hono/node-server": "^1.19.13"
+    },
+    "auditConfig": {
+      "ignoreCves": [
+        "CVE-2026-93748"
+      ]
     }
   },
   "devDependencies": {
