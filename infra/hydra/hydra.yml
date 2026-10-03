@@ -45,6 +45,14 @@ oauth2:
   pkce:
     enforced: true
     enforced_for_public_clients: true
+  # Refresh tokens are single-use, and presenting a spent one revokes the
+  # whole chain — the newest valid token included. With no grace period, two
+  # refreshes that overlap (parallel requests, a retry after a dropped
+  # response) sign the user out. Within the window a spent token is honoured
+  # again instead.
+  grant:
+    refresh_token:
+      rotation_grace_period: 60s
 
 oidc:
   dynamic_client_registration:
