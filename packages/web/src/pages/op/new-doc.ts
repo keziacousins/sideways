@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 import { docUrl } from "@sideways/types";
-import { getFreshToken, API_URL } from "../../lib/auth-proxy.ts";
+import { API_URL } from "../../lib/auth-proxy.ts";
 
 /**
  * POST /op/new-doc
@@ -10,8 +10,8 @@ import { getFreshToken, API_URL } from "../../lib/auth-proxy.ts";
  * a unique path by appending a numeric suffix. Returns the doc's canonical
  * URL with `?edit=1` so the client can navigate straight into edit mode.
  */
-export const POST: APIRoute = async ({ request, session }) => {
-  const token = await getFreshToken(session);
+export const POST: APIRoute = async ({ request, locals }) => {
+  const token = locals.accessToken;
   if (!token) return jsonError("Not authenticated", 401);
 
   const { space } = await request.json();

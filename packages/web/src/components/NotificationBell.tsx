@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { fetchSessionToken } from "../lib/session-token.ts";
 
 interface Notification {
   id: string;
@@ -16,25 +17,23 @@ interface Notification {
 interface Props {
   apiUrl: string;
   accessToken: string | null;
-  refreshToken: string | null;
 }
 
-async function authFetch(url: string, apiUrl: string, accessToken: string | null, refreshToken: string | null, opts?: RequestInit) {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+async function authFetch(url: string, apiUrl: string, tokenRef: { current: string | null }, opts?: RequestInit) {
+  const doFetch = () => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+    return fetch(`${apiUrl}${url}`, { ...opts, headers });
+  };
 
-  let res = await fetch(`${apiUrl}${url}`, { ...opts, headers });
+  let res = await doFetch();
 
-  if (res.status === 401 && refreshToken) {
-    const tokenRes = await fetch(`${apiUrl}/api/auth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: "sideways-web" }),
-    });
-    if (tokenRes.ok) {
-      const tokens = await tokenRes.json();
-      headers["Authorization"] = `Bearer ${tokens.access_token}`;
-      res = await fetch(`${apiUrl}${url}`, { ...opts, headers });
+  // The token this page was rendered with has expired — pick up the session's current one
+  if (res.status === 401 && tokenRef.current) {
+    const token = await fetchSessionToken();
+    if (token && token !== tokenRef.current) {
+      tokenRef.current = token;
+      res = await doFetch();
     }
   }
 
@@ -60,7 +59,8 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-export default function NotificationBell({ apiUrl, accessToken, refreshToken }: Props) {
+export default function NotificationBell({ apiUrl, accessToken }: Props) {
+  const tokenRef = useRef(accessToken);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
@@ -73,7 +73,7 @@ export default function NotificationBell({ apiUrl, accessToken, refreshToken }: 
 
     const fetchCount = async () => {
       try {
-        const res = await authFetch("/api/notifications/count", apiUrl, accessToken, refreshToken);
+        const res = await authFetch("/api/notifications/count", apiUrl, tokenRef);
         if (res.ok) {
           const data = await res.json();
           setUnreadCount(data.unreadCount);
@@ -98,7 +98,7 @@ export default function NotificationBell({ apiUrl, accessToken, refreshToken }: 
 
   const loadNotifications = async () => {
     try {
-      const res = await authFetch("/api/notifications?limit=20", apiUrl, accessToken, refreshToken);
+      const res = await authFetch("/api/notifications?limit=20", apiUrl, tokenRef);
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications);
@@ -115,7 +115,7 @@ export default function NotificationBell({ apiUrl, accessToken, refreshToken }: 
 
   const markAllRead = async () => {
     try {
-      await authFetch("/api/notifications/read-all", apiUrl, accessToken, refreshToken, { method: "POST" });
+      await authFetch("/api/notifications/read-all", apiUrl, tokenRef, { method: "POST" });
       setUnreadCount(0);
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch {}
@@ -123,7 +123,7 @@ export default function NotificationBell({ apiUrl, accessToken, refreshToken }: 
 
   const dismiss = async (id: string) => {
     try {
-      await authFetch(`/api/notifications/${id}`, apiUrl, accessToken, refreshToken, { method: "DELETE" });
+      await authFetch(`/api/notifications/${id}`, apiUrl, tokenRef, { method: "DELETE" });
       setNotifications(prev => prev.filter(n => n.id !== id));
     } catch {}
   };

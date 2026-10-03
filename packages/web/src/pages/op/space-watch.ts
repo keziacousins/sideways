@@ -1,12 +1,12 @@
 import type { APIRoute } from "astro";
-import { getFreshToken, API_URL } from "../../lib/auth-proxy.ts";
+import { API_URL } from "../../lib/auth-proxy.ts";
 
 /**
  * GET  /op/space-watch?space=  — check current watch state on a space
  * POST /op/space-watch  body: { space }  — toggle
  */
-export const GET: APIRoute = async ({ request, session }) => {
-  const token = await getFreshToken(session);
+export const GET: APIRoute = async ({ request, locals }) => {
+  const token = locals.accessToken;
   if (!token) return new Response(JSON.stringify({ watching: false }), { headers: jsonHeaders() });
 
   const space = new URL(request.url).searchParams.get("space");
@@ -19,8 +19,8 @@ export const GET: APIRoute = async ({ request, session }) => {
   return new Response(await res.text(), { status: res.status, headers: jsonHeaders() });
 };
 
-export const POST: APIRoute = async ({ request, session }) => {
-  const token = await getFreshToken(session);
+export const POST: APIRoute = async ({ request, locals }) => {
+  const token = locals.accessToken;
   if (!token) return jsonError("Not authenticated", 401);
 
   const { space } = await request.json();

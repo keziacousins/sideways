@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { getFreshToken, API_URL } from "../../lib/auth-proxy.ts";
+import { API_URL } from "../../lib/auth-proxy.ts";
 
 /**
  * POST /op/patch
@@ -7,8 +7,8 @@ import { getFreshToken, API_URL } from "../../lib/auth-proxy.ts";
  * `title`, `tags`, `position`, `targetSection`, `targetPath`, `targetSpace`,
  * `parentPath`. Forwards to PATCH /api/documents/...
  */
-export const POST: APIRoute = async ({ request, session }) => {
-  const token = await getFreshToken(session);
+export const POST: APIRoute = async ({ request, locals }) => {
+  const token = locals.accessToken;
   if (!token) return jsonError("Not authenticated", 401);
 
   const body = await request.json();

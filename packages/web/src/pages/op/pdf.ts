@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { getFreshToken, API_URL } from "../../lib/auth-proxy.ts";
+import { API_URL } from "../../lib/auth-proxy.ts";
 
 /**
  * GET /op/pdf?space=&section=&path=&theme=&toc=&title-page=
@@ -7,8 +7,8 @@ import { getFreshToken, API_URL } from "../../lib/auth-proxy.ts";
  * Triggered by an anchor click for download, so it has to be a GET that
  * returns the PDF directly. All targeting fields come from query string.
  */
-export const GET: APIRoute = async ({ request, session }) => {
-  const token = await getFreshToken(session);
+export const GET: APIRoute = async ({ request, locals }) => {
+  const token = locals.accessToken;
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
