@@ -14,7 +14,6 @@ import { docUrl } from "@sideways/types";
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 const { space: spaceSlug, section: sectionSlug, path: urlPath } = Astro.params;
 const { accessToken } = Astro.locals;
-const refreshToken = await Astro.session?.get("refresh_token") || null;
 
 let space: { name: string; slug: string; canWrite?: boolean; theme?: { tokens: any } } | null = null;
 let doc: {
@@ -195,7 +194,6 @@ const themeCss = themeToCSS(space?.theme?.tokens);
             path={doc.path}
             apiUrl={API_URL}
             accessToken={accessToken}
-            refreshToken={refreshToken}
           />
           <div class="doc-actions-menu" id="doc-actions-menu">
             <button class="toolbar-btn" id="actions-toggle" title="More actions">

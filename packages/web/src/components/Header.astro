@@ -7,7 +7,6 @@ const currentPath = Astro.url.pathname;
 const loginHref = `/auth/login?returnTo=${encodeURIComponent(currentPath)}`;
 const signupHref = `/auth/signup?returnTo=${encodeURIComponent(currentPath)}`;
 const accessToken = Astro.locals.accessToken || null;
-const refreshToken = await Astro.session?.get("refresh_token") || null;
 const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 ---
 
@@ -32,7 +31,7 @@ const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
 
     <div class="header-right">
       {isLoggedIn && (
-        <NotificationBell client:idle apiUrl={API_URL} accessToken={accessToken} refreshToken={refreshToken} />
+        <NotificationBell client:idle apiUrl={API_URL} accessToken={accessToken} />
       )}
       {isLoggedIn ? (
         <div class="user-menu-wrapper">

@@ -15,6 +15,13 @@ const SESSION_BASE =
     ? "/var/lib/sideways/sessions"
     : ".astro/session";
 
+// How long a session survives without use, in seconds. One number for both
+// the stored data and the cookie: with no `maxAge` the cookie is dropped
+// when the browser quits, however long the data behind it would have lasted.
+// The window slides — the middleware rewrites the session on each token
+// refresh, which also reissues the cookie.
+const SESSION_TTL = 7 * 24 * 60 * 60; // 7 days
+
 export default defineConfig({
   output: "server",
   adapter: node({ mode: "standalone" }),
@@ -35,7 +42,8 @@ export default defineConfig({
       name: "sw-session",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
+      maxAge: SESSION_TTL,
     },
-    ttl: 7 * 24 * 60 * 60, // 7 days
+    ttl: SESSION_TTL,
   },
 });

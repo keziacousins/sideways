@@ -48,14 +48,41 @@ function checkOrigin(request: Request): Response | null {
   return null;
 }
 
+/** A browser navigation, as opposed to a fetch() from page script. */
+function isNavigation(request: Request): boolean {
+  return request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/html");
+}
+
+/**
+ * Outcome of a refresh attempt. "invalid" means the refresh token itself was
+ * rejected, so the session is dead. "unavailable" is anything else — the API
+ * restarting mid-deploy, a rate limit, a network error — and says nothing
+ * about the session, so it must not be thrown away.
+ */
+type RefreshResult = { access_token: string; refresh_token?: string } | "invalid" | "unavailable";
+
 /**
  * In-flight refresh deduplication.
  * Keyed by refresh token — concurrent requests share the same promise.
  */
-let refreshInFlight: Promise<{ access_token: string; refresh_token?: string } | null> | null = null;
+let refreshInFlight: Promise<RefreshResult> | null = null;
 let refreshForToken: string | null = null;
 
-async function doRefresh(refreshToken: string): Promise<{ access_token: string; refresh_token?: string } | null> {
+function refresh(refreshToken: string): Promise<RefreshResult> {
+  if (refreshInFlight && refreshForToken === refreshToken) return refreshInFlight;
+
+  const attempt = doRefresh(refreshToken).finally(() => {
+    if (refreshInFlight === attempt) {
+      refreshInFlight = null;
+      refreshForToken = null;
+    }
+  });
+  refreshInFlight = attempt;
+  refreshForToken = refreshToken;
+  return attempt;
+}
+
+async function doRefresh(refreshToken: string): Promise<RefreshResult> {
   try {
     const res = await fetch(`${API_URL}/api/auth/token`, {
       method: "POST",
@@ -71,10 +98,10 @@ async function doRefresh(refreshToken: string): Promise<{ access_token: string; 
       return await res.json();
     }
     console.error(`[middleware] Token refresh failed: ${res.status}`);
-    return null;
+    return res.status === 400 || res.status === 401 ? "invalid" : "unavailable";
   } catch {
     console.error("[middleware] Token refresh failed (network error)");
-    return null;
+    return "unavailable";
   }
 }
 
@@ -82,6 +109,12 @@ async function doRefresh(refreshToken: string): Promise<{ access_token: string; 
  * Astro middleware — runs on every SSR request.
  * Reads the session, refreshes the access token if expired,
  * and stores a fresh token on `Astro.locals.accessToken`.
+ *
+ * This is the only place the refresh token is used. Refresh tokens are
+ * single-use, and Hydra revokes the whole chain when a spent one is presented
+ * again, so a second refresher — another endpoint, or the browser — signs the
+ * user out. Endpoints read `locals.accessToken`; client components call
+ * `/op/token`.
  *
  * Refresh is deduplicated: if multiple concurrent requests need to refresh,
  * only one actual refresh call is made. The rest wait for the same result.
@@ -97,47 +130,55 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   if (accessToken) {
     let needsRefresh = false;
+    let expiresAt = 0;
 
     try {
       const payload = JSON.parse(
         Buffer.from(accessToken.split(".")[1], "base64").toString(),
       );
-      const expiresAt = payload.exp * 1000;
+      expiresAt = payload.exp * 1000;
       needsRefresh = Date.now() > expiresAt - 5 * 60_000; // refresh 5 min before expiry
     } catch {
       needsRefresh = true;
     }
 
     if (needsRefresh && refreshToken) {
-      // Deduplicate: if a refresh is already in-flight for this token, wait for it
-      if (refreshInFlight && refreshForToken === refreshToken) {
-        const result = await refreshInFlight;
-        if (result) {
-          accessToken = result.access_token;
-        }
-      } else {
-        // Start a new refresh and let concurrent requests share it
-        refreshForToken = refreshToken;
-        refreshInFlight = doRefresh(refreshToken);
+      const result = await refresh(refreshToken);
 
-        const result = await refreshInFlight;
-        refreshInFlight = null;
-        refreshForToken = null;
-
-        if (result) {
-          accessToken = result.access_token;
-          await session?.set("access_token", result.access_token);
-          if (result.refresh_token) {
-            await session?.set("refresh_token", result.refresh_token);
-          }
-        } else {
-          // Refresh failed — session is dead, redirect to login
-          await session?.set("access_token", null);
-          await session?.set("refresh_token", null);
-          await session?.set("user_name", null);
-          await session?.set("user_email", null);
+      if (result === "invalid") {
+        // The refresh token was rejected — session is dead
+        accessToken = null;
+        await session?.set("access_token", null);
+        await session?.set("refresh_token", null);
+        await session?.set("user_name", null);
+        await session?.set("user_email", null);
+        // Send a navigation to login. A fetch() carries on signed out, so the
+        // endpoint answers 401 instead of the caller receiving a login page.
+        if (isNavigation(context.request)) {
           const returnTo = encodeURIComponent(context.url.pathname);
           return context.redirect(`/auth/login?returnTo=${returnTo}`);
+        }
+      } else if (result === "unavailable") {
+        // Keep the session and retry on the next request. Until expiry the
+        // current token still works; past it there is nothing to send.
+        if (!(Date.now() < expiresAt)) {
+          return new Response("Could not refresh your session. Try again in a moment.", {
+            status: 503,
+            headers: { "Content-Type": "text/plain", "Retry-After": "5" },
+          });
+        }
+      } else {
+        accessToken = result.access_token;
+        await session?.set("access_token", result.access_token);
+        if (result.refresh_token) {
+          await session?.set("refresh_token", result.refresh_token);
+        }
+        // Session keys expire one by one, a ttl after each was last written.
+        // Rewrite the login-time keys with the tokens so the session slides
+        // as a whole, rather than losing the user's name a week after login.
+        for (const key of ["id_token", "user_email", "user_name"]) {
+          const value = await session?.get(key);
+          if (value != null) await session?.set(key, value);
         }
       }
     } else if (needsRefresh && !refreshToken) {

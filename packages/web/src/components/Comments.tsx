@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { fetchSessionToken } from "../lib/session-token.ts";
 
 interface Comment {
   id: string;
@@ -58,7 +59,6 @@ interface Props {
   path: string;
   apiUrl: string;
   accessToken: string | null;
-  refreshToken: string | null;
 }
 
 export default function Comments({
@@ -67,7 +67,6 @@ export default function Comments({
   path,
   apiUrl,
   accessToken: initialAccessToken,
-  refreshToken: initialRefreshToken,
 }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isOpen, setIsOpenState] = useState(false);
@@ -88,9 +87,8 @@ export default function Comments({
   const [submitting, setSubmitting] = useState(false);
   const [composing, setComposing] = useState(false);
 
-  // Mutable token refs so we can refresh without re-rendering everything
+  // Mutable token ref so we can refresh without re-rendering everything
   const tokenRef = useRef(initialAccessToken);
-  const refreshRef = useRef(initialRefreshToken);
 
   // Extract current user ID from JWT for ownership checks
   const currentUserId = (() => {
@@ -100,40 +98,11 @@ export default function Comments({
     } catch { return null; }
   })();
 
-  /** Try to refresh the access token. Returns new token or null. */
+  /** Pick up the session's current access token. Returns new token or null. */
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
-    if (!refreshRef.current) return null;
-
-    try {
-      const res = await fetch(`${apiUrl}/api/auth/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: refreshRef.current,
-          client_id: "sideways-web",
-        }),
-      });
-
-      if (res.ok) {
-        const tokens = await res.json();
-        tokenRef.current = tokens.access_token;
-        if (tokens.refresh_token) {
-          refreshRef.current = tokens.refresh_token;
-        }
-        return tokens.access_token;
-      }
-
-      // Refresh failed — token is invalid/expired, clear both
-      tokenRef.current = null;
-      refreshRef.current = null;
-    } catch {
-      tokenRef.current = null;
-      refreshRef.current = null;
-    }
-
-    return null;
-  }, [apiUrl]);
+    tokenRef.current = await fetchSessionToken();
+    return tokenRef.current;
+  }, []);
 
   /** Make an authenticated API call with auto-refresh on 401. */
   const authFetch = useCallback(
@@ -149,7 +118,7 @@ export default function Comments({
       let res = await doFetch(tokenRef.current);
 
       // On 401, try refreshing the token once
-      if (res.status === 401 && refreshRef.current) {
+      if (res.status === 401 && tokenRef.current) {
         const newToken = await refreshAccessToken();
         if (newToken) {
           res = await doFetch(newToken);
