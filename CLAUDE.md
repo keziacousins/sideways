@@ -11,7 +11,7 @@ pnpm install
 ./scripts/start-server.sh --web-only   # just web on :4000
 ```
 
-Local dev expects the Docker infra (Postgres, SeaweedFS, Kratos, Hydra, WeasyPrint, Mermaid, Mailhog) to be running locally:
+Local dev expects the Docker infra (Postgres, SeaweedFS, Kratos, Hydra, WeasyPrint, Mermaid) to be running locally:
 
 ```bash
 docker context show    # must be 'default' — see below
@@ -53,7 +53,7 @@ Integration tests require a running Postgres (the infra `docker compose` brings 
 - 5001: WeasyPrint
 - 5002: Mermaid diagram sidecar
 - 8888: SeaweedFS filer
-- 1025/8025: Mailhog SMTP/UI
+- 1025/8025: Mailhog SMTP/UI (service commented out in `infra/compose.yml` for now)
 
 ## Workspace layout
 
@@ -68,7 +68,7 @@ Shared packages export raw `.ts` — no build step. The API server runs via `tsx
 
 Backing services run via Docker Compose (`infra/compose.yml`):
 
-- Postgres (5432), SeaweedFS (8888/9333), Ory Kratos (4433/4434), Ory Hydra (4444/4445), WeasyPrint (5001), Mermaid (5002), Mailhog (1025/8025)
+- Postgres (5432), SeaweedFS (8888/9333), Ory Kratos (4433/4434), Ory Hydra (4444/4445), WeasyPrint (5001), Mermaid (5002)
 
 The same compose file is used locally and on the deploy host.
 
