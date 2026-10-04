@@ -142,14 +142,19 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
   .space-header-top {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: 1.5rem;
   }
 
+  /* As tall as one line of the heading, so the actions stay centred on its
+     first line however far the name wraps. */
   .space-header-actions {
     display: flex;
     align-items: center;
     gap: 1rem;
+    flex-shrink: 0;
+    height: calc(var(--sw-text-3xl) * var(--sw-leading-tight));
   }
 
   .new-doc-btn {
@@ -162,6 +167,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     border-radius: var(--sw-radius-sm);
     color: var(--sw-text-secondary);
     font-size: var(--sw-text-sm);
+    white-space: nowrap;
     cursor: pointer;
     transition: all var(--sw-duration-fast) var(--sw-ease);
   }
@@ -205,6 +211,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     font-family: var(--sw-font-display);
     font-size: var(--sw-text-3xl);
     font-weight: 400;
+    line-height: var(--sw-leading-tight);
     letter-spacing: -0.02em;
     margin-bottom: 0.35rem;
   }
