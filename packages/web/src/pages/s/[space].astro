@@ -233,8 +233,9 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
   .doc-card {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.35rem 0.75rem;
     padding: 0.75rem 1rem;
     text-decoration: none;
     color: inherit;
@@ -280,10 +281,13 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     vertical-align: middle;
   }
 
+  /* Tags take their own line under the title, indented past the icon. */
   .doc-tags {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.35rem;
-    flex-shrink: 0;
+    width: 100%;
+    padding-left: calc(16px + 0.75rem);
   }
 
   .tag {
@@ -366,15 +370,11 @@ const themeCss = themeToCSS(space?.theme?.tokens);
 
   @media (max-width: 600px) {
     .doc-card {
-      flex-wrap: wrap;
       padding: 0.6rem 0.75rem;
       gap: 0.4rem;
     }
     .doc-card-icon { display: none; }
-    .doc-tags {
-      width: 100%;
-      flex-wrap: wrap;
-    }
+    .doc-tags { padding-left: 0; }
   }
 </style>
 
