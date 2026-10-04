@@ -159,11 +159,16 @@ services:
 
   # --- Mail (dev only) ---
 
-  mailhog:
-    image: mailhog/mailhog
-    ports:
-      - "127.0.0.1:1025:1025"
-      - "127.0.0.1:8025:8025"
+  # Commented out for now: mailhog/mailhog is published for amd64 only, so on
+  # an arm64 host it exits with "exec format error" on every `up`. While it is
+  # off, mail Kratos sends (recovery, verification) is not delivered unless
+  # SMTP_URL points at a real server.
+  #
+  # mailhog:
+  #   image: mailhog/mailhog
+  #   ports:
+  #     - "127.0.0.1:1025:1025"
+  #     - "127.0.0.1:8025:8025"
 
 volumes:
   pgdata:

@@ -23,7 +23,7 @@ This repository is the v1 implementation: a Node/Astro/Hono stack backed by Post
 Requires Node 24+, pnpm 10+, and Docker.
 
 ```bash
-# 1. Bring up infra (Postgres, Kratos, Hydra, SeaweedFS, WeasyPrint, Mailhog)
+# 1. Bring up infra (Postgres, Kratos, Hydra, SeaweedFS, WeasyPrint)
 cd infra && cp .env.example .env && docker compose up -d && cd ..
 
 # 2. Install JS deps and copy the app env
