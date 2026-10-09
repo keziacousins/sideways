@@ -15,7 +15,7 @@
     "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/sideways-mcp.cjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {
