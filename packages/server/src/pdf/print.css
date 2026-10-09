@@ -420,6 +420,9 @@ body {
      that one too tall to fit in the remaining space moves down whole, so we
      cap the height below to stop that gap growing to a full page. */
   page-break-inside: avoid;
+  /* When it does move down, take the end of the block before it along, so the
+     diagram is not stranded from the text that introduces it (see issue #87). */
+  page-break-before: avoid;
 }
 
 .print-content figure.mermaid-diagram svg {
