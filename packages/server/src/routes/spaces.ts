@@ -1,10 +1,12 @@
 import { Hono } from "hono";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { type Database, spaces, sections, documents, spaceMembers, spaceWatches, themes, users } from "@sideways/db";
+import { type Database, spaces, sections, documents, comments, spaceEvents, spaceMembers, spaceWatches, themes, users } from "@sideways/db";
+import { docUrl, type SpaceEvent } from "@sideways/types";
 import type { AuthUser } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { autoWatchSpace } from "../lib/notify.js";
 import { bustWikiLinkRenderCache } from "../lib/doc-resolver.js";
+import { recordEvents, commentSnippet, type EventInput } from "../lib/activity.js";
 
 async function ensureSystemUser(db: Database): Promise<string> {
   const existing = await db.query.users.findFirst({
@@ -24,6 +26,8 @@ async function getUserId(c: any, db: Database): Promise<string> {
   if (user) return user.id;
   return ensureSystemUser(db);
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function createSpaceRoutes(db: Database) {
   const router = new Hono();
@@ -317,7 +321,7 @@ export function createSpaceRoutes(db: Database) {
       .update(documents)
       .set({ sectionId: defaultSection.id, updatedAt: new Date() })
       .where(eq(documents.sectionId, section.id))
-      .returning({ id: documents.id });
+      .returning({ id: documents.id, title: documents.title, path: documents.path });
 
     // Assets go with the documents that reference them: paths are kept, so
     // every relative reference still resolves on the other side. Where the
@@ -334,7 +338,94 @@ export function createSpaceRoutes(db: Database) {
     // URL and wikilink.
     await bustWikiLinkRenderCache(db, space.id);
 
+    await recordEvents(db, user, moved.map((doc): EventInput => ({
+      spaceId: space.id,
+      type: "doc_moved",
+      documentId: doc.id,
+      title: doc.title,
+      detail: { from: `${sectionSlug}/${doc.path}`, to: `default/${doc.path}` },
+    })));
+
     return c.json({ moved: moved.length });
+  });
+
+  /**
+   * Activity log for a space: raw events, newest first. Folding them into
+   * feed rows is left to the reader, which knows the viewer's timezone.
+   * Query: ?before=<event id> to page back, ?limit= (default 100, max 200).
+   * Signed-in users only, even on a public space.
+   */
+  router.get("/:slug/activity", async (c) => {
+    const user = c.get("user") as AuthUser | null;
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const space = await db.query.spaces.findFirst({
+      where: eq(spaces.slug, c.req.param("slug")),
+    });
+    if (!space) return c.json({ error: "Space not found" }, 404);
+
+    if (!await canAccessSpace(db, space.id, space.visibility, space.ownerId, user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const limit = Math.min(Math.max(parseInt(c.req.query("limit") || "100") || 100, 1), 200);
+    const before = c.req.query("before");
+    if (before && !UUID_RE.test(before)) {
+      return c.json({ error: "Invalid cursor" }, 400);
+    }
+
+    // Joined live rather than denormalised, so a link follows the document
+    // through renames and moves, and a deleted comment takes its text with it.
+    const rows = await db
+      .select({
+        event: spaceEvents,
+        docSpaceId: documents.spaceId,
+        docPath: documents.path,
+        sectionSlug: sections.slug,
+        commentBody: comments.body,
+      })
+      .from(spaceEvents)
+      .leftJoin(documents, eq(documents.id, spaceEvents.documentId))
+      .leftJoin(sections, eq(sections.id, documents.sectionId))
+      .leftJoin(comments, eq(comments.id, spaceEvents.commentId))
+      .where(and(
+        eq(spaceEvents.spaceId, space.id),
+        before
+          ? sql`(${spaceEvents.createdAt}, ${spaceEvents.id}) < (
+              SELECT anchor.created_at, anchor.id FROM space_events anchor
+              WHERE anchor.id = ${before} AND anchor.space_id = ${space.id}
+            )`
+          : undefined,
+      ))
+      .orderBy(desc(spaceEvents.createdAt), desc(spaceEvents.id))
+      .limit(limit + 1);
+
+    const events: SpaceEvent[] = rows.slice(0, limit).map((row) => {
+      const { event } = row;
+      // A document that has since moved to another space gets no link: the
+      // reader of this log may not be able to see where it went.
+      const docHere = row.docSpaceId === space.id && row.docPath !== null && row.sectionSlug !== null;
+      const hash = event.commentId && row.commentBody !== null ? `#comment-${event.commentId}` : "";
+      return {
+        id: event.id,
+        type: event.type,
+        actorId: event.actorId,
+        actorName: event.actorName,
+        documentId: event.documentId,
+        title: event.title,
+        url: docHere
+          ? docUrl({ spaceSlug: space.slug, sectionSlug: row.sectionSlug!, path: row.docPath! }) + hash
+          : null,
+        detail: event.detail,
+        snippet: row.commentBody !== null ? commentSnippet(row.commentBody) : null,
+        createdAt: event.createdAt.toISOString(),
+      };
+    });
+
+    return c.json({
+      events,
+      nextCursor: rows.length > limit ? events[events.length - 1].id : null,
+    });
   });
 
   /** List members of a space */

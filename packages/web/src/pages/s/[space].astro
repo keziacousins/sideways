@@ -1,6 +1,8 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Sidebar from "../../components/Sidebar.astro";
+import ActivityFeed from "../../components/ActivityFeed.tsx";
+import "../../styles/activity.css";
 
 import { apiFetch } from "../../lib/api.ts";
 import { buildNavTree } from "../../lib/nav.ts";
@@ -9,6 +11,13 @@ import { icons } from "../../lib/icons.ts";
 
 const { space: spaceSlug } = Astro.params;
 const { accessToken } = Astro.locals;
+const API_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:4100";
+
+// The activity log is for signed-in users only, even on a public space
+const wantsActivity = Astro.url.searchParams.get("view") === "activity";
+if (wantsActivity && !accessToken) {
+  return Astro.redirect(`/auth/login?returnTo=${encodeURIComponent(`/s/${spaceSlug}?view=activity`)}`);
+}
 
 let space: { name: string; slug: string; description: string | null; visibility: string; canWrite?: boolean; theme?: { tokens: any } } | null = null;
 let documents: { id: string; title: string; tags: string[]; sectionId: string | null; sectionSlug: string; parentId: string | null; position?: number; unread?: boolean; updatedAt?: string; path: string; url: string }[] = [];
@@ -71,6 +80,17 @@ const themeCss = themeToCSS(space?.theme?.tokens);
         {space.description && <p class="space-desc">{space.description}</p>}
       </div>
 
+      {accessToken && (
+        <nav class="space-tabs">
+          <a href={`/s/${spaceSlug}`} class:list={["space-tab", { active: !wantsActivity }]}>Documents</a>
+          <a href={`/s/${spaceSlug}?view=activity`} class:list={["space-tab", { active: wantsActivity }]}>Activity</a>
+        </nav>
+      )}
+
+      {wantsActivity ? (
+        <ActivityFeed client:load apiUrl={API_URL} accessToken={accessToken} spaceSlug={spaceSlug!} />
+      ) : (
+      <Fragment>
       {documents.length > 0 && (
         <div class="sort-bar">
           <div class="sort-buttons">
@@ -126,6 +146,8 @@ const themeCss = themeToCSS(space?.theme?.tokens);
           ))
         )}
       </div>
+      </Fragment>
+      )}
     </div>
   ) : (
     <div class="not-found">
@@ -219,6 +241,27 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   .space-desc {
     color: var(--sw-text-tertiary);
     font-size: var(--sw-text-base);
+  }
+
+  .space-tabs {
+    display: flex;
+    gap: 1.5rem;
+    margin: -0.75rem 0 1.25rem;
+  }
+
+  .space-tab {
+    padding-bottom: 0.3rem;
+    border-bottom: 2px solid transparent;
+    font-size: var(--sw-text-sm);
+    color: var(--sw-text-tertiary);
+    text-decoration: none;
+    transition: color var(--sw-duration-fast) var(--sw-ease);
+  }
+
+  .space-tab:hover { color: var(--sw-text-primary); }
+  .space-tab.active {
+    color: var(--sw-text-primary);
+    border-bottom-color: var(--sw-accent);
   }
 
   .doc-grid {

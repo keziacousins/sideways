@@ -110,6 +110,35 @@ export interface SpaceMember {
   createdAt: string;
 }
 
+export type SpaceEventType =
+  | "doc_created"
+  | "doc_edited"
+  | "doc_deleted"
+  | "doc_renamed"
+  | "doc_moved"
+  | "doc_moved_out"
+  | "doc_moved_in"
+  | "comment_created";
+
+/** One entry in a space's activity log, as the API returns it */
+export interface SpaceEvent {
+  id: string;
+  type: SpaceEventType;
+  actorId: string | null;
+  actorName: string;
+  /** Kept after the document is deleted, so its events still group together. */
+  documentId: string | null;
+  /** Document title when the event happened. */
+  title: string;
+  /** Where the document (or comment) is now; null once it is gone from this space. */
+  url: string | null;
+  /** Old and new title for a rename; old and new `section/path` for a move. */
+  detail: { from: string; to: string } | null;
+  /** Plain-text start of the comment as it reads now; null if it was deleted. */
+  snippet: string | null;
+  createdAt: string;
+}
+
 /** Reference to a document by its URL-shaping fields. */
 export interface DocRef {
   spaceSlug: string;

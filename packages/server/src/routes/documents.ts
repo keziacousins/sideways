@@ -20,6 +20,7 @@ import { buildPrintHTML, type ThemeTokens } from "../pdf/template.js";
 import { env } from "../env.js";
 import { validateTitle, validatePath, validateTags, validateContent } from "../middleware/validate.js";
 import { notifyWatchers, notifySpaceWatchers } from "../lib/notify.js";
+import { recordEvents, type EventInput } from "../lib/activity.js";
 import { loadWikiLinkContext } from "../lib/wikilinks-context.js";
 import { createMermaidRenderer } from "../lib/mermaid.js";
 import { createAssetInliner } from "../lib/assets.js";
@@ -560,6 +561,12 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     });
 
     await bustWikiLinkRenderCache(db, targetSpace.id);
+    await recordEvents(db, c.get("user"), [{
+      spaceId: targetSpace.id,
+      type: "doc_created",
+      documentId: newDoc.id,
+      title: newDoc.title,
+    }]);
 
     const targetSection = await db.query.sections.findFirst({
       where: eq(sections.id, targetSectionId),
@@ -866,6 +873,17 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         .where(eq(documents.id, existing.id))
         .returning();
 
+      const events: EventInput[] = [];
+      if (updated.title !== existing.title) {
+        events.push({
+          spaceId: space.id,
+          type: "doc_renamed",
+          documentId: existing.id,
+          title: updated.title,
+          detail: { from: existing.title, to: updated.title },
+        });
+      }
+
       if (hasContent) {
         const latest = await db.query.documentVersions.findFirst({
           where: eq(documentVersions.documentId, existing.id),
@@ -880,6 +898,12 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
             content,
             contentHash: hash!,
             createdBy: userId,
+          });
+          events.push({
+            spaceId: space.id,
+            type: "doc_edited",
+            documentId: existing.id,
+            title: updated.title,
           });
 
           const actor = c.get("user") as AuthUser | null;
@@ -901,6 +925,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         }
       }
 
+      await recordEvents(db, user, events);
       updateSearchIndex(db, existing.id, updated.title, updated.tags || [], content).catch(() => {});
 
       return c.json(enrichDoc(updated, section.slug, space.slug), 200);
@@ -930,6 +955,12 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
     updateSearchIndex(db, doc.id, doc.title, doc.tags || [], content).catch(() => {});
     await bustWikiLinkRenderCache(db, space.id);
+    await recordEvents(db, user, [{
+      spaceId: space.id,
+      type: "doc_created",
+      documentId: doc.id,
+      title: doc.title,
+    }]);
 
     const actor = c.get("user") as AuthUser | null;
     const excludeId = actor?.actorName ? "" : userId;
@@ -960,6 +991,12 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
     await db.delete(documents).where(eq(documents.id, doc.id));
     await bustWikiLinkRenderCache(db, space.id);
+    await recordEvents(db, user, [{
+      spaceId: space.id,
+      type: "doc_deleted",
+      documentId: doc.id,
+      title: doc.title,
+    }]);
     return c.json({ deleted: true });
   });
 
@@ -1102,8 +1139,40 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       where: eq(sections.id, targetSectionId),
       columns: { slug: true },
     });
+    const finalSectionSlug = finalSection?.slug ?? section.slug;
+
+    const events: EventInput[] = [];
+    const event = { documentId: doc.id, title: updated.title };
+    if (updated.title !== doc.title) {
+      events.push({
+        ...event,
+        spaceId: targetSpace.id,
+        type: "doc_renamed",
+        detail: { from: doc.title, to: updated.title },
+      });
+    }
+    if (targetSpace.id !== space.id) {
+      // Neither side names the other: a reader of one space may not be able
+      // to see that the other exists.
+      events.push(
+        { ...event, spaceId: space.id, type: "doc_moved_out" },
+        { ...event, spaceId: targetSpace.id, type: "doc_moved_in" },
+      );
+    } else if (targetSectionId !== doc.sectionId || finalPath !== doc.path) {
+      events.push({
+        ...event,
+        spaceId: space.id,
+        type: "doc_moved",
+        detail: {
+          from: `${section.slug}/${doc.path}`,
+          to: `${finalSectionSlug}/${finalPath}`,
+        },
+      });
+    }
+    await recordEvents(db, user, events);
+
     return c.json(
-      enrichDoc({ ...updated, path: finalPath }, finalSection?.slug ?? section.slug, targetSpace.slug),
+      enrichDoc({ ...updated, path: finalPath }, finalSectionSlug, targetSpace.slug),
     );
   });
 
