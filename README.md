@@ -55,7 +55,7 @@ shared/        @sideways/types, @sideways/markdown, @sideways/db, @sideways/stor
 packages/      @sideways/server (Hono API)
                @sideways/web    (Astro SSR frontend)
                @sideways/cli    (file-sync CLI)
-               @sideways/mcp    (MCP server bundle)
+               @sideways/mcp    (MCP tool definitions, served by the API)
 infra/         docker-compose, nginx, Kratos/Hydra/WeasyPrint configs
 scripts/       deployment, server start, admin reports
 user-docs/     end-user documentation (rendered as a Sideways space)

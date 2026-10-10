@@ -34,9 +34,7 @@ sh install.sh {PUBLIC_URL}</code>
         <summary>View install script</summary>
         <div class="code-block">
           <code>{`#!/bin/sh
-# Downloads two files to ~/.local/bin/:
-#   sideways.cjs     — CLI bundle
-#   sideways-mcp.cjs — MCP server bundle
+# Downloads sideways.cjs (the CLI bundle) to ~/.local/bin/.
 # Creates a 'sideways' wrapper script.
 # No system-level changes. No sudo required.`}</code>
         </div>
@@ -44,11 +42,10 @@ sh install.sh {PUBLIC_URL}</code>
       </details>
 
       <h4>Option B: Manual download</h4>
-      <p>Download the files directly and place them on your PATH:</p>
+      <p>Download the bundle directly and place it on your PATH:</p>
       <div class="code-block" data-copy="cli-manual">
         <code id="cli-manual">{`mkdir -p ~/.local/bin
 curl -fsSL ${PUBLIC_URL}/downloads/sideways.cjs -o ~/.local/bin/sideways.cjs
-curl -fsSL ${PUBLIC_URL}/downloads/sideways-mcp.cjs -o ~/.local/bin/sideways-mcp.cjs
 
 # Create wrapper
 printf '#!/bin/sh\\nexec node "$(dirname "$0")/sideways.cjs" "$@"\\n' > ~/.local/bin/sideways
@@ -107,20 +104,10 @@ sideways status</code>
       </div>
 
       <h3>Claude Code</h3>
-      <p>Uses stdio transport with the downloaded MCP server. Add to <code>.mcp.json</code> in your project:</p>
+      <p>Uses the same Streamable HTTP endpoint — nothing to download. Run in your project:</p>
       <div class="code-block" data-copy="mcp-code">
-        <code id="mcp-code">{JSON.stringify({
-  mcpServers: {
-    sideways: {
-      command: "node",
-      args: ["~/.local/bin/sideways-mcp.cjs"],
-      env: {
-        SIDEWAYS_API_URL: API_URL,
-        SIDEWAYS_API_KEY: "YOUR_API_KEY"
-      }
-    }
-  }
-}, null, 2)}</code>
+        <code id="mcp-code">{`claude mcp add --transport http sideways ${API_URL}/api/mcp \\
+  --header "Authorization: Bearer YOUR_API_KEY"`}</code>
       </div>
 
       <h3>Available tools</h3>

@@ -32,9 +32,15 @@ fi
 
 mkdir -p "$INSTALL_DIR"
 
-# Download CLI + MCP bundles
+# Download CLI bundle
 curl -fsSL "$BASE_URL/downloads/sideways.cjs" -o "$INSTALL_DIR/sideways.cjs"
-curl -fsSL "$BASE_URL/downloads/sideways-mcp.cjs" -o "$INSTALL_DIR/sideways-mcp.cjs"
+
+# Earlier installers also dropped a stdio MCP server here. MCP is now served
+# over HTTP at $BASE_URL/api/mcp, so remove the stale bundle.
+if [ -f "$INSTALL_DIR/sideways-mcp.cjs" ]; then
+  rm -f "$INSTALL_DIR/sideways-mcp.cjs"
+  REMOVED_MCP=1
+fi
 
 # Create CLI wrapper
 cat > "$INSTALL_DIR/sideways" <<WRAPPER
@@ -45,8 +51,13 @@ chmod +x "$INSTALL_DIR/sideways"
 
 echo ""
 echo "Installed to $INSTALL_DIR/"
-echo "  sideways      — CLI"
-echo "  sideways-mcp  — MCP server (for AI assistants)"
+echo "  sideways  — CLI"
+
+if [ -n "${REMOVED_MCP:-}" ]; then
+  echo ""
+  echo "Removed sideways-mcp.cjs: the MCP server is now $BASE_URL/api/mcp."
+  echo "Update any MCP client config that still runs the old file — see $BASE_URL/setup"
+fi
 
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;

@@ -78,7 +78,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @sideways/cli build
-      - run: pnpm --filter @sideways/mcp build
       - name: Build web frontend
         env:
           PUBLIC_URL: http://localhost:4000
