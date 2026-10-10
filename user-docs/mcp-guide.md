@@ -25,24 +25,14 @@ Create an API key with an agent name (e.g. "Claude") in the web UI under API Key
 
 ## Setting Up Claude Code
 
-Add to `.mcp.json` in your project:
+Claude Code connects to the same HTTP endpoint with the same API key — there is nothing to download. Run in your project:
 
-```json
-{
-  "mcpServers": {
-    "sideways": {
-      "command": "node",
-      "args": ["/path/to/sideways-mcp.cjs"],
-      "env": {
-        "SIDEWAYS_API_URL": "https://your-sideways-instance",
-        "SIDEWAYS_API_KEY": "sk-your-api-key"
-      }
-    }
-  }
-}
+```bash
+claude mcp add --transport http sideways https://your-sideways-instance/api/mcp \
+  --header "Authorization: Bearer sk-your-api-key"
 ```
 
-The installer drops `sideways-mcp.cjs` alongside `sideways.cjs` in `~/.local/bin/` — point `args` at that file (not the CLI bundle).
+Earlier versions shipped a separate stdio server, `sideways-mcp.cjs`. It has been removed; a `.mcp.json` entry that still runs it should be replaced with the command above.
 
 ## Available Tools
 

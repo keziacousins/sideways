@@ -1,5 +1,6 @@
 /**
- * MCP tool registrations — shared between stdio and SSE transports.
+ * MCP tool registrations, served by the API's Streamable HTTP endpoint
+ * (`packages/server/src/routes/mcp.ts`).
  *
  * Doc references use a two-arg shape: `(space, path)` where `path` is the
  * filesystem-shaped doc path including its section prefix as the first
