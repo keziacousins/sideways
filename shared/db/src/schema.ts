@@ -226,6 +226,44 @@ export const spaceWatches = pgTable("space_watches", {
   index("space_watches_space_idx").on(t.spaceId),
 ]);
 
+/**
+ * Activity log for a space: one append-only row per thing that happened.
+ *
+ * `title` and `actorName` are frozen historical copy, as on `notifications`.
+ * `documentId` and `commentId` are deliberately not foreign keys. A row has to
+ * outlive the document it describes — a delete is itself an event — and the id
+ * stays useful afterwards as the key that groups one document's events.
+ * Whether the target still exists, and its URL, come from a join at read time.
+ */
+export const spaceEvents = pgTable("space_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  spaceId: uuid("space_id").notNull().references(() => spaces.id, { onDelete: "cascade" }),
+  type: text("type", {
+    enum: [
+      "doc_created",
+      "doc_edited",
+      "doc_deleted",
+      "doc_renamed",
+      "doc_moved",
+      "doc_moved_out",
+      "doc_moved_in",
+      "comment_created",
+    ],
+  }).notNull(),
+  actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+  /** Agent/bot name when the request carried one, otherwise the user's name */
+  actorName: text("actor_name").notNull(),
+  documentId: uuid("document_id"),
+  commentId: uuid("comment_id"),
+  /** Document title when the event happened */
+  title: text("title").notNull(),
+  /** Old and new title for a rename; old and new `section/path` for a move */
+  detail: jsonb("detail").$type<{ from: string; to: string }>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("space_events_space_created_idx").on(t.spaceId, t.createdAt, t.id),
+]);
+
 /** Share links — single-claim invite tokens for spaces */
 export const shareLinks = pgTable("share_links", {
   id: uuid("id").primaryKey().defaultRandom(),

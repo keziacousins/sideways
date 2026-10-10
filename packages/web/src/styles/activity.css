@@ -1,0 +1,212 @@
+/* ═══════════════════════════════════════════════════════════════
+   SPACE ACTIVITY FEED
+   ═══════════════════════════════════════════════════════════════ */
+
+.activity-day + .activity-day {
+  margin-top: 2rem;
+}
+
+.activity-day-label {
+  margin: 0 0 0.25rem;
+  padding: 0 1rem 0.5rem;
+  border-bottom: 1px solid var(--sw-border);
+  font-family: var(--sw-font-body);
+  font-size: var(--sw-text-xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sw-text-tertiary);
+}
+
+.activity-list,
+.activity-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Row ──────────────────────────────────────────────────────── */
+.activity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  border-radius: var(--sw-radius-md);
+  transition: background var(--sw-duration-fast) var(--sw-ease);
+}
+
+.activity-row:hover {
+  background: var(--sw-ink-light);
+}
+
+/* The icon and the time are each as tall as the row's first line, to centre on it */
+.activity-icon,
+.activity-time {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: calc(var(--sw-text-base) * 1.5);
+}
+
+.activity-icon {
+  color: var(--sw-text-tertiary);
+}
+
+.activity-icon svg {
+  display: block;
+}
+
+.activity-body {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--sw-text-base);
+  line-height: 1.5;
+  color: var(--sw-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.activity-actor {
+  font-weight: 500;
+  color: var(--sw-text-primary);
+}
+
+.activity-doc {
+  color: var(--sw-text-primary);
+  text-decoration: none;
+}
+
+a.activity-doc:hover {
+  color: var(--sw-accent);
+}
+
+/* A document that is no longer there to link to */
+.activity-doc-gone,
+.activity-was {
+  color: var(--sw-text-tertiary);
+}
+
+.activity-count {
+  font-size: var(--sw-text-sm);
+  color: var(--sw-text-tertiary);
+}
+
+.activity-time {
+  font-size: var(--sw-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--sw-text-tertiary);
+}
+
+/* ── Second line ──────────────────────────────────────────────── */
+.activity-detail {
+  margin-top: 0.25rem;
+  font-size: var(--sw-text-sm);
+  color: var(--sw-text-tertiary);
+}
+
+.activity-path {
+  font-family: var(--sw-font-mono);
+  font-size: var(--sw-text-xs);
+}
+
+.activity-snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--sw-border-strong);
+}
+
+/* ── Burst across many documents ──────────────────────────────── */
+.activity-burst {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.activity-burst:hover {
+  color: var(--sw-text-primary);
+}
+
+.activity-chevron {
+  display: inline-flex;
+  color: var(--sw-text-tertiary);
+  transition: transform var(--sw-duration-fast) var(--sw-ease);
+}
+
+.activity-burst[aria-expanded="true"] .activity-chevron {
+  transform: rotate(90deg);
+}
+
+.activity-children {
+  margin-top: 0.4rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--sw-border-strong);
+  font-size: var(--sw-text-sm);
+}
+
+.activity-children li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.15rem 0;
+}
+
+.activity-children .activity-time {
+  height: auto;
+}
+
+/* ── Empty, error, paging ─────────────────────────────────────── */
+.activity-empty {
+  padding: 3rem 0;
+  text-align: center;
+  color: var(--sw-text-ghost);
+}
+
+.activity-retry {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--sw-accent);
+  cursor: pointer;
+}
+
+.activity-more {
+  display: block;
+  margin: 1.5rem auto 0;
+  padding: 0.35rem 0.75rem;
+  background: none;
+  border: 1px solid var(--sw-border);
+  border-radius: var(--sw-radius-sm);
+  font-size: var(--sw-text-sm);
+  color: var(--sw-text-secondary);
+  cursor: pointer;
+  transition: all var(--sw-duration-fast) var(--sw-ease);
+}
+
+.activity-more:hover:not(:disabled) {
+  border-color: var(--sw-accent);
+  color: var(--sw-accent);
+}
+
+.activity-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .activity-row {
+    padding: 0.6rem 0.75rem;
+  }
+  .activity-day-label {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}

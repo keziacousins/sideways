@@ -84,6 +84,19 @@ Click the bell icon in the document toolbar to watch a document. You'll be notif
 
 Commenting on a document automatically watches it.
 
+## Space Activity
+
+Notifications tell you about the documents you watch. The **Activity** tab on a space's page shows everything that has happened in the space, whether you watch it or not: documents created, edited, renamed, moved and deleted, and comments posted, with who did each.
+
+Activity is listed newest first under **Today**, **Yesterday** and then by date, in your own timezone. To keep it readable:
+
+- Repeated edits to one document by the same person on the same day show as one line, with a count. So do their comments on it, with the latest one quoted.
+- A run of changes across four or more documents within a few minutes — a `sideways push`, for example — shows as one line such as "created 12 documents". Click it to list the documents.
+
+A deleted document stays in the log, without a link. A document moved to another space shows as moved out; the log does not say where it went.
+
+The Activity tab is shown to signed-in users only, including on public spaces. It starts from the history Sideways already held when the feature arrived, so deletes, renames and moves from before that are not in it.
+
 ## @Mentions
 
 Mention a user in a comment by typing their name or email:

@@ -11,6 +11,7 @@ import type { AuthUser } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { createNotification, autoWatch, parseMentions } from "../lib/notify.js";
+import { recordEvents } from "../lib/activity.js";
 import { resolveSection, findDocByPath } from "../lib/doc-resolver.js";
 import { validatePath } from "../middleware/validate.js";
 
@@ -183,7 +184,7 @@ export function createCommentRoutes(db: Database) {
 
     const result = await resolveDoc(c);
     if ("error" in result) return result.error;
-    const { doc } = result;
+    const { space, doc } = result;
 
     const body = await c.req.json<{
       body: string;
@@ -217,6 +218,14 @@ export function createCommentRoutes(db: Database) {
         actorName: user.actorName ?? null,
       })
       .returning();
+
+    await recordEvents(db, user, [{
+      spaceId: space.id,
+      type: "comment_created",
+      documentId: doc.id,
+      commentId: comment.id,
+      title: doc.title,
+    }]);
 
     // Fire notifications (async, don't block response)
     const notified = new Set<string>();

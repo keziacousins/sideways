@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { fetchSessionToken } from "../lib/session-token.ts";
+import { authFetch } from "../lib/session-token.ts";
 
 interface Notification {
   id: string;
@@ -17,27 +17,6 @@ interface Notification {
 interface Props {
   apiUrl: string;
   accessToken: string | null;
-}
-
-async function authFetch(url: string, apiUrl: string, tokenRef: { current: string | null }, opts?: RequestInit) {
-  const doFetch = () => {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
-    return fetch(`${apiUrl}${url}`, { ...opts, headers });
-  };
-
-  let res = await doFetch();
-
-  // The token this page was rendered with has expired — pick up the session's current one
-  if (res.status === 401 && tokenRef.current) {
-    const token = await fetchSessionToken();
-    if (token && token !== tokenRef.current) {
-      tokenRef.current = token;
-      res = await doFetch();
-    }
-  }
-
-  return res;
 }
 
 // SVG icon strings for notification types — matches the shared icon style
