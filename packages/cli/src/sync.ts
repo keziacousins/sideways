@@ -429,6 +429,22 @@ export interface RemoteEntry {
   version: number;
 }
 
+/**
+ * What `push` does with a file in each state. `--force` pushes every file,
+ * matching `pull --force`: a file whose content hasn't moved can still carry
+ * frontmatter (a title, tags) the server doesn't have, and a remote edit is
+ * overwritten because keeping the local copy is what the flag asks for.
+ */
+export function pushAction(
+  status: FileStatus,
+  force: boolean,
+): "push" | "skip" | "conflict" {
+  if (force) return "push";
+  if (status === "unchanged" || status === "remote-modified") return "skip";
+  if (status === "conflict") return "conflict";
+  return "push";
+}
+
 export function computeDiff(
   rootDir: string,
   mounts: Mount[],

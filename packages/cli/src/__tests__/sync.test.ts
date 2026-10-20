@@ -6,6 +6,7 @@ import {
   discoverFiles,
   matchAddArg,
   parseFrontmatter,
+  pushAction,
   serializeFrontmatter,
 } from "../sync.js";
 
@@ -109,5 +110,21 @@ describe("serializeFrontmatter", () => {
     const { frontmatter, content } = parseFrontmatter(serializeFrontmatter(fm, "body\n"));
     expect(frontmatter).toEqual(fm);
     expect(content).toBe("body\n");
+  });
+});
+
+describe("pushAction", () => {
+  it("pushes only local changes without --force", () => {
+    expect(pushAction("local-modified", false)).toBe("push");
+    expect(pushAction("new-local", false)).toBe("push");
+    expect(pushAction("unchanged", false)).toBe("skip");
+    expect(pushAction("remote-modified", false)).toBe("skip");
+    expect(pushAction("conflict", false)).toBe("conflict");
+  });
+
+  it("pushes every file with --force, unchanged ones included", () => {
+    for (const status of ["unchanged", "remote-modified", "conflict", "local-modified"] as const) {
+      expect(pushAction(status, true)).toBe("push");
+    }
   });
 });

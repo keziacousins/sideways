@@ -16,6 +16,7 @@ See [[setup|Setup]] for installation instructions.
 | `sideways add .` | Track everything (default behavior) |
 | `sideways remove <paths...>` | Stop tracking files |
 | `sideways push [path]` | Push tracked local changes to remote, with the images and PDFs they reference |
+| `sideways push --force [path]` | Push every tracked file, changed or not, overwriting remote edits — resends frontmatter such as titles |
 | `sideways pull [path]` | Pull remote changes to local, images and PDFs included |
 | `sideways sync` | Bidirectional: pull remote + push local |
 | `sideways status` | Show sync status + open comment counts |
