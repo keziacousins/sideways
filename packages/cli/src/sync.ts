@@ -177,6 +177,22 @@ export function titleFromSlug(slug: string): string {
     .join(" ");
 }
 
+/**
+ * Strip a matching pair of YAML quotes from a scalar, undoing the escapes
+ * each style allows: `\"` and `\\` in double quotes, `''` in single quotes.
+ */
+function unquote(value: string): string {
+  if (value.length >= 2) {
+    if (value.startsWith('"') && value.endsWith('"')) {
+      return value.slice(1, -1).replace(/\\(["\\])/g, "$1");
+    }
+    if (value.startsWith("'") && value.endsWith("'")) {
+      return value.slice(1, -1).replace(/''/g, "'");
+    }
+  }
+  return value;
+}
+
 /** Parse YAML frontmatter from markdown. */
 export function parseFrontmatter(
   markdown: string,
@@ -194,12 +210,31 @@ export function parseFrontmatter(
         value = value
           .slice(1, -1)
           .split(",")
-          .map((s: string) => s.trim());
+          .map((s: string) => unquote(s.trim()));
+      } else {
+        value = unquote(value);
       }
       frontmatter[key] = value;
     }
   }
   return { frontmatter, content: match[2] };
+}
+
+/**
+ * Quote a scalar when it wouldn't survive as a plain YAML scalar — a `: `
+ * or ` #` inside it, or a leading character YAML treats as syntax. JSON
+ * string syntax is valid YAML double-quoted syntax.
+ */
+function quoteIfNeeded(value: string): string {
+  if (
+    value === "" ||
+    value !== value.trim() ||
+    /: |:$| #/.test(value) ||
+    /^[-?:,[\]{}#&*!|>'"%@`]/.test(value)
+  ) {
+    return JSON.stringify(value);
+  }
+  return value;
 }
 
 export function serializeFrontmatter(
@@ -212,8 +247,10 @@ export function serializeFrontmatter(
   if (entries.length === 0) return content;
 
   const lines = entries.map(([key, value]) => {
-    if (Array.isArray(value)) return `${key}: [${value.join(", ")}]`;
-    return `${key}: ${value}`;
+    if (Array.isArray(value)) {
+      return `${key}: [${value.map((v) => quoteIfNeeded(String(v))).join(", ")}]`;
+    }
+    return `${key}: ${quoteIfNeeded(String(value))}`;
   });
   return `---\n${lines.join("\n")}\n---\n${content}`;
 }
