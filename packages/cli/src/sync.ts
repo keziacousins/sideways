@@ -237,21 +237,79 @@ function quoteIfNeeded(value: string): string {
   return value;
 }
 
-export function serializeFrontmatter(
-  frontmatter: Record<string, any>,
-  content: string,
-): string {
-  const entries = Object.entries(frontmatter).filter(
-    ([, v]) => v !== undefined && v !== null,
-  );
-  if (entries.length === 0) return content;
+function frontmatterLine(key: string, value: string | string[]): string {
+  if (Array.isArray(value)) {
+    return `${key}: [${value.map((v) => quoteIfNeeded(v)).join(", ")}]`;
+  }
+  return `${key}: ${quoteIfNeeded(value)}`;
+}
 
-  const lines = entries.map(([key, value]) => {
-    if (Array.isArray(value)) {
-      return `${key}: [${value.map((v) => quoteIfNeeded(String(v))).join(", ")}]`;
+/**
+ * Split a frontmatter block into top-level entries: a `key:` line plus the
+ * indented or `- ` lines that continue it (block lists, folded strings).
+ * Anything else at the top level, such as a comment, is an entry with no key.
+ */
+function frontmatterEntries(block: string): { key: string | null; lines: string[] }[] {
+  const entries: { key: string | null; lines: string[] }[] = [];
+  for (const line of block.split("\n")) {
+    const continues = /^\s|^- |^-$/.test(line) || line === "";
+    if (continues && entries.length > 0) {
+      entries[entries.length - 1].lines.push(line);
+      continue;
     }
-    return `${key}: ${quoteIfNeeded(String(value))}`;
-  });
+    const colonIdx = line.indexOf(":");
+    const key = colonIdx > 0 && !line.startsWith("#") ? line.slice(0, colonIdx).trim() : null;
+    entries.push({ key, lines: [line] });
+  }
+  return entries;
+}
+
+/**
+ * Assemble a pulled document for disk. The server holds only the title and
+ * tags, so those come from `doc`; every other frontmatter key exists only in
+ * the local file, and is carried over from `localRaw` line for line, with its
+ * comments, block lists and quoting as they were.
+ *
+ * The title is written when it differs from the document's H1, or when the
+ * local file already had one.
+ */
+export function fileForDisk(
+  doc: { title?: string | null; tags?: string[] | null },
+  content: string,
+  localRaw?: string | null,
+): string {
+  const localBlock = localRaw
+    ? extractComments(localRaw).clean.match(/^---\n([\s\S]*?)\n---\n/)?.[1]
+    : undefined;
+  const entries = localBlock !== undefined ? frontmatterEntries(localBlock) : [];
+
+  const headingTitle = content.match(/^#\s+(.+)$/m)?.[1].trim() ?? null;
+  const hadTitle = entries.some((e) => e.key === "title");
+  const title =
+    doc.title && (doc.title !== headingTitle || hadTitle)
+      ? [frontmatterLine("title", doc.title)]
+      : [];
+  const tags = doc.tags?.length ? [frontmatterLine("tags", doc.tags)] : [];
+
+  // Replace the server-owned keys where they stand; add them if missing.
+  const lines: string[] = [];
+  let placedTitle = false;
+  let placedTags = false;
+  for (const entry of entries) {
+    if (entry.key === "title") {
+      if (!placedTitle) lines.push(...title);
+      placedTitle = true;
+    } else if (entry.key === "tags") {
+      if (!placedTags) lines.push(...tags);
+      placedTags = true;
+    } else {
+      lines.push(...entry.lines);
+    }
+  }
+  if (!placedTitle) lines.unshift(...title);
+  if (!placedTags) lines.push(...tags);
+
+  if (lines.length === 0) return content;
   return `---\n${lines.join("\n")}\n---\n${content}`;
 }
 

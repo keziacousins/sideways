@@ -15,7 +15,7 @@ import {
   hashLocalFile,
   slugFromFilename,
   parseFrontmatter,
-  serializeFrontmatter,
+  fileForDisk,
   discoverFiles,
   type DiscoveredFile,
   matchAddArg,
@@ -159,24 +159,19 @@ function printPathHint(config: ProjectConfig, arg: string): void {
   }
 }
 
-/** Prepare a file's content for writing to disk (frontmatter + comments) */
+/**
+ * Prepare a file's content for writing to disk (frontmatter + comments).
+ * `filePath` is where it will be written: frontmatter the server doesn't
+ * hold is kept from the file already there.
+ */
 async function prepareFileForDisk(
   client: ReturnType<typeof createClient>,
   space: string,
   doc: any,
+  filePath: string,
   opts: { clean?: boolean; includeResolved?: boolean },
 ): Promise<string> {
   let content = doc.content;
-
-  const fm: Record<string, any> = {};
-  const headingMatch = content.match(/^#\s+(.+)$/m);
-  const headingTitle = headingMatch ? headingMatch[1].trim() : null;
-  // Title in frontmatter only when it differs from the H1 — basename comparison
-  // would be too noisy (most filenames don't title-case to the doc title).
-  if (doc.title && doc.title !== headingTitle) {
-    fm.title = doc.title;
-  }
-  if (doc.tags?.length > 0) fm.tags = doc.tags;
 
   if (!opts.clean) {
     try {
@@ -193,7 +188,8 @@ async function prepareFileForDisk(
     } catch {}
   }
 
-  return Object.keys(fm).length > 0 ? serializeFrontmatter(fm, content) : content;
+  const localRaw = existsSync(filePath) ? readFileSync(filePath, "utf-8") : null;
+  return fileForDisk(doc, content, localRaw);
 }
 
 /** Read a local file and prepare for push */
@@ -362,7 +358,7 @@ program
           process.exit(1);
         }
         const doc = await client.getDocument(space, resolved.sectionSlug, resolved.path);
-        const output = await prepareFileForDisk(client, space, doc, opts);
+        const output = await prepareFileForDisk(client, space, doc, filePath, opts);
 
         writeFileSync(filePath, output);
 
@@ -461,7 +457,7 @@ program
         }
 
         const fullDoc = await client.getDocument(space, r.sectionSlug, r.path);
-        const output = await prepareFileForDisk(client, space, fullDoc, opts);
+        const output = await prepareFileForDisk(client, space, fullDoc, filePath, opts);
 
         mkdirSync(dirname(filePath), { recursive: true });
         writeFileSync(filePath, output);
@@ -1070,8 +1066,8 @@ program
           continue;
         }
         const doc = await client.getDocument(space, sectionSlug, docPath);
-        const output = await prepareFileForDisk(client, space, doc, { clean: opts.clean });
         const filePath = join(syncRoot, relativePath);
+        const output = await prepareFileForDisk(client, space, doc, filePath, { clean: opts.clean });
         mkdirSync(join(filePath, ".."), { recursive: true });
         writeFileSync(filePath, output);
 
