@@ -22,6 +22,8 @@ import {
   readTracked,
   writeTracked,
   isTracked,
+  pushAction,
+  type FileStatus,
 } from "./sync.js";
 import {
   mounts as buildMounts,
@@ -521,7 +523,7 @@ program
   .description("Push local changes to remote")
   .option("--space <space>", "Override space from config")
   .option("--dry-run", "Show what would change without doing it")
-  .option("--force", "Overwrite remote even on conflict")
+  .option("--force", "Push every file, overwriting remote changes and conflicts")
   .action(
     async (
       path: string | undefined,
@@ -617,7 +619,7 @@ program
         const remote = remoteMap.get(syncKey(file.sectionSlug, file.path));
 
         // Compute status
-        let status: string;
+        let status: FileStatus;
         if (!tracked && !remote) status = "new-local";
         else if (!tracked && remote) {
           // Not tracked — compare hashes; if different, use mtime to decide direction
@@ -651,8 +653,9 @@ program
           }
         }
 
-        if (status === "unchanged" || status === "remote-modified") continue;
-        if (status === "conflict" && !opts.force) {
+        const action = pushAction(status, !!opts.force);
+        if (action === "skip") continue;
+        if (action === "conflict") {
           console.log(`  conflict: ${file.relPath} (use --force to overwrite)`);
           continue;
         }
