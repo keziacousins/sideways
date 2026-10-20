@@ -38,8 +38,37 @@ export interface Document {
   title: string;
   position: number;
   tags: string[];
+  frontmatter: Frontmatter | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A document's frontmatter keys besides `title` and `tags`, which are fields
+ * of their own. Null on a document no client has sent frontmatter for yet.
+ */
+export type Frontmatter = Record<string, unknown>;
+
+/**
+ * What a document's frontmatter adds to its content hash: nothing when there
+ * is none, so the hash of a document without frontmatter is the hash of its
+ * content alone. Keys are sorted at every level, so the same frontmatter
+ * always hashes the same however it was written.
+ */
+export function frontmatterHashInput(frontmatter: Frontmatter | null | undefined): string {
+  if (!frontmatter || Object.keys(frontmatter).length === 0) return "";
+  return `\n---frontmatter---\n${canonicalJson(frontmatter)}`;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.keys(value)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
 
 /** A specific version of a document */
@@ -49,6 +78,7 @@ export interface DocumentVersion {
   version: number;
   title: string;
   content: string;
+  frontmatter: Frontmatter | null;
   contentHash: string;
   renderedKey: string | null;
   createdBy: string;

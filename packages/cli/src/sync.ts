@@ -17,7 +17,17 @@ import {
 } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { extractComments } from "@sideways/markdown";
+import { frontmatterHashInput, type Frontmatter } from "@sideways/types";
+import {
+  Document as YamlDocument,
+  isCollection,
+  isMap,
+  parse as parseYaml,
+  parseDocument,
+  type YAMLMap,
+} from "yaml";
 import type { Mount } from "./resolve.js";
 
 /** A single tracked doc in the local sync cache. */
@@ -126,14 +136,18 @@ export function matchAddArg(files: DiscoveredFile[], rel: string, arg: string): 
   return files.filter(f => f.filename === arg || f.slug === slug);
 }
 
-export function hashContent(content: string): string {
-  return createHash("sha256").update(content.trim()).digest("hex").slice(0, 16);
-}
-
+/**
+ * Hash a file the way the server hashes a version: content and frontmatter
+ * together, so an edit to either counts as a change. Title and tags aren't
+ * part of it.
+ */
 export function hashLocalFile(fileContent: string): string {
   const { clean } = extractComments(fileContent);
-  const { content } = parseFrontmatter(clean);
-  return hashContent(content);
+  const { content, frontmatter } = parseFrontmatter(clean);
+  return createHash("sha256")
+    .update(content.trim() + frontmatterHashInput(frontmatter))
+    .digest("hex")
+    .slice(0, 16);
 }
 
 /**
@@ -177,140 +191,115 @@ export function titleFromSlug(slug: string): string {
     .join(" ");
 }
 
-/**
- * Strip a matching pair of YAML quotes from a scalar, undoing the escapes
- * each style allows: `\"` and `\\` in double quotes, `''` in single quotes.
- */
-function unquote(value: string): string {
-  if (value.length >= 2) {
-    if (value.startsWith('"') && value.endsWith('"')) {
-      return value.slice(1, -1).replace(/\\(["\\])/g, "$1");
-    }
-    if (value.startsWith("'") && value.endsWith("'")) {
-      return value.slice(1, -1).replace(/''/g, "'");
-    }
-  }
-  return value;
+export interface ParsedFile {
+  /** Title and tags, which the server keeps as fields of their own. */
+  title?: string;
+  tags: string[];
+  /** Every other frontmatter key. */
+  frontmatter: Frontmatter;
+  /** The markdown after the frontmatter block. */
+  content: string;
+  /** Why the frontmatter couldn't be read, when it couldn't. */
+  error?: string;
 }
 
-/** Parse YAML frontmatter from markdown. */
-export function parseFrontmatter(
-  markdown: string,
-): { frontmatter: Record<string, any>; content: string } {
-  const match = markdown.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!match) return { frontmatter: {}, content: markdown };
+const FRONTMATTER_BLOCK = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
 
-  const frontmatter: Record<string, any> = {};
-  for (const line of match[1].split("\n")) {
-    const colonIdx = line.indexOf(":");
-    if (colonIdx > 0) {
-      const key = line.slice(0, colonIdx).trim();
-      let value: any = line.slice(colonIdx + 1).trim();
-      if (value.startsWith("[") && value.endsWith("]")) {
-        value = value
-          .slice(1, -1)
-          .split(",")
-          .map((s: string) => unquote(s.trim()));
-      } else {
-        value = unquote(value);
-      }
-      frontmatter[key] = value;
-    }
+/** Split a markdown file into its YAML frontmatter and content. */
+export function parseFrontmatter(markdown: string): ParsedFile {
+  const match = markdown.match(FRONTMATTER_BLOCK);
+  if (!match) return { tags: [], frontmatter: {}, content: markdown };
+  const content = match[2];
+
+  let data: unknown;
+  try {
+    data = parseYaml(match[1]) ?? {};
+  } catch (e) {
+    return { tags: [], frontmatter: {}, content, error: (e as Error).message };
   }
-  return { frontmatter, content: match[2] };
+  if (typeof data !== "object" || Array.isArray(data)) {
+    return { tags: [], frontmatter: {}, content, error: "frontmatter is not a set of keys" };
+  }
+
+  const { title, tags, ...rest } = data as Record<string, unknown>;
+  return {
+    title: title == null ? undefined : String(title),
+    tags: tags == null ? [] : (Array.isArray(tags) ? tags : [tags]).map(String),
+    // Through JSON, as the server will store it.
+    frontmatter: JSON.parse(JSON.stringify(rest)),
+    content,
+  };
 }
 
 /**
- * Quote a scalar when it wouldn't survive as a plain YAML scalar — a `: `
- * or ` #` inside it, or a leading character YAML treats as syntax. JSON
- * string syntax is valid YAML double-quoted syntax.
- */
-function quoteIfNeeded(value: string): string {
-  if (
-    value === "" ||
-    value !== value.trim() ||
-    /: |:$| #/.test(value) ||
-    /^[-?:,[\]{}#&*!|>'"%@`]/.test(value)
-  ) {
-    return JSON.stringify(value);
-  }
-  return value;
-}
-
-function frontmatterLine(key: string, value: string | string[]): string {
-  if (Array.isArray(value)) {
-    return `${key}: [${value.map((v) => quoteIfNeeded(v)).join(", ")}]`;
-  }
-  return `${key}: ${quoteIfNeeded(value)}`;
-}
-
-/**
- * Split a frontmatter block into top-level entries: a `key:` line plus the
- * indented or `- ` lines that continue it (block lists, folded strings).
- * Anything else at the top level, such as a comment, is an entry with no key.
- */
-function frontmatterEntries(block: string): { key: string | null; lines: string[] }[] {
-  const entries: { key: string | null; lines: string[] }[] = [];
-  for (const line of block.split("\n")) {
-    const continues = /^\s|^- |^-$/.test(line) || line === "";
-    if (continues && entries.length > 0) {
-      entries[entries.length - 1].lines.push(line);
-      continue;
-    }
-    const colonIdx = line.indexOf(":");
-    const key = colonIdx > 0 && !line.startsWith("#") ? line.slice(0, colonIdx).trim() : null;
-    entries.push({ key, lines: [line] });
-  }
-  return entries;
-}
-
-/**
- * Assemble a pulled document for disk. The server holds only the title and
- * tags, so those come from `doc`; every other frontmatter key exists only in
- * the local file, and is carried over from `localRaw` line for line, with its
- * comments, block lists and quoting as they were.
+ * Assemble a pulled document for disk. Title, tags and frontmatter come from
+ * the server and are applied to the frontmatter of the file already there,
+ * if any, so its comments, key order and quoting survive wherever the values
+ * haven't changed.
+ *
+ * The server's frontmatter is null when no client has sent it any: then the
+ * local keys are left as they are rather than taken for deleted. A local block
+ * that isn't valid YAML is kept as it is, with a warning, rather than lost.
  *
  * The title is written when it differs from the document's H1, or when the
  * local file already had one.
  */
 export function fileForDisk(
-  doc: { title?: string | null; tags?: string[] | null },
+  doc: { title?: string | null; tags?: string[] | null; frontmatter?: Frontmatter | null },
   content: string,
   localRaw?: string | null,
-): string {
+): { text: string; warning?: string } {
   const localBlock = localRaw
-    ? extractComments(localRaw).clean.match(/^---\n([\s\S]*?)\n---\n/)?.[1]
+    ? extractComments(localRaw).clean.match(FRONTMATTER_BLOCK)?.[1]
     : undefined;
-  const entries = localBlock !== undefined ? frontmatterEntries(localBlock) : [];
+
+  let yaml = new YamlDocument({});
+  if (localBlock !== undefined) {
+    const local = parseDocument(localBlock);
+    if (local.errors.length > 0 || (local.contents !== null && !isMap(local.contents))) {
+      return {
+        text: `---\n${localBlock}\n---\n${content}`,
+        warning: "its frontmatter isn't valid YAML, so it was kept as it was: fix it and pull again",
+      };
+    }
+    if (isMap(local.contents)) yaml = local;
+  }
+  const map = yaml.contents as YAMLMap;
+
+  const set = (key: string, value: unknown, first = false) => {
+    if (yaml.has(key)) {
+      if (isDeepStrictEqual(yaml.toJS()[key], value)) return;
+      // A changed list or map keeps the style it was written in.
+      const node = yaml.createNode(value);
+      const old = yaml.get(key, true);
+      if (isCollection(old) && isCollection(node)) node.flow = old.flow;
+      yaml.set(key, node);
+    } else if (first) {
+      map.items.unshift(yaml.createPair(key, value));
+    } else {
+      yaml.set(key, value);
+    }
+  };
 
   const headingTitle = content.match(/^#\s+(.+)$/m)?.[1].trim() ?? null;
-  const hadTitle = entries.some((e) => e.key === "title");
-  const title =
-    doc.title && (doc.title !== headingTitle || hadTitle)
-      ? [frontmatterLine("title", doc.title)]
-      : [];
-  const tags = doc.tags?.length ? [frontmatterLine("tags", doc.tags)] : [];
-
-  // Replace the server-owned keys where they stand; add them if missing.
-  const lines: string[] = [];
-  let placedTitle = false;
-  let placedTags = false;
-  for (const entry of entries) {
-    if (entry.key === "title") {
-      if (!placedTitle) lines.push(...title);
-      placedTitle = true;
-    } else if (entry.key === "tags") {
-      if (!placedTags) lines.push(...tags);
-      placedTags = true;
-    } else {
-      lines.push(...entry.lines);
-    }
+  if (doc.title && (doc.title !== headingTitle || yaml.has("title"))) {
+    set("title", doc.title, true);
+  } else {
+    yaml.delete("title");
   }
-  if (!placedTitle) lines.unshift(...title);
-  if (!placedTags) lines.push(...tags);
 
-  if (lines.length === 0) return content;
-  return `---\n${lines.join("\n")}\n---\n${content}`;
+  if (doc.frontmatter) {
+    for (const key of Object.keys(yaml.toJS() ?? {})) {
+      if (key !== "title" && key !== "tags" && !(key in doc.frontmatter)) yaml.delete(key);
+    }
+    for (const [key, value] of Object.entries(doc.frontmatter)) set(key, value);
+  }
+
+  if (doc.tags?.length) set("tags", doc.tags);
+  else yaml.delete("tags");
+
+  if (map.items.length === 0) return { text: content };
+  return { text: `---\n${yaml.toString({ lineWidth: 0, flowCollectionPadding: false })}---\n${content}` };
 }
 
 export function findMarkdownFiles(dir: string): string[] {

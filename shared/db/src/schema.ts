@@ -75,6 +75,10 @@ export const documents = pgTable("documents", {
   title: text("title").notNull(),
   position: integer("position").notNull().default(0),
   tags: text("tags").array().notNull().default([]),
+  /** Frontmatter keys besides title and tags, as of the latest version.
+   *  Null until a client first sends frontmatter: the server has never been
+   *  told, as opposed to `{}`, told there is none. */
+  frontmatter: jsonb("frontmatter").$type<Record<string, unknown>>(),
   /** Full-text search index — recomputed on content/title/tag changes */
   searchTsv: tsvector("search_tsv"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -84,6 +88,7 @@ export const documents = pgTable("documents", {
   index("documents_space_idx").on(t.spaceId),
   index("documents_section_idx").on(t.sectionId),
   index("documents_parent_idx").on(t.parentId),
+  index("documents_frontmatter_idx").using("gin", t.frontmatter),
 ]);
 
 export const documentVersions = pgTable("document_versions", {
@@ -92,6 +97,8 @@ export const documentVersions = pgTable("document_versions", {
   version: integer("version").notNull(),
   title: text("title").notNull(),
   content: text("content").notNull(),
+  /** Frontmatter as of this version; see `documents.frontmatter`. */
+  frontmatter: jsonb("frontmatter").$type<Record<string, unknown>>(),
   contentHash: text("content_hash").notNull(),
   /** SeaweedFS key for pre-rendered HTML, null if not yet rendered */
   renderedKey: text("rendered_key"),
