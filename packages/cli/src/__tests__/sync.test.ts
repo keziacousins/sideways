@@ -7,7 +7,7 @@ import {
   matchAddArg,
   parseFrontmatter,
   pushAction,
-  serializeFrontmatter,
+  fileForDisk,
 } from "../sync.js";
 
 describe("matchAddArg", () => {
@@ -94,22 +94,76 @@ describe("parseFrontmatter", () => {
   });
 });
 
-describe("serializeFrontmatter", () => {
+describe("fileForDisk", () => {
   it("quotes a title that wouldn't be a valid plain YAML scalar", () => {
-    const out = serializeFrontmatter({ title: "Data Cards: card collections" }, "body\n");
+    const out = fileForDisk({ title: "Data Cards: card collections" }, "body\n");
     expect(out).toBe('---\ntitle: "Data Cards: card collections"\n---\nbody\n');
   });
 
   it("leaves an ordinary title unquoted", () => {
-    const out = serializeFrontmatter({ title: "Data Cards prototype — critique" }, "");
+    const out = fileForDisk({ title: "Data Cards prototype — critique" }, "");
     expect(out).toBe("---\ntitle: Data Cards prototype — critique\n---\n");
   });
 
+  it("omits a title that matches the H1, and frontmatter with nothing in it", () => {
+    expect(fileForDisk({ title: "Plan", tags: [] }, "# Plan\n")).toBe("# Plan\n");
+  });
+
   it("round-trips through parseFrontmatter", () => {
-    const fm = { title: '"Quoted": a "title" #1', tags: ["x", "y: z"] };
-    const { frontmatter, content } = parseFrontmatter(serializeFrontmatter(fm, "body\n"));
-    expect(frontmatter).toEqual(fm);
+    const doc = { title: '"Quoted": a "title" #1', tags: ["x", "y: z"] };
+    const { frontmatter, content } = parseFrontmatter(fileForDisk(doc, "body\n"));
+    expect(frontmatter).toEqual(doc);
     expect(content).toBe("body\n");
+  });
+
+  it("keeps local frontmatter the server doesn't hold, as written", () => {
+    const local = [
+      "---",
+      'title: "Old title"',
+      "type: critique",
+      "# reviewed weekly",
+      "repos:",
+      "  - sideways",
+      "  - cli",
+      "created: 2026-10-01",
+      "tags: [old]",
+      "summary: >",
+      "  Folded",
+      "  text",
+      "---",
+      "# Old title",
+      "",
+    ].join("\n");
+    const out = fileForDisk({ title: "New: title", tags: ["a", "b"] }, "# New\n", local);
+    expect(out).toBe(
+      [
+        "---",
+        'title: "New: title"',
+        "type: critique",
+        "# reviewed weekly",
+        "repos:",
+        "  - sideways",
+        "  - cli",
+        "created: 2026-10-01",
+        "tags: [a, b]",
+        "summary: >",
+        "  Folded",
+        "  text",
+        "---",
+        "# New",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps a local title line even when it matches the H1", () => {
+    const local = "---\ntitle: Plan\nstatus: draft\n---\n# Plan\n";
+    expect(fileForDisk({ title: "Plan" }, "# Plan\n", local)).toBe(local);
+  });
+
+  it("drops server-owned keys the server no longer has, including block lists", () => {
+    const local = "---\nstatus: draft\ntags:\n  - stale\n  - gone\n---\nbody\n";
+    expect(fileForDisk({ tags: [] }, "body\n", local)).toBe("---\nstatus: draft\n---\nbody\n");
   });
 });
 
