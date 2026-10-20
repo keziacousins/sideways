@@ -2,7 +2,12 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { discoverFiles, matchAddArg } from "../sync.js";
+import {
+  discoverFiles,
+  matchAddArg,
+  parseFrontmatter,
+  serializeFrontmatter,
+} from "../sync.js";
 
 describe("matchAddArg", () => {
   const dirs: string[] = [];
@@ -53,5 +58,56 @@ describe("matchAddArg", () => {
     const files = makeTree();
     expect(paths(matchAddArg(files, "elsewhere/PROFILE.md", "PROFILE.md")).sort())
       .toEqual(["capital-banking/PROFILE.md", "vendors/idee/PROFILE.md"]);
+  });
+});
+
+describe("parseFrontmatter", () => {
+  it("strips the quotes from a quoted title", () => {
+    const { frontmatter } = parseFrontmatter(
+      '---\ntitle: "Data Cards: card collections"\n---\nbody\n',
+    );
+    expect(frontmatter.title).toBe("Data Cards: card collections");
+  });
+
+  it("strips single quotes and undoes their escaping", () => {
+    const { frontmatter } = parseFrontmatter("---\ntitle: 'Kezia''s notes'\n---\n");
+    expect(frontmatter.title).toBe("Kezia's notes");
+  });
+
+  it("undoes escaped quotes inside double quotes", () => {
+    const { frontmatter } = parseFrontmatter('---\ntitle: "The \\"best\\" plan"\n---\n');
+    expect(frontmatter.title).toBe('The "best" plan');
+  });
+
+  it("leaves unquoted and unbalanced values alone", () => {
+    const { frontmatter } = parseFrontmatter(
+      '---\ntitle: Plain title\nsubtitle: "half\n---\n',
+    );
+    expect(frontmatter.title).toBe("Plain title");
+    expect(frontmatter.subtitle).toBe('"half');
+  });
+
+  it("strips quotes from tag items", () => {
+    const { frontmatter } = parseFrontmatter("---\ntags: [\"a\", 'b', c]\n---\n");
+    expect(frontmatter.tags).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("serializeFrontmatter", () => {
+  it("quotes a title that wouldn't be a valid plain YAML scalar", () => {
+    const out = serializeFrontmatter({ title: "Data Cards: card collections" }, "body\n");
+    expect(out).toBe('---\ntitle: "Data Cards: card collections"\n---\nbody\n');
+  });
+
+  it("leaves an ordinary title unquoted", () => {
+    const out = serializeFrontmatter({ title: "Data Cards prototype — critique" }, "");
+    expect(out).toBe("---\ntitle: Data Cards prototype — critique\n---\n");
+  });
+
+  it("round-trips through parseFrontmatter", () => {
+    const fm = { title: '"Quoted": a "title" #1', tags: ["x", "y: z"] };
+    const { frontmatter, content } = parseFrontmatter(serializeFrontmatter(fm, "body\n"));
+    expect(frontmatter).toEqual(fm);
+    expect(content).toBe("body\n");
   });
 });
