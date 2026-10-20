@@ -64,91 +64,126 @@ describe("matchAddArg", () => {
 
 describe("parseFrontmatter", () => {
   it("strips the quotes from a quoted title", () => {
-    const { frontmatter } = parseFrontmatter(
-      '---\ntitle: "Data Cards: card collections"\n---\nbody\n',
+    const parsed = parseFrontmatter('---\ntitle: "Data Cards: card collections"\n---\nbody\n');
+    expect(parsed.title).toBe("Data Cards: card collections");
+    expect(parsed.content).toBe("body\n");
+  });
+
+  it("undoes the escapes of each quote style", () => {
+    expect(parseFrontmatter("---\ntitle: 'Kezia''s notes'\n---\n").title).toBe("Kezia's notes");
+    expect(parseFrontmatter('---\ntitle: "The \\"best\\" plan"\n---\n').title).toBe('The "best" plan');
+  });
+
+  it("splits title and tags from the rest, block lists and all", () => {
+    const parsed = parseFrontmatter(
+      [
+        "---",
+        "title: Plan",
+        "type: critique # inline comment",
+        "repos:",
+        "  - sideways",
+        "  - cli",
+        "created: 2026-10-01",
+        "tags:",
+        "  - a",
+        "  - b",
+        "review: { by: kezia, done: false }",
+        "---",
+        "body",
+      ].join("\n"),
     );
-    expect(frontmatter.title).toBe("Data Cards: card collections");
+    expect(parsed.title).toBe("Plan");
+    expect(parsed.tags).toEqual(["a", "b"]);
+    expect(parsed.frontmatter).toEqual({
+      type: "critique",
+      repos: ["sideways", "cli"],
+      created: "2026-10-01",
+      review: { by: "kezia", done: false },
+    });
   });
 
-  it("strips single quotes and undoes their escaping", () => {
-    const { frontmatter } = parseFrontmatter("---\ntitle: 'Kezia''s notes'\n---\n");
-    expect(frontmatter.title).toBe("Kezia's notes");
+  it("reads a single tag and a numeric title as strings", () => {
+    const parsed = parseFrontmatter("---\ntitle: 2026\ntags: api\n---\n");
+    expect(parsed.title).toBe("2026");
+    expect(parsed.tags).toEqual(["api"]);
   });
 
-  it("undoes escaped quotes inside double quotes", () => {
-    const { frontmatter } = parseFrontmatter('---\ntitle: "The \\"best\\" plan"\n---\n');
-    expect(frontmatter.title).toBe('The "best" plan');
+  it("reports frontmatter that isn't valid YAML, and still finds the content", () => {
+    const parsed = parseFrontmatter("---\ntitle: Data Cards: card collections\n---\nbody\n");
+    expect(parsed.error).toBeTruthy();
+    expect(parsed.content).toBe("body\n");
   });
 
-  it("leaves unquoted and unbalanced values alone", () => {
-    const { frontmatter } = parseFrontmatter(
-      '---\ntitle: Plain title\nsubtitle: "half\n---\n',
-    );
-    expect(frontmatter.title).toBe("Plain title");
-    expect(frontmatter.subtitle).toBe('"half');
-  });
-
-  it("strips quotes from tag items", () => {
-    const { frontmatter } = parseFrontmatter("---\ntags: [\"a\", 'b', c]\n---\n");
-    expect(frontmatter.tags).toEqual(["a", "b", "c"]);
+  it("returns a file without frontmatter as it is", () => {
+    expect(parseFrontmatter("# Plan\n")).toEqual({ tags: [], frontmatter: {}, content: "# Plan\n" });
   });
 });
 
 describe("fileForDisk", () => {
-  it("quotes a title that wouldn't be a valid plain YAML scalar", () => {
-    const out = fileForDisk({ title: "Data Cards: card collections" }, "body\n");
-    expect(out).toBe('---\ntitle: "Data Cards: card collections"\n---\nbody\n');
-  });
+  const text = (...args: Parameters<typeof fileForDisk>) => fileForDisk(...args).text;
 
-  it("leaves an ordinary title unquoted", () => {
-    const out = fileForDisk({ title: "Data Cards prototype — critique" }, "");
-    expect(out).toBe("---\ntitle: Data Cards prototype — critique\n---\n");
+  it("quotes a title that wouldn't be a valid plain YAML scalar", () => {
+    expect(text({ title: "Data Cards: card collections" }, "body\n")).toBe(
+      '---\ntitle: "Data Cards: card collections"\n---\nbody\n',
+    );
   });
 
   it("omits a title that matches the H1, and frontmatter with nothing in it", () => {
-    expect(fileForDisk({ title: "Plan", tags: [] }, "# Plan\n")).toBe("# Plan\n");
+    expect(text({ title: "Plan", tags: [], frontmatter: {} }, "# Plan\n")).toBe("# Plan\n");
+  });
+
+  it("writes the server's frontmatter into a new file, title first", () => {
+    const out = text(
+      { title: "Plan B", tags: ["x"], frontmatter: { status: "draft", repos: ["a", "b"] } },
+      "# Plan\n",
+    );
+    expect(out).toBe(
+      "---\ntitle: Plan B\nstatus: draft\nrepos:\n  - a\n  - b\ntags:\n  - x\n---\n# Plan\n",
+    );
   });
 
   it("round-trips through parseFrontmatter", () => {
-    const doc = { title: '"Quoted": a "title" #1', tags: ["x", "y: z"] };
-    const { frontmatter, content } = parseFrontmatter(fileForDisk(doc, "body\n"));
-    expect(frontmatter).toEqual(doc);
-    expect(content).toBe("body\n");
+    const doc = {
+      title: '"Quoted": a "title" #1',
+      tags: ["x", "y: z"],
+      frontmatter: { status: "draft", nested: { list: [1, "two"] } },
+    };
+    const parsed = parseFrontmatter(text(doc, "body\n"));
+    expect(parsed).toEqual({ ...doc, content: "body\n" });
   });
 
-  it("keeps local frontmatter the server doesn't hold, as written", () => {
+  it("applies the server's values to the local file, keeping its layout", () => {
     const local = [
       "---",
       'title: "Old title"',
       "type: critique",
       "# reviewed weekly",
-      "repos:",
-      "  - sideways",
-      "  - cli",
+      "repos: [sideways, cli]",
       "created: 2026-10-01",
+      "stale: gone",
       "tags: [old]",
-      "summary: >",
-      "  Folded",
-      "  text",
       "---",
       "# Old title",
       "",
     ].join("\n");
-    const out = fileForDisk({ title: "New: title", tags: ["a", "b"] }, "# New\n", local);
+    const out = text(
+      {
+        title: "New: title",
+        tags: ["a", "b"],
+        frontmatter: { type: "critique", repos: ["sideways", "cli"], created: "2026-10-02" },
+      },
+      "# New\n",
+      local,
+    );
     expect(out).toBe(
       [
         "---",
         'title: "New: title"',
         "type: critique",
         "# reviewed weekly",
-        "repos:",
-        "  - sideways",
-        "  - cli",
-        "created: 2026-10-01",
+        "repos: [sideways, cli]",
+        "created: 2026-10-02",
         "tags: [a, b]",
-        "summary: >",
-        "  Folded",
-        "  text",
         "---",
         "# New",
         "",
@@ -156,14 +191,27 @@ describe("fileForDisk", () => {
     );
   });
 
-  it("keeps a local title line even when it matches the H1", () => {
-    const local = "---\ntitle: Plan\nstatus: draft\n---\n# Plan\n";
-    expect(fileForDisk({ title: "Plan" }, "# Plan\n", local)).toBe(local);
+  it("leaves local keys alone when the server has never been sent frontmatter", () => {
+    const local = "---\nstatus: draft\nrepos:\n  - a\n---\nbody\n";
+    expect(text({ frontmatter: null }, "body\n", local)).toBe(local);
+    expect(text({}, "body\n", local)).toBe(local);
   });
 
-  it("drops server-owned keys the server no longer has, including block lists", () => {
-    const local = "---\nstatus: draft\ntags:\n  - stale\n  - gone\n---\nbody\n";
-    expect(fileForDisk({ tags: [] }, "body\n", local)).toBe("---\nstatus: draft\n---\nbody\n");
+  it("removes local keys the server's frontmatter doesn't have", () => {
+    const local = "---\nstatus: draft\n---\nbody\n";
+    expect(text({ frontmatter: {} }, "body\n", local)).toBe("body\n");
+  });
+
+  it("keeps a local title line even when it matches the H1", () => {
+    const local = "---\ntitle: Plan\nstatus: draft\n---\n# Plan\n";
+    expect(text({ title: "Plan", frontmatter: { status: "draft" } }, "# Plan\n", local)).toBe(local);
+  });
+
+  it("keeps a local block that isn't valid YAML, with a warning", () => {
+    const local = "---\ntitle: Data Cards: card collections\nstatus: draft\n---\nold\n";
+    const out = fileForDisk({ title: "Data Cards", frontmatter: {} }, "new\n", local);
+    expect(out.text).toBe("---\ntitle: Data Cards: card collections\nstatus: draft\n---\nnew\n");
+    expect(out.warning).toBeTruthy();
   });
 });
 

@@ -158,6 +158,10 @@ Documents can include YAML frontmatter for metadata:
 ---
 title: My Custom Title
 tags: [api, architecture, v2]
+status: draft
+repos:
+  - api
+  - cli
 ---
 
 # Document Content
@@ -167,8 +171,11 @@ tags: [api, architecture, v2]
 
 - **title** — overrides the title extracted from the first `# heading`
 - **tags** — categorisation tags, shown in the document header and searchable
+- **any other key** — stored with the document as structured metadata, and written back on pull
 
 If no frontmatter title is set, Sideways extracts the title from the first `# heading` in the document.
+
+The frontmatter must be valid YAML: quote a value that contains `: `, such as `title: "Data Cards: card collections"`. `sideways push` skips a file whose frontmatter it can't read, with a warning. A change to the frontmatter alone counts as a change to the document and makes a new version. Title and tags are the exception: a change to only those isn't picked up by `sideways push`, so send it with `sideways push --force`.
 
 ## Web Editor
 

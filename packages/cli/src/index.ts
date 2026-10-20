@@ -189,19 +189,28 @@ async function prepareFileForDisk(
   }
 
   const localRaw = existsSync(filePath) ? readFileSync(filePath, "utf-8") : null;
-  return fileForDisk(doc, content, localRaw);
+  const { text, warning } = fileForDisk(doc, content, localRaw);
+  if (warning) console.warn(`warning: ${filePath}: ${warning}`);
+  return text;
 }
 
-/** Read a local file and prepare for push */
-function prepareFileForPush(filePath: string): { content: string; tags: string[]; title?: string } {
-  const raw = readFileSync(filePath, "utf-8");
+/**
+ * The request body that pushes a local file, or null, with a warning, when
+ * its frontmatter can't be read: pushing it would send none.
+ */
+function pushBody(raw: string, label: string): Record<string, any> | null {
   const { clean } = extractComments(raw);
-  const { frontmatter, content } = parseFrontmatter(clean);
-  if (frontmatter.slug) {
-    console.warn(`warning: frontmatter 'slug:' is no longer used (path is the identifier) — ${filePath}`);
+  const { title, tags, frontmatter, content, error } = parseFrontmatter(clean);
+  if (error) {
+    console.warn(`warning: ${label}: frontmatter isn't valid YAML, not pushed — ${error.split("\n")[0]}`);
+    return null;
   }
-  const tags = frontmatter.tags || [];
-  return { content, tags, title: frontmatter.title };
+  if (frontmatter.slug) {
+    console.warn(`warning: frontmatter 'slug:' is no longer used (path is the identifier) — ${label}`);
+  }
+  const body: Record<string, any> = { content, tags, frontmatter };
+  if (title) body.title = title;
+  return body;
 }
 
 /**
@@ -557,7 +566,8 @@ program
             printPathHint(config, path);
             process.exit(1);
           }
-          const { content, tags, title } = prepareFileForPush(absPath);
+          const body = pushBody(readFileSync(absPath, "utf-8"), path);
+          if (!body) process.exit(1);
           if (opts.dryRun) {
             console.log(`  would push: ${resolved.sectionSlug}/${resolved.path}`);
             return;
@@ -576,8 +586,6 @@ program
               }
             }
           }
-          const body: Record<string, any> = { content, tags };
-          if (title) body.title = title;
           const result = await client.putDocument(space, resolved.sectionSlug, resolved.path, body);
           console.log(`Pushed ${space}/${resolved.sectionSlug}/${resolved.path} (${result.id})`);
           return;
@@ -662,14 +670,8 @@ program
           continue;
         }
 
-        const { clean } = extractComments(raw);
-        const { frontmatter, content } = parseFrontmatter(clean);
-        if (frontmatter.slug) {
-          console.warn(`warning: frontmatter 'slug:' is no longer used (path is the identifier) — ${file.relPath}`);
-        }
-        const tags = frontmatter.tags || [];
-        const body: Record<string, any> = { content, tags };
-        if (frontmatter.title) body.title = frontmatter.title;
+        const body = pushBody(raw, file.relPath);
+        if (!body) continue;
         // Preserve local file timestamp so mtime-based fallback works
         body.updatedAt = statSync(filePath).mtime.toISOString();
 
@@ -1105,14 +1107,8 @@ program
           console.log(`  would push: ${file.relPath}`);
           continue;
         }
-        const { clean } = extractComments(raw);
-        const { frontmatter, content } = parseFrontmatter(clean);
-        if (frontmatter.slug) {
-          console.warn(`warning: frontmatter 'slug:' is no longer used (path is the identifier) — ${file.relPath}`);
-        }
-        const tags = frontmatter.tags || [];
-        const body: Record<string, any> = { content, tags };
-        if (frontmatter.title) body.title = frontmatter.title;
+        const body = pushBody(raw, file.relPath);
+        if (!body) continue;
         body.updatedAt = statSync(join(syncRoot, file.relPath)).mtime.toISOString();
 
         await client.putDocument(space, file.sectionSlug, file.path, body);

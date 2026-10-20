@@ -208,7 +208,7 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
 
   server.tool(
     "doc_read",
-    'Read a document by ref (e.g. "engineering:architecture/api-design.md"). Comments are embedded at the end as HTML comment blocks unless disabled.',
+    'Read a document by ref (e.g. "engineering:architecture/api-design.md"). A header above the `---` gives the title, then tags and frontmatter (as JSON) when the document has them. Comments are embedded at the end as HTML comment blocks unless disabled.',
     {
       ref: z.string().describe(REF_DESC),
       include_comments: z.boolean().optional().describe("Embed comments as <!-- @comment --> blocks at the end (default: true)"),
@@ -236,7 +236,11 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
         } catch {}
       }
 
-      const meta = `${ref} — ${doc.title}`;
+      let meta = `${ref} — ${doc.title}`;
+      if (doc.tags?.length) meta += `\ntags: ${JSON.stringify(doc.tags)}`;
+      if (doc.frontmatter && Object.keys(doc.frontmatter).length > 0) {
+        meta += `\nfrontmatter: ${JSON.stringify(doc.frontmatter)}`;
+      }
       return { content: [{ type: "text" as const, text: `${meta}\n---\n${content}` }] };
     },
   );
@@ -249,12 +253,17 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
       content: z.string().describe("Full markdown content of the document"),
       title: z.string().optional().describe("Document title (auto-extracted from first # heading if omitted)"),
       tags: z.array(z.string()).optional().describe('Tags for categorization, e.g. ["api", "architecture"]'),
+      frontmatter: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe('Structured metadata besides title and tags, e.g. {"status": "draft", "repos": ["api"]}. Replaces the whole set; omit to keep the current one, pass {} to clear it.'),
     },
-    async ({ ref, content, title, tags }) => {
+    async ({ ref, content, title, tags, frontmatter }) => {
       const { space, section, rest } = parseRef(ref);
       const body: Record<string, any> = { content };
       if (title) body.title = title;
       if (tags) body.tags = tags;
+      if (frontmatter) body.frontmatter = frontmatter;
 
       const doc = await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/${encodePath(rest)}`, {
         method: "PUT",

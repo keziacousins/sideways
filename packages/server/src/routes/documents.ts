@@ -14,11 +14,18 @@ import {
   users,
 } from "@sideways/db";
 import type { Storage } from "@sideways/storage";
+import { frontmatterHashInput, type Frontmatter } from "@sideways/types";
 import type { AuthUser } from "../middleware/auth.js";
 import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { buildPrintHTML, type ThemeTokens } from "../pdf/template.js";
 import { env } from "../env.js";
-import { validateTitle, validatePath, validateTags, validateContent } from "../middleware/validate.js";
+import {
+  validateTitle,
+  validatePath,
+  validateTags,
+  validateContent,
+  validateFrontmatter,
+} from "../middleware/validate.js";
 import { notifyWatchers, notifySpaceWatchers } from "../lib/notify.js";
 import { recordEvents, type EventInput } from "../lib/activity.js";
 import { loadWikiLinkContext } from "../lib/wikilinks-context.js";
@@ -71,8 +78,11 @@ async function getUserId(
   return ensureSystemUser(db);
 }
 
-function contentHash(content: string): string {
-  return createHash("sha256").update(content).digest("hex").slice(0, 16);
+function contentHash(content: string, frontmatter: Frontmatter | null): string {
+  return createHash("sha256")
+    .update(content + frontmatterHashInput(frontmatter))
+    .digest("hex")
+    .slice(0, 16);
 }
 
 /**
@@ -547,6 +557,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         sectionId: targetSectionId,
         title: `${doc.title} (copy)`,
         tags: doc.tags,
+        frontmatter: doc.frontmatter,
         position: doc.position + 1,
       })
       .returning();
@@ -556,7 +567,8 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       version: 1,
       title: newDoc.title,
       content,
-      contentHash: contentHash(content),
+      frontmatter: doc.frontmatter,
+      contentHash: contentHash(content, doc.frontmatter),
       createdBy: userId,
     });
 
@@ -806,6 +818,8 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       title?: string;
       content?: string;
       tags?: string[];
+      /** Keys besides title and tags. Omitted keeps the current frontmatter. */
+      frontmatter?: Frontmatter;
       position?: number;
       parentPath?: string;
       updatedAt?: string;
@@ -825,11 +839,14 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       const contentErr = validateContent(body.content);
       if (contentErr) return c.json({ error: contentErr }, 400);
     }
+    const hasFrontmatter = body.frontmatter !== undefined;
+    if (hasFrontmatter) {
+      const frontmatterErr = validateFrontmatter(body.frontmatter);
+      if (frontmatterErr) return c.json({ error: frontmatterErr }, 400);
+    }
 
     const userId = await getUserId(c, db);
     const hasContent = body.content !== undefined;
-    const content = body.content ?? "";
-    const hash = hasContent ? contentHash(content) : null;
 
     const space = await db.query.spaces.findFirst({
       where: eq(spaces.slug, spaceSlug),
@@ -856,12 +873,23 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
     const existing = await findDocByPath(db, space.id, section.id, path);
 
-    const derivedTitle = body.title || (hasContent ? extractTitle(content) : null);
+    const derivedTitle = body.title || (hasContent ? extractTitle(body.content!) : null);
 
     if (existing) {
+      const latest = await db.query.documentVersions.findFirst({
+        where: eq(documentVersions.documentId, existing.id),
+        orderBy: desc(documentVersions.version),
+      });
+      // A version holds content and frontmatter together, so a change to
+      // either writes one; whichever wasn't sent carries over.
+      const content = body.content ?? latest?.content ?? "";
+      const frontmatter = hasFrontmatter ? body.frontmatter! : existing.frontmatter;
+      const hash = contentHash(content, frontmatter);
+
       const updates: Record<string, any> = {
         title: derivedTitle ?? existing.title,
         tags: body.tags ?? existing.tags,
+        frontmatter,
         position: body.position ?? existing.position,
         updatedAt: body.updatedAt ? new Date(body.updatedAt) : new Date(),
       };
@@ -884,19 +912,15 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         });
       }
 
-      if (hasContent) {
-        const latest = await db.query.documentVersions.findFirst({
-          where: eq(documentVersions.documentId, existing.id),
-          orderBy: desc(documentVersions.version),
-        });
-
+      if (hasContent || hasFrontmatter) {
         if (!latest || latest.contentHash !== hash) {
           await db.insert(documentVersions).values({
             documentId: existing.id,
             version: (latest?.version ?? 0) + 1,
             title: body.title ?? existing.title,
             content,
-            contentHash: hash!,
+            frontmatter,
+            contentHash: hash,
             createdBy: userId,
           });
           events.push({
@@ -931,6 +955,8 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       return c.json(enrichDoc(updated, section.slug, space.slug), 200);
     }
 
+    const content = body.content ?? "";
+    const frontmatter = body.frontmatter ?? null;
     const [doc] = await db
       .insert(documents)
       .values({
@@ -939,6 +965,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
         path,
         title: derivedTitle || path.replace(/\.md$/, "").split("/").pop() || path,
         tags: body.tags ?? [],
+        frontmatter,
         position: body.position ?? 0,
         ...(parentId ? { parentId } : {}),
       })
@@ -949,7 +976,8 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       version: 1,
       title: doc.title,
       content,
-      contentHash: hash || contentHash(content),
+      frontmatter,
+      contentHash: contentHash(content, frontmatter),
       createdBy: userId,
     });
 

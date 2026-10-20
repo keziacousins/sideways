@@ -10,6 +10,7 @@ export const LIMITS = {
   tag: 100,
   tags: 50,        // max number of tags
   content: 500_000, // ~500KB markdown
+  frontmatter: 20_000, // serialized JSON
   comment: 10_000,
   name: 200,
   description: 2000,
@@ -68,6 +69,19 @@ export function validateTags(tags: string[]): string | null {
   if (tags.length > LIMITS.tags) return `Maximum ${LIMITS.tags} tags`;
   for (const tag of tags) {
     if (tag.length > LIMITS.tag) return `Tag "${tag.slice(0, 20)}..." exceeds ${LIMITS.tag} characters`;
+  }
+  return null;
+}
+
+export function validateFrontmatter(frontmatter: unknown): string | null {
+  if (frontmatter === null || typeof frontmatter !== "object" || Array.isArray(frontmatter)) {
+    return "Frontmatter must be an object";
+  }
+  for (const key of ["title", "tags"]) {
+    if (key in frontmatter) return `Frontmatter can't hold "${key}": send it as a field of its own`;
+  }
+  if (JSON.stringify(frontmatter).length > LIMITS.frontmatter) {
+    return `Frontmatter exceeds ${LIMITS.frontmatter} characters`;
   }
   return null;
 }
