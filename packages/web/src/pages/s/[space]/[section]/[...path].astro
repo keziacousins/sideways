@@ -845,11 +845,19 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight, scale: 1 };
   }
 
+  // Compared in document coordinates: browsers disagree on whether client rects
+  // are relative to the layout or the visual viewport once pinch-zoomed, but
+  // subtracting the root's client rect cancels whichever it is.
   function rangeOnScreen(range: Range): boolean {
     const rect = range.getBoundingClientRect();
-    const area = visibleArea();
-    return rect.bottom > area.top && rect.top < area.top + area.height
-      && rect.right > area.left && rect.left < area.left + area.width;
+    const root = document.documentElement.getBoundingClientRect();
+    const top = rect.top - root.top, left = rect.left - root.left;
+    const vv = window.visualViewport;
+    const area = vv
+      ? { left: vv.pageLeft, top: vv.pageTop, width: vv.width, height: vv.height }
+      : { left: window.scrollX, top: window.scrollY, width: window.innerWidth, height: window.innerHeight };
+    return top + rect.height > area.top && top < area.top + area.height
+      && left + rect.width > area.left && left < area.left + area.width;
   }
 
   function showTouchBtn() {
@@ -932,11 +940,12 @@ const themeCss = themeToCSS(space?.theme?.tokens);
       hideBtn();
       return;
     }
-    if (!currentRange || scrollFrame || viewportTimer) return;
+    if (!currentRange) return;
     if (visibleArea().scale > 1) {
       settleTouchBtn();
       return;
     }
+    if (scrollFrame || viewportTimer) return;
     scrollFrame = requestAnimationFrame(() => {
       scrollFrame = 0;
       showTouchBtn();
