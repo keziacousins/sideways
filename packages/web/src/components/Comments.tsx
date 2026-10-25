@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { fetchSessionToken } from "../lib/session-token.ts";
 
 interface Comment {
@@ -149,14 +149,18 @@ export default function Comments({
   useEffect(() => {
     function handleInlineComment(e: Event) {
       const detail = (e as CustomEvent).detail;
-      setNewComment("");
-      setReplyTo(null);
-      setError(null);
-      setAnchorText(detail.anchorText);
-      setAnchorSection(detail.anchorSection || null);
-      setAnchorContext(detail.anchorContext || null);
-      setComposing(true);
-      setIsOpen(true);
+      // Render synchronously so the textarea's autoFocus runs inside the tap;
+      // iOS only raises the keyboard for focus() within a user gesture.
+      flushSync(() => {
+        setNewComment("");
+        setReplyTo(null);
+        setError(null);
+        setAnchorText(detail.anchorText);
+        setAnchorSection(detail.anchorSection || null);
+        setAnchorContext(detail.anchorContext || null);
+        setComposing(true);
+        setIsOpen(true);
+      });
     }
 
     document.addEventListener("sideways:inline-comment", handleInlineComment);
