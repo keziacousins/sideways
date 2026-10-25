@@ -171,6 +171,32 @@ export default function Comments({
       );
   }, []);
 
+  // When pinch-zoomed, iOS doesn't pan the view to a focused field inside the
+  // fixed panel. Once the keyboard has finished opening, ask for it explicitly.
+  useEffect(() => {
+    function handleFocusIn(e: FocusEvent) {
+      const field = e.target as HTMLElement;
+      const vv = window.visualViewport;
+      if (!vv || vv.scale <= 1 || !field.matches?.(".comments-panel-overlay textarea")) return;
+      let timer: ReturnType<typeof setTimeout>;
+      const reveal = () => {
+        vv.removeEventListener("resize", settle);
+        if (document.activeElement === field) field.scrollIntoView({ block: "nearest" });
+      };
+      // The keyboard resizes the viewport in steps; wait for them to stop.
+      const settle = () => {
+        clearTimeout(timer);
+        timer = setTimeout(reveal, 150);
+      };
+      vv.addEventListener("resize", settle);
+      // Keyboard already up: no resize will come.
+      timer = setTimeout(reveal, 600);
+    }
+
+    document.addEventListener("focusin", handleFocusIn);
+    return () => document.removeEventListener("focusin", handleFocusIn);
+  }, []);
+
   // Open panel and scroll to comment if URL has #comment-{id}
   const pendingScrollId = useRef<string | null>(null);
 
