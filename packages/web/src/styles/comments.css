@@ -80,12 +80,10 @@
   display: none;
 }
 
-/* Touch: a thumb-sized pill pinned bottom-centre, clear of the system selection menu */
+/* Touch: a thumb-sized pill at the bottom-centre of the visible area, clear of
+   the system selection menu. Position and scale are set from script. */
 .selection-comment-btn.is-touch {
-  position: fixed;
-  left: 50%;
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
+  transform-origin: bottom center;
   width: auto;
   height: 44px;
   padding: 0 1.1rem;
@@ -98,10 +96,6 @@
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-}
-
-.selection-comment-btn.is-touch:hover {
-  transform: translateX(-50%);
 }
 
 .selection-comment-btn.is-touch .selection-comment-label {
@@ -223,6 +217,13 @@
 
 .comment-form textarea::placeholder {
   color: var(--sw-text-ghost);
+}
+
+/* iOS zooms the page when an input under 16px takes focus */
+@media (pointer: coarse) {
+  .comment-form textarea {
+    font-size: 16px;
+  }
 }
 
 /* ── Collapsed Form Trigger ────────────────────────────────────── */
