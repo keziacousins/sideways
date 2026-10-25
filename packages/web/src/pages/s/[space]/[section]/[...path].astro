@@ -764,7 +764,7 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   const btn = document.createElement("button");
   btn.className = "selection-comment-btn";
   btn.setAttribute("aria-label", "Add comment");
-  btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+  btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="selection-comment-label">Comment</span>`;
   btn.style.display = "none";
   document.body.appendChild(btn);
 
@@ -807,24 +807,119 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     return fullText.slice(0, 300);
   }
 
+  // Touch selection (long-press, handle drags) fires no mouse events, so on touch
+  // the button is driven by selectionchange and pinned to the bottom of the
+  // visible area, clear of the system selection menu. Pinch zoom moves the
+  // visual viewport but not position:fixed, so it's placed against
+  // window.visualViewport and counter-scaled to keep its on-screen size.
+  let lastPointerType = "mouse";
+  let pressingBtn = false;
+  let currentRange: Range | null = null;
+  let selectionTimer: ReturnType<typeof setTimeout> | undefined;
+  let viewportTimer: ReturnType<typeof setTimeout> | undefined;
+  const isTouch = () => lastPointerType !== "mouse";
+
+  function hideBtn() {
+    btn.style.display = "none";
+  }
+
+  // Returns the selected range if it is a non-empty selection inside the doc.
+  function captureSelection(): Range | null {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) return null;
+    if (!sel.anchorNode?.parentElement?.closest(".sw-doc-content")) return null;
+    const range = sel.getRangeAt(0);
+    currentDetail = {
+      anchorText: sel.toString().trim().slice(0, 200),
+      anchorSection: getSectionPath(sel.anchorNode),
+      anchorContext: getContext(range),
+    };
+    return range;
+  }
+
+  // The visible area in layout-viewport coordinates (what fixed positioning uses).
+  function visibleArea() {
+    const vv = window.visualViewport;
+    return vv
+      ? { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: vv.height, scale: vv.scale }
+      : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight, scale: 1 };
+  }
+
+  // Compared in document coordinates: browsers disagree on whether client rects
+  // are relative to the layout or the visual viewport once pinch-zoomed, but
+  // subtracting the root's client rect cancels whichever it is.
+  function rangeOnScreen(range: Range): boolean {
+    const rect = range.getBoundingClientRect();
+    const root = document.documentElement.getBoundingClientRect();
+    const top = rect.top - root.top, left = rect.left - root.left;
+    const vv = window.visualViewport;
+    const area = vv
+      ? { left: vv.pageLeft, top: vv.pageTop, width: vv.width, height: vv.height }
+      : { left: window.scrollX, top: window.scrollY, width: window.innerWidth, height: window.innerHeight };
+    return top + rect.height > area.top && top < area.top + area.height
+      && left + rect.width > area.left && left < area.left + area.width;
+  }
+
+  function showTouchBtn() {
+    if (!currentRange || !rangeOnScreen(currentRange)) {
+      hideBtn();
+      return;
+    }
+    const area = visibleArea();
+    btn.classList.add("is-touch");
+    btn.style.position = "fixed";
+    btn.style.left = `${area.left + area.width / 2}px`;
+    btn.style.top = `${area.top + area.height - 20 / area.scale}px`;
+    btn.style.transform = `translate(-50%, -100%) scale(${1 / area.scale})`;
+    btn.style.display = "flex";
+  }
+
+  // iOS reports the visual viewport in bursts mid-gesture, so following a pinch
+  // or pan live makes the pill jitter. Hide it and place it once things settle.
+  function settleTouchBtn() {
+    if (!currentRange) return;
+    hideBtn();
+    clearTimeout(viewportTimer);
+    viewportTimer = setTimeout(() => {
+      viewportTimer = undefined;
+      showTouchBtn();
+    }, 150);
+  }
+
+  document.addEventListener("pointerdown", (e) => {
+    lastPointerType = e.pointerType;
+    pressingBtn = !!(e.target as HTMLElement).closest(".selection-comment-btn");
+  }, { capture: true });
+
+  document.addEventListener("selectionchange", () => {
+    if (!isTouch()) return;
+    clearTimeout(selectionTimer);
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) {
+      // Tapping the button can clear the selection; keep it up so click lands.
+      if (pressingBtn) return;
+      currentRange = null;
+      hideBtn();
+      return;
+    }
+    // Wait for the handles to settle before showing.
+    selectionTimer = setTimeout(() => {
+      currentRange = captureSelection();
+      showTouchBtn();
+    }, 250);
+  });
+
   document.addEventListener("mouseup", () => {
+    if (isTouch()) return;
     setTimeout(() => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-        btn.style.display = "none";
+      const range = captureSelection();
+      if (!range) {
+        hideBtn();
         return;
       }
-      const docContent = sel.anchorNode?.parentElement?.closest(".sw-doc-content");
-      if (!docContent) {
-        btn.style.display = "none";
-        return;
-      }
-      const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
-      const anchorText = sel.toString().trim().slice(0, 200);
-      const anchorSection = getSectionPath(sel.anchorNode!);
-      const anchorContext = getContext(range);
-      currentDetail = { anchorText, anchorSection, anchorContext };
+      btn.classList.remove("is-touch");
+      btn.style.transform = "";
       btn.style.display = "flex";
       btn.style.position = "fixed";
       btn.style.left = `${rect.right + 6}px`;
@@ -833,13 +928,38 @@ const themeCss = themeToCSS(space?.theme?.tokens);
   });
 
   document.addEventListener("mousedown", (e) => {
+    if (isTouch()) return;
     if (!(e.target as HTMLElement).closest(".selection-comment-btn")) {
-      btn.style.display = "none";
+      hideBtn();
     }
   });
-  document.addEventListener("scroll", () => { btn.style.display = "none"; }, { passive: true });
+
+  let scrollFrame = 0;
+  document.addEventListener("scroll", () => {
+    if (!isTouch()) {
+      hideBtn();
+      return;
+    }
+    if (!currentRange) return;
+    if (visibleArea().scale > 1) {
+      settleTouchBtn();
+      return;
+    }
+    if (scrollFrame || viewportTimer) return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = 0;
+      showTouchBtn();
+    });
+  }, { passive: true });
+  window.visualViewport?.addEventListener("resize", settleTouchBtn);
+  window.visualViewport?.addEventListener("scroll", settleTouchBtn);
+
+  // Keep the tap from clearing the selection or taking focus before click fires.
+  btn.addEventListener("pointerdown", (e) => e.preventDefault());
 
   btn.addEventListener("click", () => {
+    pressingBtn = false;
+    currentRange = null;
     btn.style.display = "none";
     window.getSelection()?.removeAllRanges();
     document.dispatchEvent(new CustomEvent("sideways:inline-comment", { detail: currentDetail }));

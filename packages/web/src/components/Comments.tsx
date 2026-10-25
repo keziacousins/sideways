@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { fetchSessionToken } from "../lib/session-token.ts";
 
 interface Comment {
@@ -149,14 +149,18 @@ export default function Comments({
   useEffect(() => {
     function handleInlineComment(e: Event) {
       const detail = (e as CustomEvent).detail;
-      setNewComment("");
-      setReplyTo(null);
-      setError(null);
-      setAnchorText(detail.anchorText);
-      setAnchorSection(detail.anchorSection || null);
-      setAnchorContext(detail.anchorContext || null);
-      setComposing(true);
-      setIsOpen(true);
+      // Render synchronously so the textarea's autoFocus runs inside the tap;
+      // iOS only raises the keyboard for focus() within a user gesture.
+      flushSync(() => {
+        setNewComment("");
+        setReplyTo(null);
+        setError(null);
+        setAnchorText(detail.anchorText);
+        setAnchorSection(detail.anchorSection || null);
+        setAnchorContext(detail.anchorContext || null);
+        setComposing(true);
+        setIsOpen(true);
+      });
     }
 
     document.addEventListener("sideways:inline-comment", handleInlineComment);
@@ -165,6 +169,32 @@ export default function Comments({
         "sideways:inline-comment",
         handleInlineComment,
       );
+  }, []);
+
+  // When pinch-zoomed, iOS doesn't pan the view to a focused field inside the
+  // fixed panel. Once the keyboard has finished opening, ask for it explicitly.
+  useEffect(() => {
+    function handleFocusIn(e: FocusEvent) {
+      const field = e.target as HTMLElement;
+      const vv = window.visualViewport;
+      if (!vv || vv.scale <= 1 || !field.matches?.(".comments-panel-overlay textarea")) return;
+      let timer: ReturnType<typeof setTimeout>;
+      const reveal = () => {
+        vv.removeEventListener("resize", settle);
+        if (document.activeElement === field) field.scrollIntoView({ block: "nearest" });
+      };
+      // The keyboard resizes the viewport in steps; wait for them to stop.
+      const settle = () => {
+        clearTimeout(timer);
+        timer = setTimeout(reveal, 150);
+      };
+      vv.addEventListener("resize", settle);
+      // Keyboard already up: no resize will come.
+      timer = setTimeout(reveal, 600);
+    }
+
+    document.addEventListener("focusin", handleFocusIn);
+    return () => document.removeEventListener("focusin", handleFocusIn);
   }, []);
 
   // Open panel and scroll to comment if URL has #comment-{id}
