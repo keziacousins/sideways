@@ -34,6 +34,7 @@ import {
 import type { SyncInfo } from "./api.js";
 import { surveyAssets, planAssets, runAssetPlan, type AssetSurvey } from "./assets.js";
 import { findDocLinkGaps, reportDocLinkGaps } from "./doclinks.js";
+import { formatUnifiedDiff } from "./diff.js";
 
 const program = new Command();
 
@@ -1195,33 +1196,16 @@ program
     const { clean } = extractComments(raw);
     const { content: localContent } = parseFrontmatter(clean);
 
-    try {
-      const doc = await client.getDocument(space, file.sectionSlug, file.path);
-      const remoteContent = doc.content;
-
-      if (localContent.trim() === remoteContent.trim()) {
-        console.log("No content differences.");
-        return;
-      }
-
-      const localLines = localContent.split("\n");
-      const remoteLines = remoteContent.split("\n");
-
-      console.log(`--- remote: ${space}/${file.sectionSlug}/${file.path}`);
-      console.log(`+++ local: ${file.relPath}`);
-
-      // Simple line diff
-      const maxLines = Math.max(localLines.length, remoteLines.length);
-      for (let i = 0; i < maxLines; i++) {
-        const l = localLines[i];
-        const r = remoteLines[i];
-        if (l === r) continue;
-        if (r !== undefined && l !== r) console.log(`\x1b[31m- ${r}\x1b[0m`);
-        if (l !== undefined && l !== r) console.log(`\x1b[32m+ ${l}\x1b[0m`);
-      }
-    } catch {
-      console.log("Document not found on remote — entirely new.");
-    }
+    // getDocument exits with "Not found" on a 404, so anything thrown here is a real error.
+    const doc = await client.getDocument(space, file.sectionSlug, file.path);
+    const out = formatUnifiedDiff(
+      `remote: ${space}/${file.sectionSlug}/${file.path}`,
+      `local: ${file.relPath}`,
+      doc.content,
+      localContent,
+      { color: process.stdout.isTTY && !process.env.NO_COLOR },
+    );
+    console.log(out || "No content differences.");
   });
 
 // ── rename ────────────────────────────────────────────────────────────
