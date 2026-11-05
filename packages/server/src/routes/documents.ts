@@ -30,7 +30,7 @@ import { notifyWatchers, notifySpaceWatchers } from "../lib/notify.js";
 import { recordEvents, type EventInput } from "../lib/activity.js";
 import { loadWikiLinkContext } from "../lib/wikilinks-context.js";
 import { createMermaidRenderer } from "../lib/mermaid.js";
-import { createTypstRenderer } from "../lib/typst.js";
+import { createTypstRenderer, themeFontContext, typstFontContext } from "../lib/typst.js";
 import { createAssetInliner } from "../lib/assets.js";
 import {
   resolveSection,
@@ -384,7 +384,7 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
 
     // Typst diagrams go inline as `data:` URIs: a preview is thrown away on
     // the next keystroke, so there's nothing worth storing.
-    const typst = createTypstRenderer({ kind: "inline" });
+    const typst = createTypstRenderer({ kind: "inline" }, await themeFontContext(db, space.themeId));
     const html = await renderMarkdown(body.content || "", { target, wikiLinks, renderTypst: typst.render });
     return c.json({ html });
   });
@@ -435,7 +435,12 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     });
     // Typst diagrams are stored under a content address and the HTML points
     // at them, so the cached HTML below stays valid for as long as it lives.
-    const typst = createTypstRenderer({ kind: "store", storage, spaceId: space.id, spaceSlug: space.slug });
+    // Drawn in the space theme's fonts. A theme change has to invalidate this
+    // cache (see bustWikiLinkRenderCache callers in spaces.ts and themes.ts).
+    const typst = createTypstRenderer(
+      { kind: "store", storage, spaceId: space.id, spaceSlug: space.slug },
+      await themeFontContext(db, space.themeId),
+    );
     const html = await renderMarkdown(latestVersion.content, { target, wikiLinks, renderTypst: typst.render });
 
     // Not cached if a diagram failed for reasons of ours (sidecar down, busy,
@@ -753,8 +758,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       target: "pdf",
       wikiLinks,
       renderMermaid: createMermaidRenderer(),
-      // Typst diagrams as `data:` URIs too, for the same reason as images.
-      renderTypst: createTypstRenderer({ kind: "inline" }).render,
+      // Typst diagrams as `data:` URIs too, for the same reason as images, and
+      // in the fonts of the theme this export is printed with.
+      renderTypst: createTypstRenderer({ kind: "inline" }, typstFontContext(themeRow?.tokens)).render,
       inlineAsset: createAssetInliner(db, storage, space.id, section.id),
       origin: spaceLinks ? env.publicUrl : undefined,
     });

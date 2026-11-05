@@ -27,7 +27,7 @@
  */
 
 import { fork, execFile } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
@@ -53,12 +53,19 @@ const VENDOR = process.env.TYPST_VENDOR_DIR || join(here, "vendor");
 const WORKSPACE = mkdtempSync(join(tmpdir(), "typst-ws-"));
 const DEAD_PROXY = "http://127.0.0.1:9";
 
+// Default fonts. In the image these are installed under /usr/share/fonts and
+// TYPST_FONT_PATHS says so; run outside it, `npm install` fetches the same
+// pinned files into vendor/fonts (see package.json). The compiler also loads
+// the host's system fonts whatever we pass — which is why brand fonts live
+// elsewhere (see worker.mjs).
 function defaultFontPaths() {
-  if (process.platform === "darwin") {
-    return ["/System/Library/Fonts", "/System/Library/Fonts/Supplemental", "/Library/Fonts"];
-  }
-  return ["/usr/share/fonts"];
+  const vendored = join(VENDOR, "fonts");
+  return existsSync(vendored) ? [vendored] : [];
 }
+
+// Brand fonts, one directory per client. Outside the image, the repo's own
+// mirror (scripts/sync-brand-assets.sh) if it has been populated.
+const BRAND_FONT_DIR = process.env.TYPST_BRAND_FONT_DIR || join(here, "..", "fonts", "brand");
 
 /**
  * The whole environment a worker sees. Built from scratch rather than copied
@@ -82,6 +89,7 @@ function sandboxEnv() {
     no_proxy: "",
     TYPST_WORKSPACE: WORKSPACE,
     TYPST_FONT_PATHS: (process.env.TYPST_FONT_PATHS || defaultFontPaths().join(delimiter)),
+    TYPST_BRAND_FONT_DIR: BRAND_FONT_DIR,
   };
 }
 
@@ -169,7 +177,7 @@ class Worker {
         this.kill(new MemoryError(`Diagram render exceeded ${MAX_RSS_MB}MB of memory`));
       }
     }, 100);
-    this.child.send({ id: job.id, source: job.source, assets: job.assets });
+    this.child.send({ id: job.id, source: job.source, assets: job.assets, fontSets: job.fontSets, inputs: job.inputs });
   }
 
   kill(reason) {
@@ -201,9 +209,9 @@ class Pool {
     for (let i = 0; i < size; i++) this.workers.add(new Worker(this));
   }
 
-  render(source, assets) {
+  render({ source, assets, fontSets, inputs }) {
     return new Promise((resolve, reject) => {
-      const job = { id: nextJobId++, source, assets, resolve, reject };
+      const job = { id: nextJobId++, source, assets, fontSets, inputs, resolve, reject };
       const worker = this.idle.shift();
       if (worker) return worker.run(job);
       if (this.queue.length >= MAX_QUEUED) return reject(new OverloadedError("Renderer busy — too many diagrams queued"));
@@ -280,6 +288,10 @@ function readBody(req) {
 
 // An asset is addressed the way the diagram will name it, relative to
 // /assets/ in the workspace: segments of [A-Za-z0-9._-], no `..`.
+const FONT_SET_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const MAX_FONT_SETS = 4;
+const INPUT_KEYS = new Set(["font-body", "font-display", "font-mono"]);
+
 const ASSET_PATH_RE = /^(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
 
 function validate(payload) {
@@ -293,11 +305,35 @@ function validate(payload) {
     if (typeof asset?.path !== "string" || !ASSET_PATH_RE.test(asset.path)) throw new BadRequestError(`Invalid asset path: ${asset?.path}`);
     if (typeof asset.data !== "string") throw new BadRequestError(`Asset ${asset.path} has no data`);
   }
-  return { source, assets };
+  // Brand font directories to make available, as derived by the API from the
+  // space's theme. Named, never pathed, and they must exist.
+  const fontSets = payload.fontSets ?? [];
+  if (!Array.isArray(fontSets) || fontSets.length > MAX_FONT_SETS) throw new BadRequestError(`At most ${MAX_FONT_SETS} font sets`);
+  for (const set of fontSets) {
+    if (typeof set !== "string" || !FONT_SET_RE.test(set)) throw new BadRequestError(`Invalid font set: ${set}`);
+    if (!existsSync(join(BRAND_FONT_DIR, set))) throw new BadRequestError(`Unknown font set: ${set}`);
+  }
+
+  // The theme's font names, read by the prelude from sys.inputs. Only the
+  // keys it knows, and plain one-line names.
+  const inputs = payload.inputs ?? {};
+  if (typeof inputs !== "object" || Array.isArray(inputs)) throw new BadRequestError("Invalid inputs");
+  for (const [key, value] of Object.entries(inputs)) {
+    if (!INPUT_KEYS.has(key)) throw new BadRequestError(`Unknown input: ${key}`);
+    if (typeof value !== "string" || value.length > 100 || /[\r\n]/.test(value)) throw new BadRequestError(`Invalid value for ${key}`);
+  }
+
+  return { source, assets, fontSets: [...fontSets].sort(), inputs };
 }
 
 /**
- * POST /render — { source, assets?: [{ path, data }] } -> { svg, width, height }
+ * POST /render — { source, assets?, fontSets?, inputs? } -> { svg, width, height, warnings }
+ *
+ *   assets    [{ path, data }] — files the diagram can read under /assets/,
+ *             data base64-encoded
+ *   fontSets  brand font directories (by client name) the diagram may use
+ *   inputs    { "font-body", "font-display", "font-mono" } — the theme's
+ *             families, which the prelude makes the diagram's defaults
  *
  * A diagram that doesn't compile comes back 422 as { error, diagnostics },
  * each diagnostic carrying the author's line and column where the compiler
@@ -315,11 +351,11 @@ async function handleRender(req, res) {
   }
 
   try {
-    const { svg, width, height } = await pool.render(job.source, job.assets);
+    const { svg, width, height, warnings } = await pool.render(job);
     if (Buffer.byteLength(svg) > MAX_SVG_BYTES) {
       return sendJson(res, 422, { error: `Rendered diagram exceeds ${MAX_SVG_BYTES} bytes`, diagnostics: [] });
     }
-    sendJson(res, 200, { svg, width, height });
+    sendJson(res, 200, { svg, width, height, warnings });
   } catch (e) {
     if (e instanceof DiagramError) sendJson(res, 422, { error: e.message, diagnostics: e.diagnostics });
     else if (e instanceof OverloadedError) sendJson(res, 503, { error: e.message });

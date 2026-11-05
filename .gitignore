@@ -27,17 +27,21 @@ backups/
 # Uncommitted brand assets (logos, licensed fonts, per-client theme config).
 # Single source of truth; scripts/sync-brand-assets.sh copies fonts from here
 # into the build locations below. Reaches the deploy host via deploy.sh rsync.
-brand/
+# Anchored: infra/fonts/brand/ is one of those build locations, handled below.
+/brand/
 
 # Mirrored from brand/ by sync-brand-assets.sh — never commit font binaries
 # here. The mirror prunes, so a committed file would be deleted on the next
 # sync as well as being invisible to git; redistributable fonts are fetched at
-# image-build time instead (see user-docs/themes.md).
-# The WeasyPrint directory itself stays tracked (via .gitkeep) because the
-# image's `COPY fonts/` fails the build if it is missing on a fresh clone.
+# image-build time instead (infra/fonts/fonts.lock, see user-docs/themes.md).
+# infra/fonts/brand/ itself stays tracked (via .gitkeep) because the WeasyPrint
+# and Typst images `COPY fonts/brand/`, which fails if it is missing on a fresh
+# clone.
 packages/web/public/fonts/
-infra/weasyprint/fonts/*
-!infra/weasyprint/fonts/.gitkeep
+infra/fonts/brand/*
+!infra/fonts/brand/.gitkeep
+# The print mirror's old location, before both render images shared infra/fonts/.
+infra/weasyprint/fonts/
 
 # Internal planning / scratch docs (kept out of public repo)
 PLAN.md
@@ -48,3 +52,6 @@ FEATURES-*.md
 PROPOSAL-*.md
 TODO.md
 SECURITY-AUDIT*.md
+
+# Playwright MCP screenshots and snapshots
+.playwright-mcp/

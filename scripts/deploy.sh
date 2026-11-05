@@ -64,20 +64,26 @@ sync_infra() {
     infra/compose.yml \
     infra/init-db.sql \
     infra/.env.example \
+    infra/.dockerignore \
     $VM:$INFRA_DIR/
 
   rsync -az --delete infra/hydra/ $VM:$INFRA_DIR/hydra/
   rsync -az --delete infra/kratos/ $VM:$INFRA_DIR/kratos/
   rsync -az --delete infra/scripts/ $VM:$INFRA_DIR/scripts/
+  # Fonts shared by the WeasyPrint and Typst images: the pinned manifest and
+  # fetch script, then the brand mirror (never --delete'd from a checkout that
+  # lacks it — see sync_fonts). weasyprint/ still excludes `fonts` so a host's
+  # copy from before infra/fonts/ existed is left alone rather than deleted.
+  rsync -az --delete --exclude brand infra/fonts/ $VM:$INFRA_DIR/fonts/
+  sync_fonts infra/fonts/brand "$INFRA_DIR/fonts/brand" "print and diagram"
   rsync -az --delete --exclude fonts infra/weasyprint/ $VM:$INFRA_DIR/weasyprint/
-  sync_fonts infra/weasyprint/fonts "$INFRA_DIR/weasyprint/fonts" print
   rsync -az --delete infra/mermaid/ $VM:$INFRA_DIR/mermaid/
   rsync -az --delete --exclude node_modules --exclude vendor infra/typst/ $VM:$INFRA_DIR/typst/
 
-  # Create infra .env if missing. The fonts directory is created here too:
-  # it is excluded from the rsync above and may have no fonts to push, but
-  # the WeasyPrint image's `COPY fonts/` fails the build without it.
-  ssh $VM "mkdir -p $INFRA_DIR/weasyprint/fonts; \
+  # Create infra .env if missing. The brand fonts directory is created here
+  # too: it is excluded from the rsync above and may have no fonts to push, but
+  # the images' `COPY fonts/brand/` fails the build without it.
+  ssh $VM "mkdir -p $INFRA_DIR/fonts/brand; \
     test -f $INFRA_DIR/.env || cp $INFRA_DIR/.env.example $INFRA_DIR/.env"
 }
 

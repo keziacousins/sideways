@@ -7,7 +7,7 @@
   "main": "server.mjs",
   "scripts": {
     "start": "node server.mjs",
-    "postinstall": "node fetch-packages.mjs",
+    "postinstall": "node fetch-packages.mjs && (test ! -f ../fonts/fetch-fonts.sh || test -d vendor/fonts || sh ../fonts/fetch-fonts.sh typst vendor/fonts)",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {

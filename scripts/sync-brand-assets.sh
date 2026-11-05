@@ -6,7 +6,8 @@
 # tools can't read from it directly:
 #
 #   - Astro serves web fonts only from packages/web/public/
-#   - Docker COPY can't reach outside the infra/weasyprint/ build context
+#   - Docker COPY can't reach outside the infra/ build context, from which
+#     both render images (WeasyPrint, Typst) take infra/fonts/brand/
 #
 # so fonts are copied into both. Those destinations are gitignored too, which
 # keeps licensed binaries out of the public repo no matter which path is used.
@@ -42,7 +43,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRAND_DIR="$ROOT/brand"
 WEB_FONTS="$ROOT/packages/web/public/fonts"
-PRINT_FONTS="$ROOT/infra/weasyprint/fonts"
+PRINT_FONTS="$ROOT/infra/fonts/brand"
 
 if [[ ! -d "$BRAND_DIR" ]]; then
   echo "No brand/ directory — nothing to sync."
@@ -121,7 +122,7 @@ fi
 for dest in "$WEB_FONTS" "$PRINT_FONTS"; do
   # --delete prunes fonts removed or renamed under brand/, and client
   # directories that no longer exist there at all. .gitkeep is excluded so it
-  # survives: it is tracked, and the image's `COPY fonts/` needs the directory
+  # survives: it is tracked, and the images' `COPY fonts/brand/` needs the directory
   # to exist on a fresh clone.
   rsync -a --delete --exclude=.gitkeep "$STAGE/" "$dest/"
 done
@@ -129,7 +130,8 @@ done
 echo
 echo "Synced $synced font file(s) across ${#clients[@]} client(s)."
 echo "  web:   $WEB_FONTS/<client>/"
-echo "  print: $PRINT_FONTS/<client>/"
+echo "  print and diagrams: $PRINT_FONTS/<client>/"
 echo
-echo "PDF fonts are baked into the WeasyPrint image — rebuild it to pick up"
+echo "PDF and diagram fonts are baked into the WeasyPrint and Typst images —"
+echo "rebuild them to pick up"
 echo "changes:  DEPLOY_HOST=... ./scripts/deploy.sh --infra"

@@ -135,8 +135,8 @@ brand/
 ```
 
 Builds can't read from `brand/` directly — Astro serves web fonts only from
-`packages/web/public/`, and Docker `COPY` can't reach outside the
-`infra/weasyprint/` build context — so a script copies fonts into both:
+`packages/web/public/`, and Docker `COPY` can't reach outside the `infra/`
+build context — so a script copies fonts into both:
 
 ```bash
 ./scripts/sync-brand-assets.sh
@@ -144,9 +144,10 @@ Builds can't read from `brand/` directly — Astro serves web fonts only from
 
 Both destinations are gitignored, so licensed binaries stay out of the repo
 whichever path is used. Web fonts land at `/fonts/<client>/<file>`, which is
-what `src` must point at; print fonts land at `infra/weasyprint/fonts/<client>/`
+what `src` must point at; print fonts land at `infra/fonts/brand/<client>/`
 and are namespaced the same way, so two clients shipping a `Regular.woff2`
-don't overwrite each other.
+don't overwrite each other. Both render images read that directory: WeasyPrint
+for PDF text, and the Typst sidecar for diagrams.
 
 The script is a **mirror**, not an add-only copy. A font removed or renamed
 under `brand/` is removed from both destinations on the next run, and so is a
@@ -159,8 +160,8 @@ If `brand/` has no fonts at all the script leaves the destinations alone rather
 than emptying them, on the grounds that an empty `brand/` is usually a
 half-finished setup and not a request to unbrand everything.
 
-PDF fonts are baked into the WeasyPrint image, so adding or changing one needs
-an image rebuild:
+PDF and diagram fonts are baked into the WeasyPrint and Typst images, so
+adding or changing one needs an image rebuild:
 
 ```bash
 DEPLOY_HOST=... ./scripts/deploy.sh --infra
@@ -169,12 +170,20 @@ DEPLOY_HOST=... ./scripts/deploy.sh --infra
 ### Font licensing
 
 - **Redistributable fonts (OFL and similar)** are fetched at image-build time
-  with `wget`, like the built-in families in `infra/weasyprint/Dockerfile`.
-  Don't commit binaries into the font directories: they are gitignored, and
-  `sync-brand-assets.sh` mirrors `brand/` over them, so anything committed
-  there would be both invisible to git and deleted on the next sync.
+  from `infra/fonts/fonts.lock`, which pins each download and its SHA-256 — add
+  a line there, like the built-in families. Don't commit binaries into the font
+  directories: they are gitignored, and `sync-brand-assets.sh` mirrors `brand/`
+  over them, so anything committed there would be both invisible to git and
+  deleted on the next sync.
 - **Licensed or proprietary fonts** go in `brand/<client>/fonts/` and are
   never committed. Keep the licence file alongside them.
+- **Diagrams** use a theme's fonts too: a space's Typst diagrams default to
+  its theme's body, display and mono families. Typst reads only `.otf` and
+  `.ttf` (not `.woff2`/`.woff`), and only static fonts — a variable font may
+  render incorrectly. A client's fonts are available only to diagrams in
+  spaces whose theme uses them, never to other spaces. Typst draws the glyphs
+  it uses into the diagram's SVG, which readers' browsers download, so check
+  that a licensed face permits that kind of embedding as well as PDF.
 
 ## Creating a Theme via API
 

@@ -1,0 +1,51 @@
+# Redistributable fonts installed into the render images (see fetch-fonts.sh).
+# One line per installed file:
+#
+#   <consumer>  <installed path>  <sha256 of the download>  <url>  [<member, if the download is a zip>]
+#
+# Consumers take different files from the same pinned downloads:
+#
+#   print  WeasyPrint. The variable fonts it has always had: print.css asks
+#          for "Inter", "Newsreader" and "Fira Code" and these satisfy it, so
+#          PDF typesetting does not move when this file changes.
+#   typst  The Typst diagram sidecar. Static instances, because Typst does not
+#          support variable fonts ("may render incorrectly"). Family names as
+#          Typst sees them: "Inter", "Fira Code", "Newsreader 16pt".
+#
+# The web app does not read this file: it bundles the same families from the
+# @fontsource-variable packages. Typst draws text as glyph outlines, so a
+# diagram needs its fonts only where it is compiled, not in the reader's browser.
+#
+# Every URL is pinned (a release tag or a commit) and every download is checked
+# against its SHA-256, so an image rebuild cannot silently change the fonts.
+
+print  inter/InterVariable.ttf                        9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  InterVariable.ttf
+print  inter/InterVariable-Italic.ttf                 9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  InterVariable-Italic.ttf
+print  fira-code/FiraCode-VF.ttf                      0949915ba8eb24d89fd93d10a7ff623f42830d7c5ffc3ecbf960e4ecad3e3e79  https://github.com/tonsky/FiraCode/releases/download/6.2/Fira_Code_v6.2.zip  variable_ttf/FiraCode-VF.ttf
+print  newsreader/Newsreader-Variable.ttf             8a08d13f8a6c0d51be379a60af84f945f65369a67e509ee3c3bdcc421254d7c1  https://raw.githubusercontent.com/google/fonts/fbe81817505e8aeadc53cc7a38a2b76fb57c333e/ofl/newsreader/Newsreader%5Bopsz%2Cwght%5D.ttf
+print  newsreader/Newsreader-Italic-Variable.ttf      796668611f80b64d5adf182fde3b6f29ed83b4e7cbec7b96937e84ac01364792  https://raw.githubusercontent.com/google/fonts/fbe81817505e8aeadc53cc7a38a2b76fb57c333e/ofl/newsreader/Newsreader-Italic%5Bopsz%2Cwght%5D.ttf
+print  oswald/Oswald-Variable.ttf                     5b38c246e255a12f5712d640d56bcced0472466fc68983d2d0410ec0457c2817  https://raw.githubusercontent.com/google/fonts/fbe81817505e8aeadc53cc7a38a2b76fb57c333e/ofl/oswald/Oswald%5Bwght%5D.ttf
+print  eb-garamond/EBGaramond-Variable.ttf            ef9512f92f6d579e5dc75af59a5a4b1b8b47d2eda89e00b954d44520e5369027  https://raw.githubusercontent.com/google/fonts/fbe81817505e8aeadc53cc7a38a2b76fb57c333e/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf
+print  eb-garamond/EBGaramond-Italic-Variable.ttf     bba2c4499c93c9612b90b9825d32b07da52fce2fe57562a1eb6b833553f93c4e  https://raw.githubusercontent.com/google/fonts/fbe81817505e8aeadc53cc7a38a2b76fb57c333e/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf
+
+typst  inter/Inter-Regular.ttf                        9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  extras/ttf/Inter-Regular.ttf
+typst  inter/Inter-Italic.ttf                         9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  extras/ttf/Inter-Italic.ttf
+typst  inter/Inter-Medium.ttf                         9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  extras/ttf/Inter-Medium.ttf
+typst  inter/Inter-MediumItalic.ttf                   9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  extras/ttf/Inter-MediumItalic.ttf
+typst  inter/Inter-SemiBold.ttf                       9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  extras/ttf/Inter-SemiBold.ttf
+typst  inter/Inter-SemiBoldItalic.ttf                 9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  extras/ttf/Inter-SemiBoldItalic.ttf
+typst  inter/Inter-Bold.ttf                           9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  extras/ttf/Inter-Bold.ttf
+typst  inter/Inter-BoldItalic.ttf                     9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  extras/ttf/Inter-BoldItalic.ttf
+typst  fira-code/FiraCode-Regular.ttf                 0949915ba8eb24d89fd93d10a7ff623f42830d7c5ffc3ecbf960e4ecad3e3e79  https://github.com/tonsky/FiraCode/releases/download/6.2/Fira_Code_v6.2.zip  ttf/FiraCode-Regular.ttf
+typst  fira-code/FiraCode-Medium.ttf                  0949915ba8eb24d89fd93d10a7ff623f42830d7c5ffc3ecbf960e4ecad3e3e79  https://github.com/tonsky/FiraCode/releases/download/6.2/Fira_Code_v6.2.zip  ttf/FiraCode-Medium.ttf
+typst  fira-code/FiraCode-SemiBold.ttf                0949915ba8eb24d89fd93d10a7ff623f42830d7c5ffc3ecbf960e4ecad3e3e79  https://github.com/tonsky/FiraCode/releases/download/6.2/Fira_Code_v6.2.zip  ttf/FiraCode-SemiBold.ttf
+typst  fira-code/FiraCode-Bold.ttf                    0949915ba8eb24d89fd93d10a7ff623f42830d7c5ffc3ecbf960e4ecad3e3e79  https://github.com/tonsky/FiraCode/releases/download/6.2/Fira_Code_v6.2.zip  ttf/FiraCode-Bold.ttf
+typst  newsreader/Newsreader16pt-Regular.ttf          0636887c9f72f77ce188f0b31029be58e65adae5a47e6d2887ad5020c2c75036  https://raw.githubusercontent.com/productiontype/Newsreader/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155/fonts/static/ttf/Newsreader16pt-Regular.ttf
+typst  newsreader/Newsreader16pt-Italic.ttf           292646cbb948153511e308fa80def59959746d70114bd0936ba0a7f67a33181d  https://raw.githubusercontent.com/productiontype/Newsreader/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155/fonts/static/ttf/Newsreader16pt-Italic.ttf
+typst  newsreader/Newsreader16pt-SemiBold.ttf         9e29bad1d5022c1a3d1822469a62dc9fa66cc41ba553f352530f867f84ba1c8f  https://raw.githubusercontent.com/productiontype/Newsreader/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155/fonts/static/ttf/Newsreader16pt-SemiBold.ttf
+typst  newsreader/Newsreader16pt-Bold.ttf             9e3d485293bb2f86d22f1a9bfb8d7213cff188270fa240b5084e27290746aea7  https://raw.githubusercontent.com/productiontype/Newsreader/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155/fonts/static/ttf/Newsreader16pt-Bold.ttf
+typst  newsreader/Newsreader16pt-BoldItalic.ttf       1bd178872241f5d0e02e9ee3e66e11c4aa76ff9d7614d2e47ccb7b42a3938361  https://raw.githubusercontent.com/productiontype/Newsreader/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155/fonts/static/ttf/Newsreader16pt-BoldItalic.ttf
+
+# A stand-in brand font for infra/typst's tests: a family no consumer above
+# installs, so a test can tell whether a diagram could reach it.
+test   client-a/InterDisplay-Regular.ttf              9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e  https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip  extras/ttf/InterDisplay-Regular.ttf

@@ -1,0 +1,17 @@
+# Build context for the images that build from infra/ itself rather than their
+# own directory — weasyprint and typst, so both can COPY the shared fonts/
+# tree. An allowlist, because infra/ also holds .env with the stack's secrets,
+# which must never be sent to a build.
+#
+# Images that build from their own directory (kratos, hydra, scripts, mermaid)
+# have their own context root and never read this file.
+
+*
+!fonts
+!weasyprint
+!typst
+
+# Local-only state inside the allowed directories.
+typst/node_modules
+typst/vendor
+weasyprint/fonts
