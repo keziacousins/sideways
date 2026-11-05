@@ -72,7 +72,12 @@ function compilerFor(fontSets) {
   for (const set of fontSets) {
     const dir = join(brandFontDir, set);
     if (!brandFontDir || !existsSync(dir)) throw new Error(`Unknown font set: ${set}`);
-    fontPaths.push(dir);
+    // A client whose fonts are variable can supply static instances in
+    // typst/ (see scripts/sync-brand-assets.sh). Use those alone: loading both
+    // would give Typst two fonts of one family, and it may pick the variable
+    // one, which it draws at a single weight.
+    const statics = join(dir, "typst");
+    fontPaths.push(existsSync(statics) ? statics : dir);
   }
   compiler = NodeCompiler.create({ workspace, fontArgs: fontPaths.length ? [{ fontPaths }] : [] });
   compiler.addSource(PRELUDE_PATH, PRELUDE);

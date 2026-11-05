@@ -95,8 +95,22 @@ for client_dir in "$BRAND_DIR"/*/; do
     cp -p "$f" "$dest"
   done
 
+  # Static instances for diagrams, if the client's fonts are variable: Typst
+  # doesn't support variable fonts, and draws only their default instance (a
+  # "bold" that isn't). brand/<client>/fonts/typst/*.{otf,ttf} go to the render
+  # images only — the Typst sidecar prefers them; WeasyPrint ignores them.
+  typst_files=("$fonts_dir"/typst/*.otf "$fonts_dir"/typst/*.ttf)
+  if [[ ${#typst_files[@]} -gt 0 ]]; then
+    mkdir -p "$STAGE/$client/typst"
+    for f in "${typst_files[@]}"; do
+      name="$(basename "$f")"
+      ext="$(echo "${name##*.}" | tr '[:upper:]' '[:lower:]')"
+      cp -p "$f" "$STAGE/$client/typst/${name%.*}.$ext"
+    done
+  fi
+
   clients+=("$client")
-  echo "  $client: ${#files[@]} font file(s)"
+  echo "  $client: ${#files[@]} font file(s)${typst_files:+, ${#typst_files[@]} static for diagrams}"
   synced=$((synced + ${#files[@]}))
 done
 
@@ -119,13 +133,13 @@ if [[ ${#clients[@]} -eq 0 ]]; then
   exit 0
 fi
 
-for dest in "$WEB_FONTS" "$PRINT_FONTS"; do
-  # --delete prunes fonts removed or renamed under brand/, and client
-  # directories that no longer exist there at all. .gitkeep is excluded so it
-  # survives: it is tracked, and the images' `COPY fonts/brand/` needs the directory
-  # to exist on a fresh clone.
-  rsync -a --delete --exclude=.gitkeep "$STAGE/" "$dest/"
-done
+# --delete prunes fonts removed or renamed under brand/, and client
+# directories that no longer exist there at all. .gitkeep is excluded so it
+# survives: it is tracked, and the images' `COPY fonts/brand/` needs the
+# directory to exist on a fresh clone. The web never serves the diagram-only
+# typst/ instances.
+rsync -a --delete --exclude=.gitkeep --exclude=typst/ "$STAGE/" "$WEB_FONTS/"
+rsync -a --delete --exclude=.gitkeep "$STAGE/" "$PRINT_FONTS/"
 
 echo
 echo "Synced $synced font file(s) across ${#clients[@]} client(s)."

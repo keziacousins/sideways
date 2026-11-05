@@ -179,8 +179,11 @@ DEPLOY_HOST=... ./scripts/deploy.sh --infra
   never committed. Keep the licence file alongside them.
 - **Diagrams** use a theme's fonts too: a space's Typst diagrams default to
   its theme's body, display and mono families. Typst reads only `.otf` and
-  `.ttf` (not `.woff2`/`.woff`), and only static fonts — a variable font may
-  render incorrectly. A client's fonts are available only to diagrams in
+  `.ttf` (not `.woff2`/`.woff`), and only static fonts: from a variable font
+  it draws just the default instance, so bold comes out regular. If a
+  client's fonts are variable, put static instances of the weights the theme
+  uses in `brand/<client>/fonts/typst/`; diagrams use those instead, and the
+  web and PDF never see them. A client's fonts are available only to diagrams in
   spaces whose theme uses them, never to other spaces. Typst draws the glyphs
   it uses into the diagram's SVG, which readers' browsers download, so check
   that a licensed face permits that kind of embedding as well as PDF.

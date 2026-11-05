@@ -32,6 +32,10 @@ RUN pip install --no-cache-dir weasyprint==70.0 flask==3.1.3
 COPY fonts/fonts.lock fonts/fetch-fonts.sh /tmp/fonts/
 RUN sh /tmp/fonts/fetch-fonts.sh print /usr/share/fonts/sideways && rm -rf /tmp/fonts
 COPY fonts/brand/ /usr/share/fonts/custom/
+# Each client's typst/ holds static instances for the diagram sidecar only.
+# fontconfig would otherwise see two fonts per family and might typeset PDFs
+# with the other one.
+RUN rm -rf /usr/share/fonts/custom/*/typst
 
 # Register all fonts with fontconfig
 RUN fc-cache -f -v
