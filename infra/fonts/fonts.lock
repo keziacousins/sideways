@@ -10,7 +10,8 @@
 #          PDF typesetting does not move when this file changes.
 #   typst  The Typst diagram sidecar. Static instances, because Typst does not
 #          support variable fonts ("may render incorrectly"). Family names as
-#          Typst sees them: "Inter", "Fira Code", "Newsreader 16pt".
+#          Typst sees them: "Inter", "Fira Code", "Newsreader 16pt",
+#          "EB Garamond", "Oswald".
 #
 # The web app does not read this file: it bundles the same families from the
 # @fontsource-variable packages. Typst draws text as glyph outlines, so a
@@ -45,6 +46,19 @@ typst  newsreader/Newsreader16pt-Italic.ttf           292646cbb948153511e308fa80
 typst  newsreader/Newsreader16pt-SemiBold.ttf         9e29bad1d5022c1a3d1822469a62dc9fa66cc41ba553f352530f867f84ba1c8f  https://raw.githubusercontent.com/productiontype/Newsreader/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155/fonts/static/ttf/Newsreader16pt-SemiBold.ttf
 typst  newsreader/Newsreader16pt-Bold.ttf             9e3d485293bb2f86d22f1a9bfb8d7213cff188270fa240b5084e27290746aea7  https://raw.githubusercontent.com/productiontype/Newsreader/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155/fonts/static/ttf/Newsreader16pt-Bold.ttf
 typst  newsreader/Newsreader16pt-BoldItalic.ttf       1bd178872241f5d0e02e9ee3e66e11c4aa76ff9d7614d2e47ccb7b42a3938361  https://raw.githubusercontent.com/productiontype/Newsreader/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155/fonts/static/ttf/Newsreader16pt-BoldItalic.ttf
+
+# Static instances of the other built-in families themes may name (the
+# print entries above ship them variable), from their upstream repositories.
+typst  eb-garamond/EBGaramond-Regular.ttf             2028dc06d3c130b4761693481436a32a8e35ed500bf58c25c53de004106125b8  https://raw.githubusercontent.com/octaviopardo/EBGaramond12/106a4a6d377987459ae5e68673a4570f13b957fb/fonts/ttf/EBGaramond-Regular.ttf
+typst  eb-garamond/EBGaramond-Italic.ttf              d4ad1d0a9390d26d6d3f176117a1d121441edb8c8632bfca52cfad084b9059cb  https://raw.githubusercontent.com/octaviopardo/EBGaramond12/106a4a6d377987459ae5e68673a4570f13b957fb/fonts/ttf/EBGaramond-Italic.ttf
+typst  eb-garamond/EBGaramond-Medium.ttf              57f9e2a5881ac1a3a7bf02935ceb604ba0ca21961fb161d7a535bae4f74a52b1  https://raw.githubusercontent.com/octaviopardo/EBGaramond12/106a4a6d377987459ae5e68673a4570f13b957fb/fonts/ttf/EBGaramond-Medium.ttf
+typst  eb-garamond/EBGaramond-SemiBold.ttf            ebf827a102983972abb2a1a3964afd5a7b79ca04f2ddd9e53917ce623cefdf2c  https://raw.githubusercontent.com/octaviopardo/EBGaramond12/106a4a6d377987459ae5e68673a4570f13b957fb/fonts/ttf/EBGaramond-SemiBold.ttf
+typst  eb-garamond/EBGaramond-Bold.ttf                0cfed122e51e3fd44ccedaef7637efed6d5bdc4ad89a6117d70241510309a186  https://raw.githubusercontent.com/octaviopardo/EBGaramond12/106a4a6d377987459ae5e68673a4570f13b957fb/fonts/ttf/EBGaramond-Bold.ttf
+typst  eb-garamond/EBGaramond-BoldItalic.ttf          3437cf76a720b01580218614e7f0ce9d66035a075c34a98394cec9a888cf38d6  https://raw.githubusercontent.com/octaviopardo/EBGaramond12/106a4a6d377987459ae5e68673a4570f13b957fb/fonts/ttf/EBGaramond-BoldItalic.ttf
+typst  oswald/Oswald-Regular.ttf                      0d9980da817ee71ad9c34bb46950fcf15dd53e928031f39d2e11ae19178ab826  https://raw.githubusercontent.com/googlefonts/OswaldFont/89795261ac9eeb9aa8cd99f43982c4e4b0e53261/fonts/ttf/Oswald-Regular.ttf
+typst  oswald/Oswald-Medium.ttf                       d8b3ac8668c6ddbcecd299567e2130e2b933ad8b6c98b5b8ac6ff2bee9c0848a  https://raw.githubusercontent.com/googlefonts/OswaldFont/89795261ac9eeb9aa8cd99f43982c4e4b0e53261/fonts/ttf/Oswald-Medium.ttf
+typst  oswald/Oswald-SemiBold.ttf                     8c5e61737c100d0a1ca87a9a1608afc53246b8a77f8d73c56b03406adc2d9282  https://raw.githubusercontent.com/googlefonts/OswaldFont/89795261ac9eeb9aa8cd99f43982c4e4b0e53261/fonts/ttf/Oswald-SemiBold.ttf
+typst  oswald/Oswald-Bold.ttf                         eb7d46f856dd57f18a8c03d033c57802692bf127f01dbd95ba8984338e6b5135  https://raw.githubusercontent.com/googlefonts/OswaldFont/89795261ac9eeb9aa8cd99f43982c4e4b0e53261/fonts/ttf/Oswald-Bold.ttf
 
 # A stand-in brand font for infra/typst's tests: a family no consumer above
 # installs, so a test can tell whether a diagram could reach it.

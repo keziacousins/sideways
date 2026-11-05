@@ -35,7 +35,11 @@ import { createLimiter } from "./limiter.js";
  * source changes: infra/typst/prelude.typ, the vendored package versions, the
  * fonts in the image, or the Typst compiler itself.
  */
-export const PRELUDE_VERSION = "p2";
+//
+// p2: default fonts Inter / Newsreader / Fira Code; theme fonts.
+// p3: static EB Garamond and Oswald; clients' static typst/ instances.
+// Also part of the rendered-HTML cache key (routes/documents.ts).
+export const PRELUDE_VERSION = "p3";
 
 /** The sidecar's own deadline is 8s; allow for queueing and transfer. */
 const RENDER_TIMEOUT_MS = 10_000;

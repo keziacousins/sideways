@@ -637,6 +637,16 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     max-width: 100%;
     height: auto;
   }
+  /* A diagram is drawn for paper: transparent background, dark strokes and
+     text by default. On the dark page those vanish, so in dark mode it sits on
+     a light plate. A stopgap until diagrams render with the page's own colours
+     (see issue #117); light mode needs nothing. */
+  .sw-doc-content figure.typst-diagram {
+    background: #fff;
+  }
+  [data-theme="light"] .sw-doc-content figure.typst-diagram {
+    background: transparent;
+  }
   .sw-doc-content .typst-error {
     margin: -1.4em 0 1.8em;
     font-family: var(--sw-font-mono);

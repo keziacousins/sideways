@@ -30,7 +30,7 @@ import { notifyWatchers, notifySpaceWatchers } from "../lib/notify.js";
 import { recordEvents, type EventInput } from "../lib/activity.js";
 import { loadWikiLinkContext } from "../lib/wikilinks-context.js";
 import { createMermaidRenderer } from "../lib/mermaid.js";
-import { createTypstRenderer, themeFontContext, typstFontContext } from "../lib/typst.js";
+import { createTypstRenderer, PRELUDE_VERSION, themeFontContext, typstFontContext } from "../lib/typst.js";
 import { createAssetInliner } from "../lib/assets.js";
 import {
   resolveSection,
@@ -412,7 +412,9 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
       versionDate: latestVersion.createdAt,
     };
 
-    const cacheKey = `/rendered/${doc.id}/${RENDERER_VERSION}-${latestVersion.contentHash}.html`;
+    // PRELUDE_VERSION too: cached HTML holds Typst diagram URLs, whose keys
+    // change when the prelude or the image's fonts do.
+    const cacheKey = `/rendered/${doc.id}/${RENDERER_VERSION}-${PRELUDE_VERSION}-${latestVersion.contentHash}.html`;
     if (latestVersion.renderedKey === cacheKey) {
       try {
         const cached = await storage.download(latestVersion.renderedKey);
