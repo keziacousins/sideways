@@ -260,3 +260,59 @@ describe("diagram assets", () => {
     expect(requests).toEqual([]);
   });
 });
+
+describe("review follow-ups", () => {
+  it("caches a diagram the sidecar killed at its deadline, as the diagram's fault", async () => {
+    replies.push({ status: 504, body: { error: "Diagram render exceeded 8000ms" } });
+    const renderer = lib.createTypstRenderer({ kind: "inline" });
+    await expect(renderer.render("x")).rejects.toThrow(/exceeded 8000ms/);
+    expect(renderer.transientFailure).toBe(false);
+    expect(renderer.cacheable).toBe(true);
+  });
+
+  it("treats the sidecar refusing a request as the diagram's fault", async () => {
+    replies.push({ status: 400, body: { error: "At most 50 assets per diagram" } });
+    const renderer = lib.createTypstRenderer({ kind: "inline" });
+    await expect(renderer.render("x")).rejects.toThrow(/At most 50 assets/);
+    expect(renderer.cacheable).toBe(true);
+  });
+
+  it("shows a diagram drawn without missing brand fonts, but neither stores it nor lets the page be cached", async () => {
+    replies.push({ status: 200, body: { svg: SVG, missingFontSets: ["client-a"], warnings: [{ message: "font set not installed" }] } });
+    const { storage, files } = memoryStorage();
+    const renderer = lib.createTypstRenderer({ kind: "store", storage, spaceId: "s", spaceSlug: "s" });
+    const diagram = await renderer.render("x");
+    expect(diagram.src).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(files.size).toBe(0);
+    expect(renderer.cacheable).toBe(false);
+  });
+
+  it("gives stored diagrams no dimensions, fresh or reused, so the HTML doesn't depend on render order", async () => {
+    const { storage } = memoryStorage();
+    const mode = { kind: "store" as const, storage, spaceId: "s", spaceSlug: "s" };
+    replies.push(ok());
+    const fresh = await lib.createTypstRenderer(mode).render("x");
+    const reused = await lib.createTypstRenderer(mode).render("x");
+    expect(fresh).toEqual(reused);
+    expect(fresh.width).toBeUndefined();
+  });
+
+  it("reads an image once per document render, however many diagrams show it", async () => {
+    let loads = 0;
+    const doc = {
+      docPath: "doc.md",
+      findAsset: async () => ({ contentHash: "h", load: async () => (loads++, Buffer.from("logo")) }),
+    };
+    const renderer = lib.createTypstRenderer({ kind: "inline" }, lib.NO_THEME_FONTS, doc);
+    replies.push(ok(), ok(), ok());
+    await Promise.all(['#image("logo.png") 1', '#image("logo.png") 2', '#image("logo.png") 3'].map((d) => renderer.render(d)));
+    expect(loads).toBe(1);
+    expect(requests.every((r) => r.assets?.length === 1)).toBe(true);
+  });
+
+  it("digests a font context stably, and differently for different fonts", () => {
+    const a = lib.typstFontContext({ fonts: { body: "Inter" } });
+    expect(lib.fontContextKey(a)).toBe(lib.fontContextKey(lib.typstFontContext({ fonts: { body: "Inter" } })));
+    expect(lib.fontContextKey(a)).not.toBe(lib.fontContextKey(lib.NO_THEME_FONTS));
+  });
+});

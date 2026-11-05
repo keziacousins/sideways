@@ -4,7 +4,6 @@ import { type Database, themes } from "@sideways/db";
 import type { Storage } from "@sideways/storage";
 import { requireAuth, type AuthUser } from "../middleware/auth.js";
 import { validateLogoUpload } from "../middleware/themeLogo.js";
-import { bustThemeRenderCache } from "../lib/doc-resolver.js";
 
 const MAX_NAME_LENGTH = 100;
 
@@ -96,9 +95,6 @@ export function createThemeRoutes(db: Database, storage: Storage) {
       .where(eq(themes.id, existing.id))
       .returning();
 
-    // The theme's fonts are baked into its spaces' cached diagram renders.
-    if (body.tokens) await bustThemeRenderCache(db, existing.id);
-
     return c.json(updated);
   });
 
@@ -114,9 +110,6 @@ export function createThemeRoutes(db: Database, storage: Storage) {
       return c.json({ error: "Forbidden" }, 403);
     }
 
-    // Before the delete, while the spaces still point at it: they fall back to
-    // the default fonts, so their cached diagram renders are stale.
-    await bustThemeRenderCache(db, existing.id);
     await db.delete(themes).where(eq(themes.id, existing.id));
     return c.json({ deleted: true });
   });

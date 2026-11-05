@@ -317,13 +317,18 @@ function validate(payload) {
     if (typeof asset.data !== "string") throw new BadRequestError(`Asset ${asset.path} has no data`);
   }
   // Brand font directories to make available, as derived by the API from the
-  // space's theme. Named, never pathed, and they must exist.
-  const fontSets = payload.fontSets ?? [];
-  if (!Array.isArray(fontSets) || fontSets.length > MAX_FONT_SETS) throw new BadRequestError(`At most ${MAX_FONT_SETS} font sets`);
-  for (const set of fontSets) {
+  // space's theme. Named, never pathed. One this image doesn't have (a theme
+  // synced to the web before the image was rebuilt) is left out rather than
+  // failing every diagram in the space: the diagram is drawn in the default
+  // fonts, and the response says which sets were missing so the caller can
+  // decline to cache a render that will look different once they're installed.
+  const requested = payload.fontSets ?? [];
+  if (!Array.isArray(requested) || requested.length > MAX_FONT_SETS) throw new BadRequestError(`At most ${MAX_FONT_SETS} font sets`);
+  for (const set of requested) {
     if (typeof set !== "string" || !FONT_SET_RE.test(set)) throw new BadRequestError(`Invalid font set: ${set}`);
-    if (!existsSync(join(BRAND_FONT_DIR, set))) throw new BadRequestError(`Unknown font set: ${set}`);
   }
+  const fontSets = requested.filter((set) => existsSync(join(BRAND_FONT_DIR, set)));
+  const missingFontSets = requested.filter((set) => !fontSets.includes(set));
 
   // The theme's font names, read by the prelude from sys.inputs. Only the
   // keys it knows, and plain one-line names.
@@ -334,11 +339,12 @@ function validate(payload) {
     if (typeof value !== "string" || value.length > 100 || /[\r\n]/.test(value)) throw new BadRequestError(`Invalid value for ${key}`);
   }
 
-  return { source, mainDir, assets, fontSets: [...fontSets].sort(), inputs };
+  return { source, mainDir, assets, fontSets: [...fontSets].sort(), missingFontSets, inputs };
 }
 
 /**
- * POST /render — { source, mainDir?, assets?, fontSets?, inputs? } -> { svg, width, height, warnings }
+ * POST /render — { source, mainDir?, assets?, fontSets?, inputs? }
+ *               -> { svg, width, height, warnings, missingFontSets }
  *
  *   mainDir   the document's directory within its section ("" at the top)
  *   assets    [{ path, data }] — files the diagram can read, at their
@@ -367,7 +373,11 @@ async function handleRender(req, res) {
     if (Buffer.byteLength(svg) > MAX_SVG_BYTES) {
       return sendJson(res, 422, { error: `Rendered diagram exceeds ${MAX_SVG_BYTES} bytes`, diagnostics: [] });
     }
-    sendJson(res, 200, { svg, width, height, warnings });
+    const { missingFontSets } = job;
+    for (const set of missingFontSets) {
+      warnings.unshift({ message: `font set not installed in the renderer: ${set}; drawn in the default fonts` });
+    }
+    sendJson(res, 200, { svg, width, height, warnings, missingFontSets });
   } catch (e) {
     if (e instanceof DiagramError) sendJson(res, 422, { error: e.message, diagnostics: e.diagnostics });
     else if (e instanceof OverloadedError) sendJson(res, 503, { error: e.message });

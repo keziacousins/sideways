@@ -134,11 +134,28 @@ test("makes the theme's body font the diagram's default", async () => {
   assert.notEqual(themed.body.svg, plain.body.svg);
 });
 
-test("rejects font sets that don't exist or try to leave the brand directory", async () => {
-  for (const fontSets of [["nope"], ["../client-a"], ["client-a/.."]]) {
+test("rejects font set names that try to leave the brand directory", async () => {
+  for (const fontSets of [["../client-a"], ["client-a/.."], ["a/b"]]) {
     const { status } = await render({ source: "Hello", fontSets });
     assert.equal(status, 400, JSON.stringify(fontSets));
   }
+});
+
+test("draws in the default fonts when a font set isn't installed, and says so", async () => {
+  const { status, body } = await render({ source: "Hello", fontSets: ["client-a", "not-installed"] });
+  assert.equal(status, 200);
+  assert.deepEqual(body.missingFontSets, ["not-installed"]);
+  assert.match(body.warnings[0].message, /font set not installed in the renderer: not-installed/);
+});
+
+test("leaves no trace of one diagram's source for the next", async () => {
+  // Two spaces share a compiler when they share a font set. Paths are
+  // section-relative, so the second could name the first's main file.
+  const first = await render({ source: "// SECRET-FROM-SPACE-A\nhello", mainDir: "guides" });
+  assert.equal(first.status, 200);
+  const second = await render({ source: '#read("/guides/__diagram__.typ")' });
+  assert.equal(second.status, 422, "read the previous diagram's source");
+  assert.match(second.body.error, /not found/);
 });
 
 test("rejects inputs the prelude doesn't read", async () => {

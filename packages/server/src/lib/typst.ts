@@ -139,6 +139,8 @@ interface Rendered {
   width?: number;
   height?: number;
   warnings: SidecarDiagnostic[];
+  /** Brand font sets the sidecar doesn't have; it drew in the defaults instead. */
+  missingFontSets: string[];
 }
 
 /** One of the space's hosted files, as a diagram reads it. */
@@ -214,12 +216,31 @@ async function renderOne(
     error?: string;
     diagnostics?: SidecarDiagnostic[];
     warnings?: SidecarDiagnostic[];
+    missingFontSets?: string[];
   };
-  if (res.status === 422) throw new DiagramError(formatDiagnostics(body.error ?? "Diagram failed to compile", body.diagnostics));
+  // The diagram's own doing, and the same every time, so safe to cache:
+  //   422 — didn't compile, or blew the memory ceiling or output size;
+  //   504 — the sidecar killed it at its deadline (a slow compile, not a busy
+  //         sidecar: queueing time doesn't count);
+  //   400/413 — too many or too-large assets, oversized source.
+  // Treating these as transient would re-send an endless loop on every page
+  // view, holding a worker for the full deadline each time.
+  if (DETERMINISTIC_STATUSES.has(res.status)) {
+    throw new DiagramError(formatDiagnostics(body.error ?? "Diagram failed to compile", body.diagnostics));
+  }
+  // Busy (503), or something wrong on our side: worth trying again later.
   if (!res.ok) throw new Error(`Typst render failed (${res.status}): ${body.error ?? "unknown error"}`);
   if (!body.svg) throw new Error("Typst service returned no SVG");
-  return { svg: body.svg, width: body.width, height: body.height, warnings: body.warnings ?? [] };
+  return {
+    svg: body.svg,
+    width: body.width,
+    height: body.height,
+    warnings: body.warnings ?? [],
+    missingFontSets: body.missingFontSets ?? [],
+  };
 }
+
+const DETERMINISTIC_STATUSES = new Set([400, 413, 422, 504]);
 
 function px(pt: number | undefined): number | undefined {
   return pt ? pt * PX_PER_PT : undefined;
@@ -237,6 +258,16 @@ export function diagramKey(
 ): string {
   const context = JSON.stringify([fonts.fontSets, Object.entries(fonts.inputs).sort(), [...assets].sort()]);
   return createHash("sha256").update(`${PRELUDE_VERSION}\0${context}\0${source}`).digest("hex");
+}
+
+/**
+ * A short, stable digest of a font context, for keys that must change when a
+ * space's fonts do — the rendered-HTML cache key in particular, so a theme
+ * change can't be raced by a render that was in flight when it happened.
+ */
+export function fontContextKey(fonts: TypstFontContext): string {
+  const context = JSON.stringify([fonts.fontSets, Object.entries(fonts.inputs).sort()]);
+  return createHash("sha256").update(context).digest("hex").slice(0, 16);
 }
 
 /** Where a stored diagram lives, per space so access follows the space's. */
@@ -258,6 +289,12 @@ export interface TypstRenderer {
   /** True once any diagram failed for a reason that isn't the diagram's. */
   readonly transientFailure: boolean;
   /**
+   * False if the HTML these renders went into shouldn't be cached: a diagram
+   * failed transiently, or was drawn without fonts the renderer didn't have
+   * yet. Either would be served long after it was put right.
+   */
+  readonly cacheable: boolean;
+  /**
    * The compiler's warnings for diagrams rendered here (e.g. a font family it
    * couldn't find), formatted like errors. Not shown in the document; for
    * tools that preview a diagram for its author.
@@ -278,7 +315,11 @@ export function createTypstRenderer(
   const deadline = Date.now() + DOC_BUDGET_MS;
   let requested = 0;
   let transientFailure = false;
+  let degraded = false;
   const warnings: string[] = [];
+  // Each distinct file is read once per document render, however many of its
+  // diagrams show it: content hash -> base64, as the sidecar wants it.
+  const loadedAssets = new Map<string, Promise<{ data: string; bytes: number }>>();
 
   // The document's directory within its section, where the diagram "lives".
   const mainDir = doc ? posix.dirname(doc.docPath).replace(/^\.$/, "") : "";
@@ -291,25 +332,39 @@ export function createTypstRenderer(
     return found.filter((entry): entry is [string, TypstAsset] => entry[1] !== null);
   }
 
+  function loadAsset(asset: TypstAsset) {
+    let loaded = loadedAssets.get(asset.contentHash);
+    if (!loaded) {
+      loaded = asset.load().then((bytes) => ({ data: bytes.toString("base64"), bytes: bytes.length }));
+      loadedAssets.set(asset.contentHash, loaded);
+    }
+    return loaded;
+  }
+
   async function loadAssets(assets: Array<[string, TypstAsset]>): Promise<SidecarAsset[]> {
-    const loaded = await Promise.all(assets.map(async ([path, asset]) => [path, await asset.load()] as const));
-    const total = loaded.reduce((sum, [, bytes]) => sum + bytes.length, 0);
+    const loaded = await Promise.all(assets.map(async ([path, asset]) => ({ path, ...(await loadAsset(asset)) })));
+    const total = loaded.reduce((sum, file) => sum + file.bytes, 0);
     if (total > MAX_DIAGRAM_ASSET_BYTES) {
       throw new DiagramError(`The diagram's images come to ${Math.round(total / 1024 / 1024)}MB; at most ${MAX_DIAGRAM_ASSET_BYTES / 1024 / 1024}MB per diagram`);
     }
-    return loaded.map(([path, bytes]) => ({ path, data: bytes.toString("base64") }));
+    return loaded.map(({ path, data }) => ({ path, data }));
   }
 
   async function compile(source: string, assets: Array<[string, TypstAsset]>): Promise<Rendered> {
-    const files = { mainDir, assets: await loadAssets(assets) };
     const rendered = await limit(async () => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error(`Typst render budget of ${DOC_BUDGET_MS}ms exhausted for this document`);
+      // Inside the limit: only the diagrams actually being sent hold their
+      // images in memory, not every diagram in the document at once.
+      const files = { mainDir, assets: await loadAssets(assets) };
       return renderOne(source, fonts, files, Math.min(RENDER_TIMEOUT_MS, remaining));
     });
     if (rendered.warnings.length) warnings.push(formatDiagnostics("", rendered.warnings));
+    if (rendered.missingFontSets.length) degraded = true;
     return rendered;
   }
+
+  const dataUri = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 
   async function render(source: string): Promise<TypstDiagram> {
     if (++requested > MAX_DIAGRAMS_PER_DOC) {
@@ -321,25 +376,25 @@ export function createTypstRenderer(
       const assets = await findAssets(source);
       if (mode.kind === "inline") {
         const { svg, width, height } = await compile(source, assets);
-        return {
-          src: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
-          width: px(width),
-          height: px(height),
-        };
+        return { src: dataUri(svg), width: px(width), height: px(height) };
       }
 
       const key = diagramKey(source, fonts, assets.map(([path, asset]) => [path, asset.contentHash]));
       const path = diagramStoragePath(mode.spaceId, key);
       const src = diagramUrl(mode.spaceSlug, key);
-      // Rendered before (this document or another in the space): reuse it. The
-      // image's natural size comes from the SVG itself, so the dimensions only
-      // ride along when we have them to hand.
+      // Rendered before (this document or another in the space): reuse it.
+      // Stored diagrams never carry width/height — the image's natural size
+      // comes from the SVG itself — so the HTML is the same whichever of a
+      // fresh render or a reused one got there first.
       if (await mode.storage.exists(path)) return { src };
 
-      const { svg, width, height } = await compile(source, assets);
+      const { svg, missingFontSets } = await compile(source, assets);
+      // Drawn without some of the theme's fonts, which the renderer lacks for
+      // now: show it, but don't store it under a key that means "with them".
+      if (missingFontSets.length) return { src: dataUri(svg) };
       // Awaited, not fire-and-forget: the HTML about to be cached points here.
       await mode.storage.upload(path, Buffer.from(svg), "image/svg+xml");
-      return { src, width: px(width), height: px(height) };
+      return { src };
     } catch (e) {
       if (!(e instanceof DiagramError)) transientFailure = true;
       throw e;
@@ -350,6 +405,9 @@ export function createTypstRenderer(
     render,
     get transientFailure() {
       return transientFailure;
+    },
+    get cacheable() {
+      return !transientFailure && !degraded;
     },
     warnings,
   };

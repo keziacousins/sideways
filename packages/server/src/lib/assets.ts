@@ -74,3 +74,21 @@ export function createAssetInliner(
     return pending;
   };
 }
+
+/**
+ * For responses that serve user-supplied bytes from our own origin (hosted
+ * assets, rendered diagrams): a direct visit must not be able to run anything —
+ * no scripts, no subresources, and an opaque origin. SVG is why this matters:
+ * inside `<img>` it is inert, but opened in its own tab it is a document, and
+ * can carry `<script>`.
+ */
+export const INERT_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+
+/** True if an `If-None-Match` header names this ETag (weak or strong). */
+export function etagMatches(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  return header
+    .split(",")
+    .map((t) => t.trim().replace(/^W\//, ""))
+    .some((t) => t === etag || t === "*");
+}

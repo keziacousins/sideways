@@ -5,6 +5,7 @@ import type { Storage } from "@sideways/storage";
 import type { AuthUser } from "../middleware/auth.js";
 import { canAccessSpace } from "../middleware/visibility.js";
 import { diagramStoragePath } from "../lib/typst.js";
+import { etagMatches, INERT_CSP } from "../lib/assets.js";
 
 /**
  * Rendered Typst diagrams (see lib/typst.ts), as the `<img>` in a rendered
@@ -14,9 +15,6 @@ import { diagramStoragePath } from "../lib/typst.js";
  * says, so a URL can't be enumerated short of knowing its source already.
  */
 
-// Same reasoning as for hosted assets (routes/assets.ts): inert inside <img>,
-// but opened in its own tab an SVG is a document, so give it nothing to run.
-const INERT_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 
 const DIAGRAM_FILE_RE = /^([0-9a-f]{64})\.svg$/;
 
@@ -44,7 +42,7 @@ export function createDiagramRoutes(db: Database, storage: Storage) {
       "Cache-Control": "private, max-age=31536000, immutable",
       ETag: `"${key}"`,
     };
-    if (c.req.header("If-None-Match")?.includes(`"${key}"`)) {
+    if (etagMatches(c.req.header("If-None-Match"), headers.ETag)) {
       return new Response(null, { status: 304, headers });
     }
 

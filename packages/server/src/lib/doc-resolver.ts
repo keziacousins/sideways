@@ -115,22 +115,23 @@ export async function bustWikiLinkRenderCache(
 }
 
 /**
- * Clear the rendered HTML cache for every space using a theme. Typst diagrams
- * are drawn in the theme's fonts and the cached HTML points at those renders,
- * so editing or deleting a theme leaves it showing the old type otherwise.
+ * Clear the rendered HTML cache for a space's documents that hold a Typst
+ * diagram. A diagram reads the space's images when it renders, so the cached
+ * HTML of a document that has one goes stale when an image is uploaded,
+ * replaced or deleted. Documents without diagrams point at their images by
+ * path and are left alone.
  */
-export async function bustThemeRenderCache(
+export async function bustTypstRenderCache(
   db: Database,
-  themeId: string,
+  spaceId: string,
 ): Promise<void> {
   await db.execute(sql`
     UPDATE document_versions
     SET rendered_key = NULL
     WHERE rendered_key IS NOT NULL
+      AND content LIKE ${"%```typst%"}
       AND document_id IN (
-        SELECT d.id FROM documents d
-        JOIN spaces s ON s.id = d.space_id
-        WHERE s.theme_id = ${themeId}
+        SELECT id FROM documents WHERE space_id = ${spaceId}
       )
   `);
 }
