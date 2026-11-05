@@ -27,6 +27,7 @@ sideways push
 ## Features
 
 - [[writing|Writing & Editing]] — markdown with GFM, math, syntax highlighting, wiki-links
+- [[typst-diagrams|Typst diagrams]] — precisely placed diagrams with icons and the space's fonts
 - [[cli-guide|CLI Guide]] — push, pull, sync documentation from your terminal
 - [[comments-guide|Comments & Review]] — inline comments, @mentions, notifications
 - [[search-guide|Search]] — full-text search across all your documentation
