@@ -451,6 +451,32 @@ body {
   font-family: "DejaVu Sans", sans-serif;
 }
 
+/* ── Typst diagrams (see issue #117) ─────────────────────────── */
+/* Server-rendered SVG in an <img> (a data: URI), laid out at the size it
+   was drawn: Typst works in points, so a diagram drawn 6in wide prints 6in
+   wide. Text is glyph outlines inside the SVG, so no font rule is needed. */
+.print-content figure.typst-diagram {
+  margin: 1.4em 0;
+  text-align: center;
+  page-break-inside: avoid;
+  page-break-before: avoid;
+}
+
+.print-content figure.typst-diagram img {
+  /* Overrides `.print-content img`'s margin; same shrink-only bounds as
+     mermaid's SVG above. */
+  margin: 0;
+  max-width: 100%;
+  height: auto;
+  max-height: 180mm;
+}
+
+.print-content .typst-error {
+  font-family: "DejaVu Sans Mono", monospace;
+  font-size: 8pt;
+  color: #b00020;
+}
+
 /* ── KaTeX ───────────────────────────────────────────────────── */
 .print-content .katex {
   color: #1a1a1a;

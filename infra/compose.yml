@@ -157,6 +157,23 @@ services:
     # accumulate as zombies under PID 1.
     init: true
 
+  # --- Typst (diagram rendering, web and PDF — see issue #117) ---
+  # Compiles ```typst diagram fences to SVG for both surfaces. Diagram source
+  # is a program, so each compile runs in a worker process with a deadline and
+  # a memory ceiling, and no network (see infra/typst/server.mjs).
+
+  typst:
+    build: ./typst
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5003:5003"
+    # Workers are killed and respawned on timeout; reap them.
+    init: true
+    # Backstop for the per-worker ceiling (MAX_RSS_MB, 512MB by default, two
+    # workers): a render that slips past the watchdog can't take the host
+    # down with it.
+    mem_limit: 1200m
+
   # --- Mail (dev only) ---
 
   # Commented out for now: mailhog/mailhog is published for amd64 only, so on

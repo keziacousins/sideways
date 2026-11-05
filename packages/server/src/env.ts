@@ -28,6 +28,10 @@ export const env = {
   // Only used on the PDF path — WeasyPrint has no JS runtime.
   mermaidUrl:
     process.env.MERMAID_URL || "http://localhost:5002",
+  // Sandboxed sidecar that compiles Typst + CeTZ diagrams to SVG (infra/typst).
+  // Used on both paths: Typst only ever renders on the server.
+  typstUrl:
+    process.env.TYPST_URL || "http://localhost:5003",
 
   /**
    * Required audience claim on JWT access tokens. The consent route forces

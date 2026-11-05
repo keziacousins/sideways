@@ -1,0 +1,17 @@
+{
+  "comment": "Typst packages vendored into the sidecar (see fetch-packages.mjs). Pinned by version and SHA-256 of the tarball from packages.typst.org. A diagram can import only these: the render workers have no network, so anything else fails to resolve. Adding one means adding its dependencies too (oxifmt is cetz's).",
+  "packages": [
+    {
+      "namespace": "preview",
+      "name": "cetz",
+      "version": "0.4.2",
+      "sha256": "e1d2f121b166f1520fc529cad834e2ca5e0b6bcab6816e1d0e07d70836aa0b59"
+    },
+    {
+      "namespace": "preview",
+      "name": "oxifmt",
+      "version": "1.0.0",
+      "sha256": "7d17a1fc8ad01740ec3cb2b03c7360a4225ff9318e5710765fa98ea6fd59594f"
+    }
+  ]
+}

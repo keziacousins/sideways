@@ -1,0 +1,16 @@
+{
+  "name": "sideways-typst",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Typst + CeTZ diagram renderer. Compiles diagram source to SVG in sandboxed, killable worker processes.",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "postinstall": "node fetch-packages.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@myriaddreamin/typst-ts-node-compiler": "0.7.0"
+  }
+}
