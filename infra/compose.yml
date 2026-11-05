@@ -136,7 +136,11 @@ services:
   # --- WeasyPrint (PDF rendering) ---
 
   weasyprint:
-    build: ./weasyprint
+    # Built from infra/ so it can reach the shared font tree (infra/fonts/);
+    # infra/.dockerignore keeps everything else, .env included, out.
+    build:
+      context: .
+      dockerfile: weasyprint/Dockerfile
     restart: unless-stopped
     ports:
       - "127.0.0.1:5001:5001"
@@ -163,7 +167,10 @@ services:
   # a memory ceiling, and no network (see infra/typst/server.mjs).
 
   typst:
-    build: ./typst
+    # Built from infra/ for the shared font tree, like weasyprint.
+    build:
+      context: .
+      dockerfile: typst/Dockerfile
     restart: unless-stopped
     ports:
       - "127.0.0.1:5003:5003"

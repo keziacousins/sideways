@@ -6,7 +6,7 @@ import type { Storage } from "@sideways/storage";
 // A stand-in for the infra/typst sidecar: answers whatever the test queues.
 type Reply = { status: number; body: unknown };
 let replies: Reply[] = [];
-let requests: Array<{ source: string }> = [];
+let requests: Array<{ source: string; fontSets?: string[]; inputs?: Record<string, string> }> = [];
 let sidecar: Server;
 let lib: typeof import("../lib/typst.js");
 
@@ -78,7 +78,7 @@ describe("createTypstRenderer — inline", () => {
     expect(diagram.src).toBe(`data:image/svg+xml;base64,${Buffer.from(SVG).toString("base64")}`);
     expect(diagram.width).toBeCloseTo(96);
     expect(diagram.height).toBeCloseTo(48);
-    expect(requests).toEqual([{ source: "#canvas({})" }]);
+    expect(requests).toEqual([{ source: "#canvas({})", fontSets: [], inputs: {} }]);
   });
 });
 
@@ -146,5 +146,49 @@ describe("createTypstRenderer — failures", () => {
     await Promise.all(Array.from({ length: 50 }, () => renderer.render("x")));
     await expect(renderer.render("x")).rejects.toThrow(/Too many Typst diagrams/);
     expect(renderer.transientFailure).toBe(false);
+  });
+});
+
+describe("theme fonts", () => {
+  const tokens = {
+    fonts: {
+      body: "Proxima Nova",
+      display: "Proxima Nova",
+      custom: [
+        { family: "Proxima Nova", weight: "400", src: "/fonts/client-a/regular.otf" },
+        { family: "Proxima Nova", weight: "700", src: "/fonts/client-a/bold.otf" },
+        { family: "Other", src: "/fonts/client-b/other.otf" },
+        { family: "Remote", src: "https://example.com/font.woff2" },
+      ],
+    },
+  };
+
+  it("derives the brand font sets and default families from the tokens", () => {
+    expect(lib.typstFontContext(tokens)).toEqual({
+      fontSets: ["client-a", "client-b"],
+      inputs: { "font-body": "Proxima Nova", "font-display": "Proxima Nova" },
+    });
+  });
+
+  it("ignores names that aren't plain font names, and themes without fonts", () => {
+    expect(lib.typstFontContext({ fonts: { body: 'X", "Y' } })).toEqual(lib.NO_THEME_FONTS);
+    expect(lib.typstFontContext({ fonts: { custom: [{ src: "/fonts/../etc/x.otf" }] } })).toEqual(lib.NO_THEME_FONTS);
+    expect(lib.typstFontContext(null)).toEqual(lib.NO_THEME_FONTS);
+    expect(lib.typstFontContext({})).toEqual(lib.NO_THEME_FONTS);
+  });
+
+  it("sends the context with the render, and keys stored diagrams by it", async () => {
+    const fonts = lib.typstFontContext(tokens);
+    replies.push(ok());
+    await lib.createTypstRenderer({ kind: "inline" }, fonts).render("x");
+    expect(requests[0]).toEqual({ source: "x", fontSets: fonts.fontSets, inputs: fonts.inputs });
+    expect(lib.diagramKey("x", fonts)).not.toBe(lib.diagramKey("x"));
+  });
+
+  it("collects the compiler's warnings for the author", async () => {
+    replies.push({ status: 200, body: { svg: SVG, warnings: [{ message: "unknown font family: nope", line: 1, column: 1 }] } });
+    const renderer = lib.createTypstRenderer({ kind: "inline" });
+    await renderer.render("x");
+    expect(renderer.warnings).toEqual(["line 1, column 1: unknown font family: nope"]);
   });
 });

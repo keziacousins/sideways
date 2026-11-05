@@ -115,6 +115,27 @@ export async function bustWikiLinkRenderCache(
 }
 
 /**
+ * Clear the rendered HTML cache for every space using a theme. Typst diagrams
+ * are drawn in the theme's fonts and the cached HTML points at those renders,
+ * so editing or deleting a theme leaves it showing the old type otherwise.
+ */
+export async function bustThemeRenderCache(
+  db: Database,
+  themeId: string,
+): Promise<void> {
+  await db.execute(sql`
+    UPDATE document_versions
+    SET rendered_key = NULL
+    WHERE rendered_key IS NOT NULL
+      AND document_id IN (
+        SELECT d.id FROM documents d
+        JOIN spaces s ON s.id = d.space_id
+        WHERE s.theme_id = ${themeId}
+      )
+  `);
+}
+
+/**
  * Convert a stored path (e.g. "architecture/overview.md") into the URL-path
  * form (e.g. "architecture/overview") used by action routes' `:path{.+}`
  * parameter. Strips `.md`; collapses `<x>/index.md` to `<x>`; collapses

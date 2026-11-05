@@ -21,8 +21,11 @@
  */
 
 import { createHash } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { type Database, themes } from "@sideways/db";
 import type { Storage } from "@sideways/storage";
 import type { TypstDiagram } from "@sideways/markdown";
+import { isValidFont } from "@sideways/theme";
 import { env } from "../env.js";
 import { logger } from "../logger.js";
 import { createLimiter } from "./limiter.js";
@@ -32,7 +35,7 @@ import { createLimiter } from "./limiter.js";
  * source changes: infra/typst/prelude.typ, the vendored package versions, the
  * fonts in the image, or the Typst compiler itself.
  */
-export const PRELUDE_VERSION = "p1";
+export const PRELUDE_VERSION = "p2";
 
 /** The sidecar's own deadline is 8s; allow for queueing and transfer. */
 const RENDER_TIMEOUT_MS = 10_000;
@@ -43,6 +46,57 @@ const MAX_CONCURRENT = 2;
 
 /** CSS px per pt: the sidecar reports Typst's page size in points. */
 const PX_PER_PT = 4 / 3;
+
+/**
+ * The fonts a space's diagrams are drawn with, from its theme. Sent with every
+ * render and part of every stored diagram's key: the same source draws
+ * differently in a space with different type.
+ *
+ *   - fontSets: the brand font directories (by client name) the theme's own
+ *     fonts come from. The sidecar gives a diagram those and the defaults,
+ *     nothing else, so one client's licensed face can't be named into a
+ *     diagram in another space.
+ *   - inputs: the theme's body, display and mono families, which the prelude
+ *     makes the diagram's defaults.
+ */
+export interface TypstFontContext {
+  fontSets: string[];
+  inputs: Record<string, string>;
+}
+
+export const NO_THEME_FONTS: TypstFontContext = { fontSets: [], inputs: {} };
+
+// A theme's custom fonts are served from /fonts/<client>/<file> (see
+// scripts/sync-brand-assets.sh), and the same <client> names the directory the
+// sidecar holds them in.
+const BRAND_FONT_SRC_RE = /^\/fonts\/([A-Za-z0-9][A-Za-z0-9._-]*)\//;
+
+/** The font context for a theme's tokens; tolerant of whatever is stored. */
+export function typstFontContext(tokens: unknown): TypstFontContext {
+  const fonts = (tokens as { fonts?: Record<string, unknown> } | null | undefined)?.fonts;
+  if (!fonts || typeof fonts !== "object") return NO_THEME_FONTS;
+
+  const fontSets = new Set<string>();
+  for (const custom of Array.isArray(fonts.custom) ? fonts.custom : []) {
+    const match = typeof custom?.src === "string" ? BRAND_FONT_SRC_RE.exec(custom.src) : null;
+    if (match) fontSets.add(match[1]);
+  }
+
+  const inputs: Record<string, string> = {};
+  for (const [token, input] of [["body", "font-body"], ["display", "font-display"], ["mono", "font-mono"]] as const) {
+    const family = fonts[token];
+    if (typeof family === "string" && isValidFont(family.trim())) inputs[input] = family.trim();
+  }
+
+  return { fontSets: [...fontSets].sort(), inputs };
+}
+
+/** The font context for a space with this theme (or none). */
+export async function themeFontContext(db: Database, themeId: string | null | undefined): Promise<TypstFontContext> {
+  if (!themeId) return NO_THEME_FONTS;
+  const row = await db.query.themes.findFirst({ where: eq(themes.id, themeId), columns: { tokens: true } });
+  return typstFontContext(row?.tokens);
+}
 
 interface SidecarDiagnostic {
   message: string;
@@ -75,15 +129,16 @@ interface Rendered {
   svg: string;
   width?: number;
   height?: number;
+  warnings: SidecarDiagnostic[];
 }
 
-async function renderOne(source: string, timeoutMs: number): Promise<Rendered> {
+async function renderOne(source: string, fonts: TypstFontContext, timeoutMs: number): Promise<Rendered> {
   let res: Response;
   try {
     res = await fetch(`${env.typstUrl}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source }),
+      body: JSON.stringify({ source, fontSets: fonts.fontSets, inputs: fonts.inputs }),
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (e: any) {
@@ -100,11 +155,12 @@ async function renderOne(source: string, timeoutMs: number): Promise<Rendered> {
     height?: number;
     error?: string;
     diagnostics?: SidecarDiagnostic[];
+    warnings?: SidecarDiagnostic[];
   };
   if (res.status === 422) throw new DiagramError(formatDiagnostics(body.error ?? "Diagram failed to compile", body.diagnostics));
   if (!res.ok) throw new Error(`Typst render failed (${res.status}): ${body.error ?? "unknown error"}`);
   if (!body.svg) throw new Error("Typst service returned no SVG");
-  return { svg: body.svg, width: body.width, height: body.height };
+  return { svg: body.svg, width: body.width, height: body.height, warnings: body.warnings ?? [] };
 }
 
 function px(pt: number | undefined): number | undefined {
@@ -112,8 +168,9 @@ function px(pt: number | undefined): number | undefined {
 }
 
 /** Content address of a diagram: what it says, and what it was rendered with. */
-export function diagramKey(source: string): string {
-  return createHash("sha256").update(`${PRELUDE_VERSION}\0${source}`).digest("hex");
+export function diagramKey(source: string, fonts: TypstFontContext = NO_THEME_FONTS): string {
+  const context = JSON.stringify([fonts.fontSets, Object.entries(fonts.inputs).sort()]);
+  return createHash("sha256").update(`${PRELUDE_VERSION}\0${context}\0${source}`).digest("hex");
 }
 
 /** Where a stored diagram lives, per space so access follows the space's. */
@@ -134,24 +191,36 @@ export interface TypstRenderer {
   render: (source: string) => Promise<TypstDiagram>;
   /** True once any diagram failed for a reason that isn't the diagram's. */
   readonly transientFailure: boolean;
+  /**
+   * The compiler's warnings for diagrams rendered here (e.g. a font family it
+   * couldn't find), formatted like errors. Not shown in the document; for
+   * tools that preview a diagram for its author.
+   */
+  readonly warnings: string[];
 }
 
 /**
  * A renderer scoped to one document render: a diagram cap, one shared
  * deadline and a small concurrency limit, as for mermaid.
  */
-export function createTypstRenderer(mode: TypstRendererMode): TypstRenderer {
+export function createTypstRenderer(
+  mode: TypstRendererMode,
+  fonts: TypstFontContext = NO_THEME_FONTS,
+): TypstRenderer {
   const limit = createLimiter(MAX_CONCURRENT);
   const deadline = Date.now() + DOC_BUDGET_MS;
   let requested = 0;
   let transientFailure = false;
+  const warnings: string[] = [];
 
   async function compile(source: string): Promise<Rendered> {
-    return limit(async () => {
+    const rendered = await limit(async () => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error(`Typst render budget of ${DOC_BUDGET_MS}ms exhausted for this document`);
-      return renderOne(source, Math.min(RENDER_TIMEOUT_MS, remaining));
+      return renderOne(source, fonts, Math.min(RENDER_TIMEOUT_MS, remaining));
     });
+    if (rendered.warnings.length) warnings.push(formatDiagnostics("", rendered.warnings));
+    return rendered;
   }
 
   async function render(source: string): Promise<TypstDiagram> {
@@ -170,7 +239,7 @@ export function createTypstRenderer(mode: TypstRendererMode): TypstRenderer {
         };
       }
 
-      const key = diagramKey(source);
+      const key = diagramKey(source, fonts);
       const path = diagramStoragePath(mode.spaceId, key);
       const src = diagramUrl(mode.spaceSlug, key);
       // Rendered before (this document or another in the space): reuse it. The
@@ -193,5 +262,6 @@ export function createTypstRenderer(mode: TypstRendererMode): TypstRenderer {
     get transientFailure() {
       return transientFailure;
     },
+    warnings,
   };
 }

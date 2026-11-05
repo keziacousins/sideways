@@ -6,7 +6,9 @@
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,10 +17,15 @@ let server;
 let base;
 
 before(async () => {
+  // A brand font directory holding one client, "client-a", whose only font is
+  // a family no default set has (see the `test` entry in fonts.lock).
+  const brand = mkdtempSync(join(tmpdir(), "typst-brand-"));
+  execFileSync("sh", [join(here, "..", "..", "fonts", "fetch-fonts.sh"), "test", brand]);
+
   server = spawn(process.execPath, [join(here, "..", "server.mjs")], {
     // One worker, so a test that gets it killed proves the replacement works
     // for the test after it. Tight limits keep the hostile cases quick.
-    env: { ...process.env, PORT: "0", POOL_SIZE: "1", RENDER_TIMEOUT_MS: "3000", MAX_RSS_MB: "400" },
+    env: { ...process.env, PORT: "0", POOL_SIZE: "1", RENDER_TIMEOUT_MS: "3000", MAX_RSS_MB: "400", TYPST_BRAND_FONT_DIR: brand },
     stdio: ["ignore", "pipe", "pipe"],
   });
   base = await new Promise((resolve, reject) => {
@@ -93,6 +100,48 @@ test("serves in-memory assets to the diagram, and only to that diagram", async (
 
 test("rejects asset paths that try to leave the assets directory", async () => {
   const { status } = await render({ source: BOX, assets: [{ path: "../main.typ", data: "" }] });
+  assert.equal(status, 400);
+});
+
+const unknownFamily = (body) => (body.warnings ?? []).some((w) => /unknown font family: inter display/.test(w.message));
+const BRAND_TEXT = '#set text(font: "Inter Display", fallback: false)\nHello';
+
+test("draws in the default families without warnings", async () => {
+  const { status, body } = await render({ source: "Hello *bold* `code`" });
+  assert.equal(status, 200);
+  assert.deepEqual(body.warnings, []);
+});
+
+test("keeps a brand font from a diagram whose request doesn't name its set", async () => {
+  const { status, body } = await render({ source: BRAND_TEXT });
+  assert.equal(status, 200);
+  assert.ok(unknownFamily(body), JSON.stringify(body.warnings));
+});
+
+test("lets a diagram use a brand font when its font set is named", async () => {
+  const { status, body } = await render({ source: BRAND_TEXT, fontSets: ["client-a"] });
+  assert.equal(status, 200);
+  assert.ok(!unknownFamily(body), JSON.stringify(body.warnings));
+});
+
+test("makes the theme's body font the diagram's default", async () => {
+  const themed = await render({ source: "Hello", fontSets: ["client-a"], inputs: { "font-body": "Inter Display" } });
+  assert.equal(themed.status, 200);
+  assert.deepEqual(themed.body.warnings, []);
+  // The same diagram unthemed comes out differently: the default family.
+  const plain = await render({ source: "Hello" });
+  assert.notEqual(themed.body.svg, plain.body.svg);
+});
+
+test("rejects font sets that don't exist or try to leave the brand directory", async () => {
+  for (const fontSets of [["nope"], ["../client-a"], ["client-a/.."]]) {
+    const { status } = await render({ source: "Hello", fontSets });
+    assert.equal(status, 400, JSON.stringify(fontSets));
+  }
+});
+
+test("rejects inputs the prelude doesn't read", async () => {
+  const { status } = await render({ source: "Hello", inputs: { "font-body": "x", secret: "y" } });
   assert.equal(status, 400);
 });
 
