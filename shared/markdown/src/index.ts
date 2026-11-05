@@ -13,6 +13,7 @@ import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from "r
 import type { Root, Element } from "hast";
 import { remarkWikiLinks, escapeWikiLinkPipes, type WikiLinkContext } from "./wikilinks.js";
 import { rehypeMermaid } from "./mermaid.js";
+import { rehypeTypst, type TypstDiagram } from "./typst.js";
 import { rehypeAssets } from "./assets.js";
 import { rehypeDocLinks } from "./doclinks.js";
 
@@ -32,6 +33,15 @@ export interface RenderOptions {
    * diagram itself from the source we leave in the document.
    */
   renderMermaid?: (code: string) => Promise<string>;
+  /**
+   * Renders a ```typst diagram and says where its `<img>` should point.
+   * Unlike `renderMermaid` this is passed on BOTH targets — Typst only ever
+   * renders on the server — and the caller picks the src: a stored, content-
+   * addressed URL for the cached web view, a `data:` URI for the PDF and for
+   * previews. Rejects if the diagram doesn't compile or the renderer is down.
+   * If omitted, typst fences stay plain code blocks.
+   */
+  renderTypst?: (source: string) => Promise<TypstDiagram>;
   /**
    * Turns a section-relative asset path into a `data:` URI, or null if the
    * asset is missing or too large to embed. Supplied by the PDF pipeline
@@ -215,6 +225,9 @@ export function createProcessor(options: RenderOptions = { target: "web" }) {
     .use(rehypeHighlight)
     .use(rehypeKatex)
     .use(rehypeSanitize, sanitizeSchema)
+    // After the sanitiser: it writes only an `<img>` around a src the caller
+    // built, which may be a `data:` URI the sanitiser would strip.
+    .use(rehypeTypst, { renderTypst: options.renderTypst })
     // After the sanitiser, unlike everything above: this one only writes
     // URLs we built ourselves, and on the pdf path `data:` URIs of bytes we
     // stored — which the sanitiser, rightly, would strip from an `<img>`.
@@ -241,6 +254,7 @@ export { extractAssetRefs } from "./assets.js";
 export { extractDocLinks } from "./doclinks.js";
 export type { DocLinkRef } from "./doclinks.js";
 export type { SerializedComment } from "./comments.js";
+export type { TypstDiagram } from "./typst.js";
 export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.js";
 
 /**
@@ -265,8 +279,10 @@ export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.
  * v10: relative image and file-link targets resolve to hosted asset URLs.
  * v11: relative links to other documents resolve to their canonical URLs,
  *      or render as unresolved markers when the target doesn't exist.
+ * v12: typst fences render as server-rendered diagrams (`figure.typst-diagram`
+ *      around an `<img>`) when a renderer is supplied.
  */
-export const RENDERER_VERSION = "v11";
+export const RENDERER_VERSION = "v12";
 
 /**
  * Render markdown to HTML string.

@@ -1,0 +1,3 @@
+node_modules/
+# Vendored Typst packages, fetched by fetch-packages.mjs.
+vendor/

@@ -72,6 +72,7 @@ sync_infra() {
   rsync -az --delete --exclude fonts infra/weasyprint/ $VM:$INFRA_DIR/weasyprint/
   sync_fonts infra/weasyprint/fonts "$INFRA_DIR/weasyprint/fonts" print
   rsync -az --delete infra/mermaid/ $VM:$INFRA_DIR/mermaid/
+  rsync -az --delete --exclude node_modules --exclude vendor infra/typst/ $VM:$INFRA_DIR/typst/
 
   # Create infra .env if missing. The fonts directory is created here too:
   # it is excluded from the rsync above and may have no fonts to push, but
@@ -126,7 +127,7 @@ ssh $VM "test -f $APP_DIR/.env || cp $APP_DIR/.env.example $APP_DIR/.env"
 # Keys that .env.example documents but the app supplies a working default for
 # (see packages/server/src/env.ts). A host that predates one of these must not
 # have its deploy aborted halfway for a value it does not need to set.
-OPTIONAL_ENV_KEYS="MERMAID_URL"
+OPTIONAL_ENV_KEYS="MERMAID_URL TYPST_URL"
 
 check_env_keys() {
   local label="$1" example_path="$2" actual_path="$3"

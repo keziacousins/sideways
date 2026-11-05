@@ -13,6 +13,7 @@
 
 import { env } from "../env.js";
 import { logger } from "../logger.js";
+import { createLimiter } from "./limiter.js";
 
 /**
  * Mermaid config. Structurally identical to the browser-side config in the
@@ -79,34 +80,6 @@ const RENDER_TIMEOUT_MS = 8000;
 const MAX_DIAGRAMS_PER_DOC = 50;
 const DOC_BUDGET_MS = 30_000;
 const MAX_CONCURRENT = 4;
-
-/**
- * Run at most `max` tasks at once, queueing the rest in call order.
- *
- * A finishing task hands its slot straight to the next waiter rather than
- * releasing it: resolving a promise only schedules a microtask, so between
- * `waiting.shift()` and the woken caller resuming there is a gap in which a
- * freshly arriving caller would see a free slot that is already spoken for
- * and push `active` past `max`.
- */
-function createLimiter(max: number) {
-  let active = 0;
-  const waiting: (() => void)[] = [];
-
-  return async function run<T>(task: () => Promise<T>): Promise<T> {
-    // Claim the slot before yielding, or queue for one that is handed over.
-    if (active >= max) await new Promise<void>((resolve) => waiting.push(resolve));
-    else active++;
-
-    try {
-      return await task();
-    } finally {
-      const next = waiting.shift();
-      if (next) next();
-      else active--;
-    }
-  };
-}
 
 /** Render Mermaid source to an SVG string. Rejects on failure. */
 async function renderOne(code: string, timeoutMs: number): Promise<string> {

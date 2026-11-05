@@ -11,7 +11,7 @@ pnpm install
 ./scripts/start-server.sh --web-only   # just web on :4000
 ```
 
-Local dev expects the Docker infra (Postgres, SeaweedFS, Kratos, Hydra, WeasyPrint, Mermaid) to be running locally:
+Local dev expects the Docker infra (Postgres, SeaweedFS, Kratos, Hydra, WeasyPrint, Mermaid, Typst) to be running locally:
 
 ```bash
 docker context show    # must be 'default' — see below
@@ -52,6 +52,7 @@ Integration tests require a running Postgres (the infra `docker compose` brings 
 - 4444/4445: Hydra public/admin
 - 5001: WeasyPrint
 - 5002: Mermaid diagram sidecar
+- 5003: Typst diagram sidecar (runs without Docker too: `cd infra/typst && npm install && npm start`)
 - 8888: SeaweedFS filer
 - 1025/8025: Mailhog SMTP/UI (service commented out in `infra/compose.yml` for now)
 
@@ -59,7 +60,7 @@ Integration tests require a running Postgres (the infra `docker compose` brings 
 
 - `shared/` — shared libraries (`@sideways/types`, `@sideways/markdown`, `@sideways/db`, `@sideways/storage`)
 - `packages/` — apps (`@sideways/server`, `@sideways/web`, `@sideways/cli`, `@sideways/mcp`)
-- `infra/` — Docker compose, nginx, Kratos/Hydra/WeasyPrint/Mermaid configs
+- `infra/` — Docker compose, nginx, Kratos/Hydra/WeasyPrint/Mermaid/Typst configs
 - `scripts/` — deployment and dev scripts
 
 Shared packages export raw `.ts` — no build step. The API server runs via `tsx` (both locally and in production).
@@ -68,7 +69,7 @@ Shared packages export raw `.ts` — no build step. The API server runs via `tsx
 
 Backing services run via Docker Compose (`infra/compose.yml`):
 
-- Postgres (5432), SeaweedFS (8888/9333), Ory Kratos (4433/4434), Ory Hydra (4444/4445), WeasyPrint (5001), Mermaid (5002)
+- Postgres (5432), SeaweedFS (8888/9333), Ory Kratos (4433/4434), Ory Hydra (4444/4445), WeasyPrint (5001), Mermaid (5002), Typst (5003)
 
 The same compose file is used locally and on the deploy host.
 

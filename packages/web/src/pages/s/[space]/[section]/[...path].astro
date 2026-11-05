@@ -621,6 +621,28 @@ const themeCss = themeToCSS(space?.theme?.tokens);
     font-size: var(--sw-text-xs);
     color: var(--sw-error);
   }
+
+  /* Typst diagrams (issue #117) arrive server-rendered as an <img>, at the
+     size the author drew them. Same frame as mermaid's; shrink-only, so a
+     diagram wider than the column scales down and a small one is left be. */
+  .sw-doc-content figure.typst-diagram {
+    margin: 0 0 1.8em;
+    padding: 1.25em 1.5em;
+    border: 1px solid var(--sw-doc-border);
+    border-radius: var(--sw-radius-md);
+    text-align: center;
+    overflow-x: auto;
+  }
+  .sw-doc-content figure.typst-diagram img {
+    max-width: 100%;
+    height: auto;
+  }
+  .sw-doc-content .typst-error {
+    margin: -1.4em 0 1.8em;
+    font-family: var(--sw-font-mono);
+    font-size: var(--sw-text-xs);
+    color: var(--sw-error);
+  }
 </style>
 
 {doc && (

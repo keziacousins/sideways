@@ -38,6 +38,23 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
+  typst-sidecar:
+    # infra/typst is its own npm package, outside the pnpm workspace, so the
+    # suites above never see it. Its tests are the sandbox's guarantees: no
+    # package downloads, no host file reads, hostile renders killed.
+    name: Typst sidecar
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/typst
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
