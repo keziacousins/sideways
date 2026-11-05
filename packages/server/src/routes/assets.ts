@@ -10,16 +10,9 @@ import { canAccessSpace, canWriteSpace } from "../middleware/visibility.js";
 import { validateAssetPath } from "../middleware/validate.js";
 import { resolveSection } from "../lib/doc-resolver.js";
 import { checkAssetUpload, MAX_ASSET_SIZE } from "../lib/asset-type.js";
-import { findAssetByPath, type AssetRow } from "../lib/assets.js";
-import { bustWikiLinkRenderCache } from "../lib/doc-resolver.js";
+import { etagMatches, findAssetByPath, INERT_CSP, type AssetRow } from "../lib/assets.js";
+import { bustTypstRenderCache } from "../lib/doc-resolver.js";
 
-/**
- * Asset responses are user-uploaded bytes served from our own origin, so a
- * direct visit must not be able to run anything: no scripts, no subresources,
- * and an opaque origin. SVG is why this matters — inside `<img>` it is inert,
- * but opened in its own tab it is a document, and can carry `<script>`.
- */
-const INERT_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 
 function responseHeaders(asset: AssetRow): Record<string, string> {
   const headers: Record<string, string> = {
@@ -40,14 +33,6 @@ function responseHeaders(asset: AssetRow): Record<string, string> {
   return headers;
 }
 
-/** True if an `If-None-Match` header names this ETag (weak or strong). */
-function etagMatches(header: string | undefined, etag: string): boolean {
-  if (!header) return false;
-  return header
-    .split(",")
-    .map((t) => t.trim().replace(/^W\//, ""))
-    .some((t) => t === etag || t === "*");
-}
 
 function present(asset: AssetRow, sectionSlug: string, spaceSlug: string) {
   return {
@@ -216,8 +201,9 @@ export function createAssetRoutes(db: Database, storage: Storage) {
 
     // Typst diagrams read assets at render time, and the cached HTML points at
     // renders made from the old bytes (or noted the file as missing). Markdown
-    // images don't need this — their URLs are by path — but diagrams do.
-    await bustWikiLinkRenderCache(db, space.id);
+    // images don't need this — their URLs are by path — so only documents with
+    // a diagram are cleared.
+    await bustTypstRenderCache(db, space.id);
     return c.json(present(asset, section.slug, space.slug), existing ? 200 : 201);
   });
 
@@ -233,7 +219,7 @@ export function createAssetRoutes(db: Database, storage: Storage) {
     await db.delete(assets).where(eq(assets.id, asset.id));
     await releaseBlob(asset.storageKey);
     // As on upload: diagrams that read it are stale now.
-    await bustWikiLinkRenderCache(db, space.id);
+    await bustTypstRenderCache(db, space.id);
     return c.json({ deleted: true });
   });
 

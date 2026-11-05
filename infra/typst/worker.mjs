@@ -14,8 +14,10 @@
  * The sandbox is the environment the server starts us in, not anything done
  * here: no network (dead proxy), packages from the vendored cache only, and a
  * workspace that is an empty directory, so file reads find nothing on disk.
- * Assets reach the compiler in memory (`mapShadow`) and are unmapped again
- * after every job, so one diagram never sees another's files.
+ * Assets reach the compiler in memory (`mapShadow`), as does the diagram's own
+ * source (`addSource`), and both are removed again after every job. A compiler
+ * is shared by every space with the same font set, so a main file left behind
+ * would be readable by the next diagram: `read("/guides/__diagram__.typ")`.
  *
  * The workspace mirrors the document's section: each asset sits at its
  * section-relative path, and the diagram's main file sits in the document's
@@ -143,6 +145,8 @@ function render({ source, mainDir = "", assets = [], fontSets = [], inputs = {} 
     const svg = compiler.plainSvg(result.result);
     return { ok: true, svg, width: rootDimension(svg, "width"), height: rootDimension(svg, "height"), warnings };
   } finally {
+    // The main file too, not just the assets: see the header.
+    compiler.unmapShadow(mainPath);
     for (const path of mapped) compiler.unmapShadow(path);
     if (++jobs % EVICT_EVERY === 0) for (const c of compilers.values()) c.evictCache(EVICT_MAX_AGE);
   }

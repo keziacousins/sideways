@@ -128,11 +128,6 @@ export function createSpaceRoutes(db: Database) {
         })
         .where(eq(spaces.id, existing.id))
         .returning();
-      // Typst diagrams are drawn in the theme's fonts; a different theme makes
-      // the cached renders stale.
-      if (body.themeId !== undefined && body.themeId !== existing.themeId) {
-        await bustWikiLinkRenderCache(db, existing.id);
-      }
       return c.json(updated, 200);
     }
 
