@@ -177,7 +177,7 @@ class Worker {
         this.kill(new MemoryError(`Diagram render exceeded ${MAX_RSS_MB}MB of memory`));
       }
     }, 100);
-    this.child.send({ id: job.id, source: job.source, assets: job.assets, fontSets: job.fontSets, inputs: job.inputs });
+    this.child.send({ id: job.id, source: job.source, mainDir: job.mainDir, assets: job.assets, fontSets: job.fontSets, inputs: job.inputs });
   }
 
   kill(reason) {
@@ -209,9 +209,9 @@ class Pool {
     for (let i = 0; i < size; i++) this.workers.add(new Worker(this));
   }
 
-  render({ source, assets, fontSets, inputs }) {
+  render({ source, mainDir, assets, fontSets, inputs }) {
     return new Promise((resolve, reject) => {
-      const job = { id: nextJobId++, source, assets, fontSets, inputs, resolve, reject };
+      const job = { id: nextJobId++, source, mainDir, assets, fontSets, inputs, resolve, reject };
       const worker = this.idle.shift();
       if (worker) return worker.run(job);
       if (this.queue.length >= MAX_QUEUED) return reject(new OverloadedError("Renderer busy — too many diagrams queued"));
@@ -288,6 +288,11 @@ function readBody(req) {
 
 // An asset is addressed the way the diagram will name it, relative to
 // /assets/ in the workspace: segments of [A-Za-z0-9._-], no `..`.
+/** A section-relative path we're willing to place in the workspace. */
+function sectionPath(path) {
+  return ASSET_PATH_RE.test(path) && path.split("/")[0] !== "__sideways__";
+}
+
 const FONT_SET_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const MAX_FONT_SETS = 4;
 const INPUT_KEYS = new Set(["font-body", "font-display", "font-mono"]);
@@ -299,10 +304,16 @@ function validate(payload) {
   if (typeof source !== "string" || !source.trim()) throw new BadRequestError("No diagram source provided");
   if (source.length > MAX_SOURCE_LENGTH) throw new BodyTooLargeError(`Diagram exceeds ${MAX_SOURCE_LENGTH} characters`);
 
+  // The workspace mirrors the document's section: mainDir is the document's
+  // directory within it ("" at the top), and assets sit at their
+  // section-relative paths. __sideways__/ is ours (the prelude).
+  const mainDir = payload.mainDir ?? "";
+  if (typeof mainDir !== "string" || (mainDir !== "" && !sectionPath(mainDir))) throw new BadRequestError(`Invalid mainDir: ${mainDir}`);
+
   const assets = payload.assets ?? [];
   if (!Array.isArray(assets) || assets.length > MAX_ASSETS) throw new BadRequestError(`At most ${MAX_ASSETS} assets per diagram`);
   for (const asset of assets) {
-    if (typeof asset?.path !== "string" || !ASSET_PATH_RE.test(asset.path)) throw new BadRequestError(`Invalid asset path: ${asset?.path}`);
+    if (typeof asset?.path !== "string" || !sectionPath(asset.path)) throw new BadRequestError(`Invalid asset path: ${asset?.path}`);
     if (typeof asset.data !== "string") throw new BadRequestError(`Asset ${asset.path} has no data`);
   }
   // Brand font directories to make available, as derived by the API from the
@@ -323,14 +334,15 @@ function validate(payload) {
     if (typeof value !== "string" || value.length > 100 || /[\r\n]/.test(value)) throw new BadRequestError(`Invalid value for ${key}`);
   }
 
-  return { source, assets, fontSets: [...fontSets].sort(), inputs };
+  return { source, mainDir, assets, fontSets: [...fontSets].sort(), inputs };
 }
 
 /**
- * POST /render — { source, assets?, fontSets?, inputs? } -> { svg, width, height, warnings }
+ * POST /render — { source, mainDir?, assets?, fontSets?, inputs? } -> { svg, width, height, warnings }
  *
- *   assets    [{ path, data }] — files the diagram can read under /assets/,
- *             data base64-encoded
+ *   mainDir   the document's directory within its section ("" at the top)
+ *   assets    [{ path, data }] — files the diagram can read, at their
+ *             section-relative paths, data base64-encoded
  *   fontSets  brand font directories (by client name) the diagram may use
  *   inputs    { "font-body", "font-display", "font-mono" } — the theme's
  *             families, which the prelude makes the diagram's defaults

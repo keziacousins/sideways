@@ -255,6 +255,7 @@ export { extractDocLinks } from "./doclinks.js";
 export type { DocLinkRef } from "./doclinks.js";
 export type { SerializedComment } from "./comments.js";
 export type { TypstDiagram } from "./typst.js";
+export { typstAssetRefs } from "./typst.js";
 export type { WikiLinkContext, WikiLinkDoc, WikiLinkSection } from "./wikilinks.js";
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderMarkdown, type TypstDiagram } from "../index.js";
+import { extractAssetRefs, renderMarkdown, typstAssetRefs, type TypstDiagram } from "../index.js";
 
 const DIAGRAM = '#canvas({\n  draw.rect((0, 0), (2, 1), name: "a")\n  draw.content("a", [A < B & "C"])\n})';
 const MD = "```typst\n" + DIAGRAM + "\n```";
@@ -83,5 +83,26 @@ describe("typst diagrams", () => {
     expect(calls).toEqual([]);
     expect(html).toContain("data-mermaid");
     expect(html).not.toContain("typst-diagram");
+  });
+});
+
+describe("typst diagram assets", () => {
+  it("finds the hosted files a diagram reads, relative to the document", () => {
+    const source = [
+      '#image("../img/logo.png", width: 1in)',
+      '#image("./icons/aws/ec2.svg")',
+      '#let label = "not a path"',
+      '#image("https://example.com/x.png")',
+      '#image("/absolute.png")',
+      '#image("../../outside.png")',
+      '#read("notes.txt")',
+      '#image("../img/logo.png")',
+    ].join("\n");
+    expect(typstAssetRefs(source, "guides/arch.md")).toEqual(["img/logo.png", "guides/icons/aws/ec2.svg"]);
+  });
+
+  it("lists a diagram's images among the document's assets, for the CLI", () => {
+    const md = "![a](./a.png)\n\n```typst\n#image(\"img/logo.png\")\n```\n\n```js\nconst x = \"img/other.png\";\n```";
+    expect(extractAssetRefs(md, "doc.md").sort()).toEqual(["a.png", "img/logo.png"]);
   });
 });

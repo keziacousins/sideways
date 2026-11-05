@@ -21,14 +21,16 @@
  */
 
 import { createHash } from "node:crypto";
+import { posix } from "node:path";
 import { eq } from "drizzle-orm";
 import { type Database, themes } from "@sideways/db";
 import type { Storage } from "@sideways/storage";
-import type { TypstDiagram } from "@sideways/markdown";
+import { typstAssetRefs, type TypstDiagram } from "@sideways/markdown";
 import { isValidFont } from "@sideways/theme";
 import { env } from "../env.js";
 import { logger } from "../logger.js";
 import { createLimiter } from "./limiter.js";
+import { findAssetByPath } from "./assets.js";
 
 /**
  * Part of every stored diagram's key. Bump it whenever output for the same
@@ -47,6 +49,9 @@ const MAX_DIAGRAMS_PER_DOC = 50;
 const DOC_BUDGET_MS = 30_000;
 /** Matches the sidecar's default pool, so one document doesn't queue on itself. */
 const MAX_CONCURRENT = 2;
+
+/** All the images one diagram may read, together (they travel base64-encoded). */
+const MAX_DIAGRAM_ASSET_BYTES = 5 * 1024 * 1024;
 
 /** CSS px per pt: the sidecar reports Typst's page size in points. */
 const PX_PER_PT = 4 / 3;
@@ -136,13 +141,62 @@ interface Rendered {
   warnings: SidecarDiagnostic[];
 }
 
-async function renderOne(source: string, fonts: TypstFontContext, timeoutMs: number): Promise<Rendered> {
+/** One of the space's hosted files, as a diagram reads it. */
+export interface TypstAsset {
+  contentHash: string;
+  load: () => Promise<Buffer>;
+}
+
+/**
+ * The document a diagram sits in, so it can read the space's hosted files the
+ * way the markdown around it does: `image("./img/logo.png")`, relative to the
+ * document, nothing outside its section (see typstAssetRefs).
+ */
+export interface TypstDocument {
+  /** Section-relative path of the document, e.g. "guides/arch.md". */
+  docPath: string;
+  /** A section-relative asset path to the file, or null if there's none. */
+  findAsset: (path: string) => Promise<TypstAsset | null>;
+}
+
+/** A TypstDocument over the space's stored assets. */
+export function typstDocument(
+  db: Database,
+  storage: Storage,
+  spaceId: string,
+  sectionId: string,
+  docPath: string,
+): TypstDocument {
+  return {
+    docPath,
+    async findAsset(path) {
+      const row = await findAssetByPath(db, spaceId, sectionId, path);
+      if (!row) return null;
+      return {
+        contentHash: row.contentHash,
+        load: async () => Buffer.from(await (await storage.download(row.storageKey)).arrayBuffer()),
+      };
+    },
+  };
+}
+
+interface SidecarAsset {
+  path: string;
+  data: string;
+}
+
+async function renderOne(
+  source: string,
+  fonts: TypstFontContext,
+  files: { mainDir: string; assets: SidecarAsset[] },
+  timeoutMs: number,
+): Promise<Rendered> {
   let res: Response;
   try {
     res = await fetch(`${env.typstUrl}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source, fontSets: fonts.fontSets, inputs: fonts.inputs }),
+      body: JSON.stringify({ source, mainDir: files.mainDir, assets: files.assets, fontSets: fonts.fontSets, inputs: fonts.inputs }),
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (e: any) {
@@ -171,9 +225,17 @@ function px(pt: number | undefined): number | undefined {
   return pt ? pt * PX_PER_PT : undefined;
 }
 
-/** Content address of a diagram: what it says, and what it was rendered with. */
-export function diagramKey(source: string, fonts: TypstFontContext = NO_THEME_FONTS): string {
-  const context = JSON.stringify([fonts.fontSets, Object.entries(fonts.inputs).sort()]);
+/**
+ * Content address of a diagram: what it says, and what it was rendered with —
+ * the prelude, the fonts, and the content of every file it reads, so that
+ * replacing an image re-renders the diagrams that show it.
+ */
+export function diagramKey(
+  source: string,
+  fonts: TypstFontContext = NO_THEME_FONTS,
+  assets: Array<[path: string, contentHash: string]> = [],
+): string {
+  const context = JSON.stringify([fonts.fontSets, Object.entries(fonts.inputs).sort(), [...assets].sort()]);
   return createHash("sha256").update(`${PRELUDE_VERSION}\0${context}\0${source}`).digest("hex");
 }
 
@@ -210,6 +272,7 @@ export interface TypstRenderer {
 export function createTypstRenderer(
   mode: TypstRendererMode,
   fonts: TypstFontContext = NO_THEME_FONTS,
+  doc?: TypstDocument,
 ): TypstRenderer {
   const limit = createLimiter(MAX_CONCURRENT);
   const deadline = Date.now() + DOC_BUDGET_MS;
@@ -217,11 +280,32 @@ export function createTypstRenderer(
   let transientFailure = false;
   const warnings: string[] = [];
 
-  async function compile(source: string): Promise<Rendered> {
+  // The document's directory within its section, where the diagram "lives".
+  const mainDir = doc ? posix.dirname(doc.docPath).replace(/^\.$/, "") : "";
+
+  /** The hosted files a diagram reads that exist; missing ones are left to Typst to report. */
+  async function findAssets(source: string): Promise<Array<[string, TypstAsset]>> {
+    if (!doc) return [];
+    const refs = typstAssetRefs(source, doc.docPath);
+    const found = await Promise.all(refs.map(async (path) => [path, await doc.findAsset(path)] as const));
+    return found.filter((entry): entry is [string, TypstAsset] => entry[1] !== null);
+  }
+
+  async function loadAssets(assets: Array<[string, TypstAsset]>): Promise<SidecarAsset[]> {
+    const loaded = await Promise.all(assets.map(async ([path, asset]) => [path, await asset.load()] as const));
+    const total = loaded.reduce((sum, [, bytes]) => sum + bytes.length, 0);
+    if (total > MAX_DIAGRAM_ASSET_BYTES) {
+      throw new DiagramError(`The diagram's images come to ${Math.round(total / 1024 / 1024)}MB; at most ${MAX_DIAGRAM_ASSET_BYTES / 1024 / 1024}MB per diagram`);
+    }
+    return loaded.map(([path, bytes]) => ({ path, data: bytes.toString("base64") }));
+  }
+
+  async function compile(source: string, assets: Array<[string, TypstAsset]>): Promise<Rendered> {
+    const files = { mainDir, assets: await loadAssets(assets) };
     const rendered = await limit(async () => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error(`Typst render budget of ${DOC_BUDGET_MS}ms exhausted for this document`);
-      return renderOne(source, fonts, Math.min(RENDER_TIMEOUT_MS, remaining));
+      return renderOne(source, fonts, files, Math.min(RENDER_TIMEOUT_MS, remaining));
     });
     if (rendered.warnings.length) warnings.push(formatDiagnostics("", rendered.warnings));
     return rendered;
@@ -234,8 +318,9 @@ export function createTypstRenderer(
     }
 
     try {
+      const assets = await findAssets(source);
       if (mode.kind === "inline") {
-        const { svg, width, height } = await compile(source);
+        const { svg, width, height } = await compile(source, assets);
         return {
           src: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
           width: px(width),
@@ -243,7 +328,7 @@ export function createTypstRenderer(
         };
       }
 
-      const key = diagramKey(source, fonts);
+      const key = diagramKey(source, fonts, assets.map(([path, asset]) => [path, asset.contentHash]));
       const path = diagramStoragePath(mode.spaceId, key);
       const src = diagramUrl(mode.spaceSlug, key);
       // Rendered before (this document or another in the space): reuse it. The
@@ -251,7 +336,7 @@ export function createTypstRenderer(
       // ride along when we have them to hand.
       if (await mode.storage.exists(path)) return { src };
 
-      const { svg, width, height } = await compile(source);
+      const { svg, width, height } = await compile(source, assets);
       // Awaited, not fire-and-forget: the HTML about to be cached points here.
       await mode.storage.upload(path, Buffer.from(svg), "image/svg+xml");
       return { src, width: px(width), height: px(height) };

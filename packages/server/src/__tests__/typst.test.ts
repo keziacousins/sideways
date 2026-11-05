@@ -6,7 +6,13 @@ import type { Storage } from "@sideways/storage";
 // A stand-in for the infra/typst sidecar: answers whatever the test queues.
 type Reply = { status: number; body: unknown };
 let replies: Reply[] = [];
-let requests: Array<{ source: string; fontSets?: string[]; inputs?: Record<string, string> }> = [];
+let requests: Array<{
+  source: string;
+  mainDir?: string;
+  assets?: Array<{ path: string; data: string }>;
+  fontSets?: string[];
+  inputs?: Record<string, string>;
+}> = [];
 let sidecar: Server;
 let lib: typeof import("../lib/typst.js");
 
@@ -78,7 +84,7 @@ describe("createTypstRenderer — inline", () => {
     expect(diagram.src).toBe(`data:image/svg+xml;base64,${Buffer.from(SVG).toString("base64")}`);
     expect(diagram.width).toBeCloseTo(96);
     expect(diagram.height).toBeCloseTo(48);
-    expect(requests).toEqual([{ source: "#canvas({})", fontSets: [], inputs: {} }]);
+    expect(requests).toEqual([{ source: "#canvas({})", mainDir: "", assets: [], fontSets: [], inputs: {} }]);
   });
 });
 
@@ -181,7 +187,7 @@ describe("theme fonts", () => {
     const fonts = lib.typstFontContext(tokens);
     replies.push(ok());
     await lib.createTypstRenderer({ kind: "inline" }, fonts).render("x");
-    expect(requests[0]).toEqual({ source: "x", fontSets: fonts.fontSets, inputs: fonts.inputs });
+    expect(requests[0]).toMatchObject({ source: "x", fontSets: fonts.fontSets, inputs: fonts.inputs });
     expect(lib.diagramKey("x", fonts)).not.toBe(lib.diagramKey("x"));
   });
 
@@ -190,5 +196,67 @@ describe("theme fonts", () => {
     const renderer = lib.createTypstRenderer({ kind: "inline" });
     await renderer.render("x");
     expect(renderer.warnings).toEqual(["line 1, column 1: unknown font family: nope"]);
+  });
+});
+
+describe("diagram assets", () => {
+  const LOGO = Buffer.from("png bytes");
+  const doc = (files: Record<string, { hash: string; bytes: Buffer }>) => {
+    const loads: string[] = [];
+    return {
+      loads,
+      doc: {
+        docPath: "guides/arch.md",
+        async findAsset(path: string) {
+          const file = files[path];
+          if (!file) return null;
+          return { contentHash: file.hash, load: async () => (loads.push(path), file.bytes) };
+        },
+      },
+    };
+  };
+
+  it("sends the files the diagram reads, from the document's directory", async () => {
+    replies.push(ok());
+    const { doc: d } = doc({ "img/logo.png": { hash: "h1", bytes: LOGO } });
+    await lib.createTypstRenderer({ kind: "inline" }, lib.NO_THEME_FONTS, d).render('#image("../img/logo.png")');
+    expect(requests[0].mainDir).toBe("guides");
+    expect(requests[0].assets).toEqual([{ path: "img/logo.png", data: LOGO.toString("base64") }]);
+  });
+
+  it("leaves a missing file for Typst to report", async () => {
+    replies.push(ok());
+    const { doc: d } = doc({});
+    await lib.createTypstRenderer({ kind: "inline" }, lib.NO_THEME_FONTS, d).render('#image("../img/nope.png")');
+    expect(requests[0].assets).toEqual([]);
+  });
+
+  it("keys a stored diagram by the content of the files it reads, and doesn't load them when it's stored", async () => {
+    const { storage, files } = memoryStorage();
+    const mode = { kind: "store" as const, storage, spaceId: "s", spaceSlug: "s" };
+    const source = '#image("../img/logo.png")';
+
+    replies.push(ok());
+    const v1 = doc({ "img/logo.png": { hash: "h1", bytes: LOGO } });
+    const first = await lib.createTypstRenderer(mode, lib.NO_THEME_FONTS, v1.doc).render(source);
+
+    const again = doc({ "img/logo.png": { hash: "h1", bytes: LOGO } });
+    const second = await lib.createTypstRenderer(mode, lib.NO_THEME_FONTS, again.doc).render(source);
+    expect(second.src).toBe(first.src);
+    expect(again.loads).toEqual([]);
+
+    replies.push(ok());
+    const v2 = doc({ "img/logo.png": { hash: "h2", bytes: LOGO } });
+    const replaced = await lib.createTypstRenderer(mode, lib.NO_THEME_FONTS, v2.doc).render(source);
+    expect(replaced.src).not.toBe(first.src);
+    expect(files.size).toBe(2);
+  });
+
+  it("refuses a diagram whose images are too big, as the diagram's fault", async () => {
+    const { doc: d } = doc({ "img/huge.png": { hash: "h", bytes: Buffer.alloc(6 * 1024 * 1024) } });
+    const renderer = lib.createTypstRenderer({ kind: "inline" }, lib.NO_THEME_FONTS, d);
+    await expect(renderer.render('#image("../img/huge.png")')).rejects.toThrow(/at most 5MB/);
+    expect(renderer.transientFailure).toBe(false);
+    expect(requests).toEqual([]);
   });
 });

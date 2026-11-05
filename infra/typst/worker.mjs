@@ -7,7 +7,7 @@
  * first is answered):
  *
  *   ← { type: "ready" }                                         compiler is up
- *   → { id, source, assets: [{ path, data }], fontSets, inputs }   data is base64
+ *   → { id, source, mainDir, assets: [{ path, data }], fontSets, inputs }   data is base64
  *   ← { id, ok: true, svg, width, height, warnings }            width/height in pt
  *   ← { id, ok: false, error, diagnostics }                     the diagram is at fault
  *
@@ -16,6 +16,11 @@
  * workspace that is an empty directory, so file reads find nothing on disk.
  * Assets reach the compiler in memory (`mapShadow`) and are unmapped again
  * after every job, so one diagram never sees another's files.
+ *
+ * The workspace mirrors the document's section: each asset sits at its
+ * section-relative path, and the diagram's main file sits in the document's
+ * own directory (`mainDir`), so `image("../img/logo.png")` resolves exactly as
+ * the same reference does in the markdown around it.
  *
  * Fonts: every compiler sees the default families. Brand fonts are licensed to
  * a client, so they are kept out of the system font directories (which the
@@ -37,13 +42,14 @@ if (!workspace) throw new Error("TYPST_WORKSPACE is not set");
 const defaultFontPaths = (process.env.TYPST_FONT_PATHS || "").split(delimiter).filter(Boolean);
 const brandFontDir = process.env.TYPST_BRAND_FONT_DIR || "";
 
-// The prelude lives at a fixed in-memory path; the diagram's own source goes
-// after a two-line header that imports and applies it. Diagnostics are moved
-// back by PREFIX_LINES so they point at the author's lines, not ours.
-const PRELUDE_PATH = join(workspace, "sideways", "prelude.typ");
-const MAIN_PATH = join(workspace, "main.typ");
+// The prelude lives at a fixed in-memory path under a directory no asset may
+// use (the server rejects it); the diagram's own source goes after a two-line
+// header that imports and applies it. Diagnostics are moved back by
+// PREFIX_LINES so they point at the author's lines, not ours.
+const PRELUDE_PATH = join(workspace, "__sideways__", "prelude.typ");
+const MAIN_FILE = "__diagram__.typ";
 const PRELUDE = readFileSync(join(here, "prelude.typ"), "utf8");
-const PREFIX = '#import "/sideways/prelude.typ": *\n#show: diagram-setup\n';
+const PREFIX = '#import "/__sideways__/prelude.typ": *\n#show: diagram-setup\n';
 const PREFIX_LINES = 2;
 
 // Each compiler holds its fonts in memory, so keep only the few font sets in
@@ -87,12 +93,17 @@ function compilerFor(fontSets) {
   return compiler;
 }
 
-/** A diagnostic, with its position in the author's terms where it has one. */
-function describe(d) {
-  const out = { message: d.message };
-  if (d.hints?.length) out.hints = d.hints;
+/**
+ * A diagnostic, with its position in the author's terms where it has one, and
+ * paths shown relative to the section ("searched at /img/logo.png") rather
+ * than inside our temporary workspace.
+ */
+function describe(d, mainPath) {
+  const local = (text) => text.split(workspace).join("");
+  const out = { message: local(d.message) };
+  if (d.hints?.length) out.hints = d.hints.map(local);
   const start = d.range?.start;
-  if (d.path === MAIN_PATH && start && start.line >= PREFIX_LINES) {
+  if (d.path === mainPath && start && start.line >= PREFIX_LINES) {
     // 1-based, as an editor shows them.
     out.line = start.line - PREFIX_LINES + 1;
     out.column = start.character + 1;
@@ -108,23 +119,24 @@ function rootDimension(svg, name) {
   return match ? Number(match[1]) : undefined;
 }
 
-function render({ source, assets = [], fontSets = [], inputs = {} }) {
+function render({ source, mainDir = "", assets = [], fontSets = [], inputs = {} }) {
   const compiler = compilerFor(fontSets);
+  const mainPath = join(workspace, mainDir, MAIN_FILE);
   const mapped = [];
   try {
     for (const asset of assets) {
-      const path = join(workspace, "assets", asset.path);
+      const path = join(workspace, asset.path);
       compiler.mapShadow(path, Buffer.from(asset.data, "base64"));
       mapped.push(path);
     }
 
-    compiler.addSource(MAIN_PATH, PREFIX + source);
-    const result = compiler.compile({ mainFilePath: MAIN_PATH, inputs });
+    compiler.addSource(mainPath, PREFIX + source);
+    const result = compiler.compile({ mainFilePath: mainPath, inputs });
     const warned = result.takeWarnings();
-    const warnings = warned ? compiler.fetchDiagnostics(warned).map(describe) : [];
+    const warnings = warned ? compiler.fetchDiagnostics(warned).map((d) => describe(d, mainPath)) : [];
     const error = result.takeError();
     if (error) {
-      const diagnostics = compiler.fetchDiagnostics(error).map(describe);
+      const diagnostics = compiler.fetchDiagnostics(error).map((d) => describe(d, mainPath));
       return { ok: false, error: diagnostics[0]?.message || "Diagram failed to compile", diagnostics };
     }
 

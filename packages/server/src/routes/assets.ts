@@ -11,6 +11,7 @@ import { validateAssetPath } from "../middleware/validate.js";
 import { resolveSection } from "../lib/doc-resolver.js";
 import { checkAssetUpload, MAX_ASSET_SIZE } from "../lib/asset-type.js";
 import { findAssetByPath, type AssetRow } from "../lib/assets.js";
+import { bustWikiLinkRenderCache } from "../lib/doc-resolver.js";
 
 /**
  * Asset responses are user-uploaded bytes served from our own origin, so a
@@ -213,6 +214,10 @@ export function createAssetRoutes(db: Database, storage: Storage) {
       await releaseBlob(existing.storageKey);
     }
 
+    // Typst diagrams read assets at render time, and the cached HTML points at
+    // renders made from the old bytes (or noted the file as missing). Markdown
+    // images don't need this — their URLs are by path — but diagrams do.
+    await bustWikiLinkRenderCache(db, space.id);
     return c.json(present(asset, section.slug, space.slug), existing ? 200 : 201);
   });
 
@@ -227,6 +232,8 @@ export function createAssetRoutes(db: Database, storage: Storage) {
 
     await db.delete(assets).where(eq(assets.id, asset.id));
     await releaseBlob(asset.storageKey);
+    // As on upload: diagrams that read it are stale now.
+    await bustWikiLinkRenderCache(db, space.id);
     return c.json({ deleted: true });
   });
 

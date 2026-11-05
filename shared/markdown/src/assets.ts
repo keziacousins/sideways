@@ -28,6 +28,7 @@ import remarkGfm from "remark-gfm";
 import type { Root, Element } from "hast";
 import { assetUrl, assetMimeType, resolveRelativePath } from "@sideways/types";
 import { splitRelativeRef, unlink } from "./relative.js";
+import { typstAssetRefs } from "./typst.js";
 
 export interface AssetOptions {
   /** Same flag as `RenderOptions.target`. */
@@ -62,7 +63,8 @@ function resolveRef(
  * The hosted files a document references: every relative image or link
  * target of a hosted type, as section-relative paths, each listed once.
  *
- * This is how the CLI decides which files beside a document belong with it.
+ * This is how the CLI decides which files beside a document belong with it,
+ * including the images a ```typst diagram reads.
  * It parses rather than pattern-matches so that it agrees with the renderer
  * below — a reference inside a code fence is not a reference.
  */
@@ -71,6 +73,11 @@ export function extractAssetRefs(markdown: string, docPath: string): string[] {
   const paths = new Set<string>();
   visit(tree, (node) => {
     // `definition` covers reference-style links: `[spec]: ./spec.pdf`.
+    // A Typst diagram reads its images too (see typstAssetRefs).
+    if (node.type === "code" && node.lang === "typst") {
+      for (const path of typstAssetRefs(node.value, docPath)) paths.add(path);
+      return;
+    }
     if (node.type !== "image" && node.type !== "link" && node.type !== "definition") return;
     const ref = resolveRef(node.url, docPath);
     if (ref && assetMimeType(ref.path)) paths.add(ref.path);
