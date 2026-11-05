@@ -3,8 +3,9 @@ FROM node:22-bookworm-slim
 # Built from infra/ (see infra/compose.yml) so the shared font tree is in reach.
 
 # DejaVu stays as the last-resort fallback. wget and unzip are for fetching
-# fonts below and are removed again afterwards.
-RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core wget unzip && \
+# fonts below and are removed again afterwards; ca-certificates is what lets
+# wget verify TLS at all (the slim base image ships without it).
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core ca-certificates wget unzip && \
     rm -rf /var/lib/apt/lists/*
 
 # Fonts. Typst draws text as glyph outlines, so a diagram's fonts only have to
