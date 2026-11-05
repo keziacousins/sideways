@@ -30,6 +30,8 @@
 
 import { visit } from "unist-util-visit";
 import type { Element, ElementContent, Parent, Root, RootContent } from "hast";
+import { assetMimeType, resolveRelativePath } from "@sideways/types";
+import { splitRelativeRef } from "./relative.js";
 
 const TYPST_LANGUAGE_CLASS = "language-typst";
 
@@ -44,6 +46,31 @@ export interface TypstDiagram {
 
 export interface TypstOptions {
   renderTypst?: (source: string) => Promise<TypstDiagram>;
+}
+
+// A string literal in Typst source, escapes and all.
+const STRING_LITERAL_RE = /"((?:[^"\\\n]|\\.)*)"/g;
+
+/**
+ * The hosted files a diagram reads, as section-relative paths, each once.
+ *
+ * A diagram names images the way markdown does — relative to the document,
+ * `image("./img/logo.png")` — and the renderer hands it those files. Which
+ * files is decided from the source text: every string literal that resolves,
+ * relative to the document, to a path of a hosted type. So a path has to be
+ * written out literally; one built up at run time isn't seen, and the diagram
+ * gets "file not found" for it. Strings that merely look like paths cost a
+ * lookup that finds nothing. Like markdown, nothing outside the section.
+ */
+export function typstAssetRefs(source: string, docPath: string): string[] {
+  const paths = new Set<string>();
+  for (const [, literal] of source.matchAll(STRING_LITERAL_RE)) {
+    const split = splitRelativeRef(literal.replace(/\\(.)/g, "$1"));
+    if (!split || split.suffix) continue;
+    const path = resolveRelativePath(docPath, split.target);
+    if (path && assetMimeType(path)) paths.add(path);
+  }
+  return [...paths];
 }
 
 export function rehypeTypst(options: TypstOptions) {

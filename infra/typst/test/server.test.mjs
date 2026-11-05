@@ -88,19 +88,44 @@ test("cannot read files from the host", async () => {
   assert.match(body.error, /not found/i);
 });
 
+const ICON = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>').toString("base64");
+
 test("serves in-memory assets to the diagram, and only to that diagram", async () => {
-  const icon = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>').toString("base64");
-  const withAsset = await render({ source: '#image("/assets/icons/x.svg", width: 1cm)', assets: [{ path: "icons/x.svg", data: icon }] });
+  const withAsset = await render({ source: '#image("icons/x.svg", width: 1cm)', assets: [{ path: "icons/x.svg", data: ICON }] });
   assert.equal(withAsset.status, 200);
   assert.match(withAsset.body.svg, /<image/);
 
-  const after = await render({ source: '#image("/assets/icons/x.svg", width: 1cm)' });
+  const after = await render({ source: '#image("icons/x.svg", width: 1cm)' });
   assert.equal(after.status, 422);
 });
 
-test("rejects asset paths that try to leave the assets directory", async () => {
-  const { status } = await render({ source: BOX, assets: [{ path: "../main.typ", data: "" }] });
-  assert.equal(status, 400);
+test("resolves an image relative to the document, as markdown does", async () => {
+  // The document is guides/arch.md; the image is img/logo.svg in its section.
+  const { status, body } = await render({
+    source: '#image("../img/logo.svg", width: 1cm)',
+    mainDir: "guides",
+    assets: [{ path: "img/logo.svg", data: ICON }],
+  });
+  assert.equal(status, 200, JSON.stringify(body));
+  assert.match(body.svg, /<image/);
+});
+
+test("says which image is missing in the author's terms, not the sandbox's", async () => {
+  const { status, body } = await render({ source: '#image("../img/nope.png")', mainDir: "guides" });
+  assert.equal(status, 422);
+  assert.match(body.error, /\/img\/nope\.png/);
+  assert.doesNotMatch(body.error, /typst-ws-/);
+});
+
+test("rejects asset paths that try to leave the section, or take the prelude's place", async () => {
+  for (const path of ["../main.typ", "__sideways__/prelude.typ", "a/./b.svg"]) {
+    const { status } = await render({ source: BOX, assets: [{ path, data: "" }] });
+    assert.equal(status, 400, path);
+  }
+  for (const mainDir of ["..", "__sideways__", "/abs"]) {
+    const { status } = await render({ source: BOX, mainDir });
+    assert.equal(status, 400, mainDir);
+  }
 });
 
 const unknownFamily = (body) => (body.warnings ?? []).some((w) => /unknown font family: inter display/.test(w.message));
