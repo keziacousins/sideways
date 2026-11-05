@@ -4,7 +4,9 @@ export default defineConfig({
   test: {
     globals: true,
     testTimeout: 10000,
-    exclude: ["**/node_modules/**", "**/references/**", "**/dist/**", "**/e2e/**"],
+    // infra/ holds the sidecars, each its own npm package with its own test
+    // runner (infra/typst uses node:test, run by its own CI job).
+    exclude: ["**/node_modules/**", "**/references/**", "**/dist/**", "**/e2e/**", "infra/**"],
     env: {
       DATABASE_URL:
         process.env.TEST_DATABASE_URL ||
