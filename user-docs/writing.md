@@ -150,6 +150,27 @@ A file is stored once per path and replaced in place, so there is no version his
 
 Images from elsewhere on the web still work with a full `https://` address.
 
+## Diagrams
+
+A code block tagged `mermaid` or `typst` is drawn as a diagram instead of shown as code.
+
+| | ` ```mermaid ` | ` ```typst ` |
+|---|---|---|
+| Good for | Quick flowcharts, sequence diagrams, explainers | Architecture and flow diagrams worth getting exactly right |
+| Layout | Automatic | You place every shape |
+| Images and icons | No | Yes, from the space |
+| Type | One size, the app's font | Any size and weight, in the space theme's fonts |
+| Where it's drawn | In the reader's browser; on the server for PDF | On the server, for both |
+
+```mermaid
+graph LR
+  Write --> Push --> Read
+```
+
+For Typst, see [[typst-diagrams|Typst diagrams]], which covers coordinates, arrows, images and the mistakes that are easy to make, with tested examples.
+
+A diagram that can't be drawn is shown as its source with the reason under it, and the rest of the document is unaffected. For Typst the reason gives the line and column, counted from the first line of the block. A document can hold up to 50 Typst diagrams, each with 8 seconds to draw; in a PDF export the same limits apply to Mermaid.
+
 ## Frontmatter
 
 Documents can include YAML frontmatter for metadata:

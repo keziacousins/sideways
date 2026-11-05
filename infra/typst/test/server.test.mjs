@@ -6,15 +6,15 @@
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { startServer } from "./helpers.mjs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-let server;
-let base;
+let sidecar;
 
 before(async () => {
   // A brand font directory holding one client, "client-a", whose only font is
@@ -22,38 +22,14 @@ before(async () => {
   const brand = mkdtempSync(join(tmpdir(), "typst-brand-"));
   execFileSync("sh", [join(here, "..", "..", "fonts", "fetch-fonts.sh"), "test", brand]);
 
-  server = spawn(process.execPath, [join(here, "..", "server.mjs")], {
-    // One worker, so a test that gets it killed proves the replacement works
-    // for the test after it. Tight limits keep the hostile cases quick.
-    env: { ...process.env, PORT: "0", POOL_SIZE: "1", RENDER_TIMEOUT_MS: "3000", MAX_RSS_MB: "400", TYPST_BRAND_FONT_DIR: brand },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  base = await new Promise((resolve, reject) => {
-    server.stdout.on("data", (chunk) => {
-      const match = String(chunk).match(/listening on (\d+)/);
-      if (match) resolve(`http://127.0.0.1:${match[1]}`);
-    });
-    server.on("exit", (code) => reject(new Error(`server exited ${code}`)));
-  });
-  // Wait for the worker to be up, not just the HTTP listener.
-  for (let i = 0; i < 100; i++) {
-    const res = await fetch(`${base}/health`).catch(() => undefined);
-    if (res?.ok) return;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error("worker never became ready");
+  // One worker, so a test that gets it killed proves the replacement works
+  // for the test after it. Tight limits keep the hostile cases quick.
+  sidecar = await startServer({ POOL_SIZE: "1", RENDER_TIMEOUT_MS: "3000", MAX_RSS_MB: "400", TYPST_BRAND_FONT_DIR: brand });
 });
 
-after(() => server?.kill("SIGTERM"));
+after(() => sidecar?.stop());
 
-async function render(body) {
-  const res = await fetch(`${base}/render`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return { status: res.status, body: await res.json() };
-}
+const render = (body) => sidecar.render(body);
 
 const BOX = `#canvas({ draw.rect((0, 0), (2, 1), name: "a"); draw.content("a", [Hello]) })`;
 
