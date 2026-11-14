@@ -31,6 +31,28 @@ for arg in "$@"; do
   esac
 done
 
+# ── Disk preflight ───────────────────────────────────────────────────
+#
+# A full or infra deploy can rebuild Docker images, and rebuilding the
+# Mermaid image alone (Chromium plus its system libraries) takes about 2GB.
+# If the disk fills mid-build the failure is misleading — Playwright reports
+# "Failed to download Chrome for Testing … code=1" while dockerd logs
+# "no space left on device" — so check up front, before anything is synced.
+# A temporary build swapfile comes out of the same disk; add it first.
+
+MIN_FREE_GB="${DEPLOY_MIN_FREE_GB:-3}"
+
+if ! $QUICK; then
+  free_mb=$(ssh $VM "df --output=avail -BM /var/lib/docker $APP_DIR | tail -n +2 | tr -dc '0-9\n' | sort -n | head -1")
+  if [ "${free_mb:-0}" -lt $((MIN_FREE_GB * 1024)) ]; then
+    echo "==> Only ${free_mb}MB free on $VM; a deploy that rebuilds images needs ${MIN_FREE_GB}GB."
+    echo "    Most of /var/lib/docker is BuildKit cache. To trim it to the newest 3GB:"
+    echo "      ssh $VM 'docker builder prune -f --max-used-space 3GB'"
+    echo "    (Set DEPLOY_MIN_FREE_GB to change the threshold.)"
+    exit 1
+  fi
+fi
+
 # ── Brand fonts ──────────────────────────────────────────────────────
 #
 # Brand fonts are gitignored: they only exist in a checkout where
@@ -87,9 +109,23 @@ sync_infra() {
     test -f $INFRA_DIR/.env || cp $INFRA_DIR/.env.example $INFRA_DIR/.env"
 }
 
+build_images() {
+  echo "==> Building Docker images..."
+  ssh $VM "cd $INFRA_DIR && docker compose build"
+}
+
+# Keep the newest 3GB of build cache. Unbounded, it grew to most of
+# /var/lib/docker on a 17GB disk, until a rebuild no longer fitted.
+trim_build_cache() {
+  echo "==> Trimming Docker build cache..."
+  ssh $VM "docker builder prune -f --max-used-space 3GB >/dev/null"
+}
+
 rebuild_infra() {
-  echo "==> Rebuilding Docker services..."
-  ssh $VM "cd $INFRA_DIR && docker compose up -d --build"
+  build_images
+  echo "==> Restarting Docker services..."
+  ssh $VM "cd $INFRA_DIR && docker compose up -d"
+  trim_build_cache
 }
 
 if $INFRA_ONLY; then
@@ -154,6 +190,15 @@ echo "==> Validating env files..."
 check_env_keys "infra .env"  "$INFRA_DIR/.env.example" "$INFRA_DIR/.env"
 check_env_keys "app .env"    "$APP_DIR/.env.example"   "$APP_DIR/.env"
 
+# ── Build Docker images ──────────────────────────────────────────────
+#
+# Before anything the running site depends on changes. If an image fails to
+# build, the deploy stops here with the web bundle, schema and nginx config
+# untouched, rather than after replacing the bundle under services it then
+# never restarts.
+
+build_images
+
 # ── Build on VM ──────────────────────────────────────────────────────
 
 if ! $QUICK; then
@@ -191,11 +236,12 @@ ssh $VM "sudo cp $APP_DIR/infra/nginx.conf /etc/nginx/sites-available/sideways &
   sudo rm -f /etc/nginx/sites-enabled/default && \
   sudo nginx -t && sudo systemctl reload nginx"
 
-# ── Restart Docker services (rebuilds local images so kratos/hydra
+# ── Restart Docker services (onto the images built above, so kratos/hydra
 #    config changes baked via Dockerfile actually land) ───────────────
 
 echo "==> Restarting Docker services..."
-ssh $VM "cd $INFRA_DIR && docker compose up -d --build"
+ssh $VM "cd $INFRA_DIR && docker compose up -d"
+trim_build_cache
 
 # ── Restart app services ─────────────────────────────────────────────
 
