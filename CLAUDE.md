@@ -91,6 +91,16 @@ but note `PUBLIC_URL` and `PUBLIC_API_URL` are baked in at build time via
 `import.meta.env`, so an off-host build must set both to the target's values or
 the bundle points at localhost.
 
+**Host requirement: a few GB of free disk.** A full or `--infra` deploy can
+rebuild Docker images, and the Mermaid image alone (Chromium and its system
+libraries) takes about 2GB. When the disk fills mid-build, Playwright reports
+`Failed to download Chrome for Testing … code=1` — the network is fine; only
+`journalctl` shows `no space left on device`. `deploy.sh` now refuses to start
+with less than 3GB free (`DEPLOY_MIN_FREE_GB` overrides) and trims the BuildKit
+cache to its newest 3GB after each deploy; unbounded, that cache grew to most of
+`/var/lib/docker` on `sideways-dev`'s 17GB disk. A temporary build swapfile
+comes out of the same disk; add it before running `deploy.sh`, so the check counts it.
+
 The deploy scripts target a remote host over SSH. Set `DEPLOY_HOST` to your SSH destination:
 
 ```bash
