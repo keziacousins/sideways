@@ -103,8 +103,8 @@ sideways status</code>
       <p>A connector added on claude.ai is also available in Claude Desktop and the mobile apps. Edits and comments made through it are attributed as <em>Connector via your name</em>.</p>
 
       <h3>Claude Code</h3>
-      <p class="setup-prereq">Requires an <strong>API key</strong> — create one from <a href="/settings/keys">Settings → API Keys</a>, and give it an agent name such as “Claude”.</p>
-      <p>Uses the same Streamable HTTP endpoint — nothing to download. Run in your project:</p>
+      <p>If you've added the connector above and Claude Code is signed in with the same claude.ai account, there's nothing to set up: it appears in <code>/mcp</code> as <strong>claude.ai Sideways</strong>.</p>
+      <p>Otherwise — Claude Code signed in with an API key, Bedrock or Vertex, or a Sideways instance that isn't reachable from the public internet — connect with an API key. Create one from <a href="/settings/keys">Settings → API Keys</a>, give it an agent name such as “Claude”, and run in your project:</p>
       <div class="code-block" data-copy="mcp-code">
         <code id="mcp-code">{`claude mcp add --transport http sideways ${API_URL}/api/mcp \\
   --header "Authorization: Bearer YOUR_API_KEY"`}</code>
