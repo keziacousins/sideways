@@ -25,7 +25,15 @@ Don't add Sideways to `claude_desktop_config.json`. That file runs local servers
 
 ## Setting Up Claude Code
 
-Claude Code uses an API key. Create one in the web UI under **Settings → API Keys**, and give it an agent name such as "Claude" (see [Agent Identity](#agent-identity)). Then run in your project:
+If you've added the Sideways connector on claude.ai and Claude Code is signed in with the same claude.ai account, there's nothing to set up. Claude Code picks up your claude.ai connectors automatically, and Sideways appears in `/mcp` as **claude.ai Sideways**.
+
+Use an API key instead when:
+
+- Claude Code is signed in with an Anthropic API key, or runs through Bedrock or Vertex. claude.ai connectors aren't available there.
+- The Sideways instance isn't reachable from the public internet, such as a local or private-network server. Connectors are called from Anthropic's cloud. An API key connection goes straight from your machine.
+- You want changes attributed to a named agent such as "Claude" rather than "Connector" (see [Agent Identity](#agent-identity)).
+
+Create a key in the web UI under **Settings → API Keys**, and give it an agent name. Then run in your project:
 
 ```bash
 claude mcp add --transport http sideways https://your-sideways-instance/api/mcp \
