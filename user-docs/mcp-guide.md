@@ -50,7 +50,7 @@ Earlier versions shipped a separate stdio server, `sideways-mcp.cjs`. It has bee
 
 ## Available Tools
 
-Tools are namespaced by entity: `space_*`, `doc_*`, `comment_*`, plus `search`.
+Tools are namespaced by entity: `space_*`, `doc_*`, `comment_*`, `diagram_*`, plus `search`.
 
 ### Document refs
 
@@ -87,6 +87,12 @@ Every doc has a single-string canonical ref: `<space>:<section>/<path>.md` — e
 | Tool | Description |
 |------|-------------|
 | `search` | Full-text search across documents |
+
+### Diagrams
+| Tool | Description |
+|------|-------------|
+| `diagram_preview` | Render a Typst diagram as it would appear in a given document, and return it as an image with the compiler's warnings or errors |
+| `diagram_guide` | Read the Typst diagram authoring guide, the same page as Typst diagrams in this space |
 
 ## The doc_edit Tool
 
