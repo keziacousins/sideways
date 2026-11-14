@@ -11,6 +11,7 @@
     "@hono/node-server": "^1.19.17",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@ory/client": "^1.22.66",
+    "@resvg/resvg-js": "^2.6.2",
     "@sideways/db": "workspace:*",
     "@sideways/markdown": "workspace:*",
     "@sideways/mcp": "workspace:*",

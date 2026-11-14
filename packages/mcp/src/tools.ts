@@ -20,6 +20,7 @@ const INSTRUCTIONS = `Sideways is a documentation platform. Capabilities:
 - Documents: read, write, edit (in-place), rename, move, duplicate, delete, version history
 - Comments: add, list, resolve, reply (threaded, optionally anchored to text)
 - Search: full-text across documents
+- Diagrams: preview a Typst diagram as an image before saving it, and read the Typst authoring guide
 
 ALWAYS pass \`ref\` to doc and comment tools — never \`space\` + \`path\` separately. Refs have the form \`<space>:<section>/<path>.md\`, e.g. \`engineering:architecture/api-design.md\`. \`search\` and \`doc_list\` emit refs you can copy verbatim into doc_read, doc_edit, comment_add, etc. The first segment after the colon is the section (a filesystem-shaped grouping); the rest is the path within that section.
 
@@ -27,6 +28,7 @@ Concepts:
 - doc_write is an upsert: creates the doc if its ref is new, updates otherwise. The section must exist first — use section_create if you're writing into a new section (every space starts with a \`default\` section).
 - doc_edit applies search/replace pairs sequentially; if any \`old\` string is not found the whole edit fails.
 - Comments can be anchored to exact text passages for inline review.
+- Typst diagrams are \`\`\`typst fences drawn with CeTZ. Before writing one, call diagram_guide for the prelude, fonts and layout rules; then check each diagram with diagram_preview, which shows you the rendered image and the compiler's errors and warnings, before saving it with doc_write or doc_edit.
 
 URL form: \`/s/<space>/<path-without-md>\` (with \`<dir>/index.md\` collapsed to \`<dir>\`).`;
 
@@ -511,6 +513,48 @@ export function registerTools(server: McpServer, apiFetch: ApiFetch) {
         .map((r: any) => `${formatRef(r.spaceSlug, r.sectionSlug, r.path)} — ${r.title}\n  ${r.snippet?.replace(/<[^>]+>/g, "") || ""}`)
         .join("\n\n");
       return { content: [{ type: "text" as const, text: text || "No documents found." }] };
+    },
+  );
+
+  // --- Diagrams ---
+
+  server.tool(
+    "diagram_preview",
+    'Render a Typst diagram and see it, before putting it in a document. Pass the source inside a ```typst fence, without the fence, and the ref of the document it is for (e.g. "engineering:architecture/overview.md"; the document need not exist yet). It is drawn as it would be there, in the space\'s theme fonts, reading images relative to that document. Returns the diagram as a PNG with the compiler\'s warnings, or the compiler\'s errors if it does not compile.',
+    {
+      ref: z.string().describe(REF_DESC),
+      source: z.string().describe("Typst source of the diagram, without the ```typst fence"),
+    },
+    async ({ ref, source }) => {
+      const { space, section, rest } = parseRef(ref);
+      const preview = await apiFetch(`/api/documents/${encodeURIComponent(space)}/${encodeURIComponent(section)}/_diagram/${encodePath(rest)}`, {
+        method: "POST",
+        body: JSON.stringify({ source }),
+      });
+      const warnings: string[] = preview.warnings ?? [];
+      const warningText = warnings.length ? `\nWarnings: ${warnings.join("; ")}` : "";
+      if (!preview.png) {
+        return {
+          content: [{ type: "text" as const, text: `The diagram did not compile: ${preview.error}${warningText}` }],
+          isError: true,
+        };
+      }
+      return {
+        content: [
+          { type: "image" as const, data: preview.png, mimeType: "image/png" },
+          { type: "text" as const, text: `Rendered at ${preview.width}x${preview.height}px.${warningText || " No warnings."}` },
+        ],
+      };
+    },
+  );
+
+  server.tool(
+    "diagram_guide",
+    "The authoring guide for Typst diagrams: the canvas and units, the prelude's helpers, fonts, colours, images from the space, and worked examples. Read it before writing a diagram.",
+    {},
+    async () => {
+      const { markdown } = await apiFetch("/api/diagrams/guide");
+      return { content: [{ type: "text" as const, text: markdown }] };
     },
   );
 }
