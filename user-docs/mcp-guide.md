@@ -2,35 +2,41 @@
 
 Sideways includes a built-in MCP (Model Context Protocol) server that lets AI agents like Claude read, write, search, and comment on documentation.
 
-## Setting Up Claude Desktop
+The server is at `https://your-sideways-instance/api/mcp` and uses the Streamable HTTP transport. It accepts two kinds of credential:
 
-Add to your Claude Desktop MCP configuration:
+- **OAuth sign-in**, for Claude connectors. You sign in with your Sideways account and approve a consent screen. No API key is involved.
+- **An API key**, for Claude Code and any other client that can send an `Authorization` header.
 
-```json
-{
-  "mcpServers": {
-    "sideways": {
-      "url": "https://your-sideways-instance/api/mcp",
-      "headers": {
-        "Authorization": "Bearer sk-your-api-key"
-      }
-    }
-  }
-}
-```
+## Setting Up Claude (claude.ai, Desktop and Mobile)
 
-The API key must be passed in the `Authorization` header — Sideways no longer accepts keys via `?key=` query parameter (they would leak through browser history, server logs, and the `Referer` header).
+Add Sideways as a custom connector:
 
-Create an API key with an agent name (e.g. "Claude") in the web UI under API Keys. This ensures comments and edits are attributed to the agent.
+1. In Claude, open **Settings → Connectors** and choose **Add custom connector**.
+2. Name it `Sideways` and paste `https://your-sideways-instance/api/mcp` as the URL. Leave the advanced OAuth settings empty.
+3. Choose **Connect**. Claude sends you to Sideways to sign in, then to a consent screen. Approve it.
+
+A connector added on claude.ai is also available in Claude Desktop and the Claude mobile apps. Claude reaches the server from Anthropic's cloud, so the instance must be reachable from the public internet.
+
+The consent screen labels Claude as an **unverified third-party connector**. That is expected: Claude registers itself with Sideways automatically, and Sideways flags every client that registers this way. Tokens issued to a connector work only against the MCP endpoint, not the rest of the API.
+
+To disconnect, remove the connector in Claude's settings.
+
+Don't add Sideways to `claude_desktop_config.json`. That file runs local servers only. Remote servers go through **Connectors**.
 
 ## Setting Up Claude Code
 
-Claude Code connects to the same HTTP endpoint with the same API key — there is nothing to download. Run in your project:
+Claude Code uses an API key. Create one in the web UI under **Settings → API Keys**, and give it an agent name such as "Claude" (see [Agent Identity](#agent-identity)). Then run in your project:
 
 ```bash
 claude mcp add --transport http sideways https://your-sideways-instance/api/mcp \
   --header "Authorization: Bearer sk-your-api-key"
 ```
+
+Claude Code's own OAuth sign-in doesn't work with Sideways. It asks to be redirected to a `http://localhost` address after sign-in, and Sideways only accepts HTTPS redirect addresses on public hosts.
+
+The API key must be passed in the `Authorization` header. Sideways does not accept keys in a `?key=` query parameter, because they would leak through browser history, server logs and the `Referer` header.
+
+The same setup works for any other MCP client that can send an `Authorization` header.
 
 Earlier versions shipped a separate stdio server, `sideways-mcp.cjs`. It has been removed; a `.mcp.json` entry that still runs it should be replaced with the command above.
 
@@ -89,11 +95,16 @@ Edits are applied sequentially. If any `old` string isn't found, the operation f
 
 ## Agent Identity
 
-API keys can have an **actor name** — set this to "Claude" or your agent's name when creating the key. This ensures:
+Edits and comments made by an agent carry an **actor name** alongside your own name. Because of it:
 
 - Comments show as "Claude via Your Name"
 - You receive notifications when the agent replies to your comments
 - You receive notifications when the agent updates watched documents
+
+Where the actor name comes from depends on how the agent connects:
+
+- **Claude connectors** are always named "Connector", so their comments show as "Connector via Your Name". Sideways sets this at the consent screen and ignores the name the connector registers with, so a connector cannot pass itself off as a different agent.
+- **API keys** use the actor name you give the key when creating it. Set it to "Claude" or your agent's name. A key with no actor name acts as you, and its changes are not marked as an agent's.
 
 For CLI usage, set the environment variable:
 

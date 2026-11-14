@@ -88,27 +88,28 @@ sideways status</code>
       </h2>
       <p>Connect AI assistants to read, write, and comment on documentation via the <a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a>.</p>
 
-      <p class="setup-prereq">Requires an <strong>API key</strong> — create one from <a href="/settings/keys">Settings → API Keys</a>.</p>
-
-      <h3>Claude Desktop</h3>
-      <p>Uses the Streamable HTTP transport. Add to your Claude Desktop config (<code>claude_desktop_config.json</code>):</p>
-      <div class="code-block" data-copy="mcp-desktop">
-        <code id="mcp-desktop">{JSON.stringify({
-  mcpServers: {
-    sideways: {
-      url: `${API_URL}/api/mcp`,
-      headers: { Authorization: "Bearer YOUR_API_KEY" }
-    }
-  }
-}, null, 2)}</code>
+      <p>The server URL is:</p>
+      <div class="code-block" data-copy="mcp-url">
+        <code id="mcp-url">{`${API_URL}/api/mcp`}</code>
       </div>
 
+      <h3>Claude (claude.ai, Desktop and mobile)</h3>
+      <p class="setup-prereq">No API key needed — you sign in with your Sideways account.</p>
+      <ol>
+        <li>In Claude, open <strong>Settings → Connectors</strong> and choose <strong>Add custom connector</strong>.</li>
+        <li>Name it <code>Sideways</code> and paste the server URL above. Leave the advanced OAuth settings empty.</li>
+        <li>Choose <strong>Connect</strong>. Sign in to Sideways and approve the consent screen.</li>
+      </ol>
+      <p>A connector added on claude.ai is also available in Claude Desktop and the mobile apps. Edits and comments made through it are attributed as <em>Connector via your name</em>.</p>
+
       <h3>Claude Code</h3>
+      <p class="setup-prereq">Requires an <strong>API key</strong> — create one from <a href="/settings/keys">Settings → API Keys</a>, and give it an agent name such as “Claude”.</p>
       <p>Uses the same Streamable HTTP endpoint — nothing to download. Run in your project:</p>
       <div class="code-block" data-copy="mcp-code">
         <code id="mcp-code">{`claude mcp add --transport http sideways ${API_URL}/api/mcp \\
   --header "Authorization: Bearer YOUR_API_KEY"`}</code>
       </div>
+      <p>The same API-key setup works for any other MCP client that can send an <code>Authorization</code> header.</p>
 
       <h3>Available tools</h3>
       <div class="cmd-list">
@@ -234,11 +235,17 @@ sideways status</code>
     margin-bottom: 0.5rem;
   }
 
-  .setup-section p {
+  .setup-section p,
+  .setup-section ol {
     font-size: var(--sw-text-sm);
     color: var(--sw-text-secondary);
     line-height: 1.6;
     margin-bottom: 0.75rem;
+  }
+
+  .setup-section ol {
+    padding-left: 1.25rem;
+    list-style: decimal;
   }
 
   .setup-section a {
