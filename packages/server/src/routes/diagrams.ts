@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { type Database, spaces } from "@sideways/db";
@@ -18,8 +19,18 @@ import { etagMatches, INERT_CSP } from "../lib/assets.js";
 
 const DIAGRAM_FILE_RE = /^([0-9a-f]{64})\.svg$/;
 
+/**
+ * The Typst authoring guide, for agents writing diagrams through MCP (issue
+ * #124). Served from the repo so it is versioned with the prelude it describes.
+ */
+const GUIDE_PATH = new URL("../../../../user-docs/typst-diagrams.md", import.meta.url);
+
 export function createDiagramRoutes(db: Database, storage: Storage) {
   const router = new Hono();
+
+  router.get("/guide", async (c) => {
+    return c.json({ markdown: await readFile(GUIDE_PATH, "utf8") });
+  });
 
   router.get("/:space/:file", async (c) => {
     const match = DIAGRAM_FILE_RE.exec(c.req.param("file"));

@@ -31,6 +31,7 @@ import { recordEvents, type EventInput } from "../lib/activity.js";
 import { loadWikiLinkContext } from "../lib/wikilinks-context.js";
 import { createMermaidRenderer } from "../lib/mermaid.js";
 import { createTypstRenderer, fontContextKey, PRELUDE_VERSION, themeFontContext, typstDocument, typstFontContext } from "../lib/typst.js";
+import { previewDiagram } from "../lib/diagram-preview.js";
 import { createAssetInliner } from "../lib/assets.js";
 import {
   resolveSection,
@@ -391,6 +392,43 @@ export function createDocumentRoutes(db: Database, storage: Storage) {
     );
     const html = await renderMarkdown(body.content || "", { target, wikiLinks, renderTypst: typst.render });
     return c.json({ html });
+  });
+
+  /**
+   * Preview one Typst diagram as a PNG, as it would render in this document:
+   * the space's theme fonts, the images it reads relative to the document.
+   * The document needn't exist yet. A diagram that doesn't compile is still a
+   * successful preview — the compiler's errors are the result — so only a
+   * sidecar that's down or busy is an error status.
+   */
+  router.post("/:space/:section/_diagram/:path{.+}", async (c) => {
+    const spaceResult = await resolveSpace(c, c.req.param("space"));
+    if ("error" in spaceResult) return spaceResult.error;
+    const { space } = spaceResult;
+
+    const section = await resolveSection(db, space.id, c.req.param("section"));
+    if (!section) return c.json({ error: "Section not found" }, 404);
+
+    const body = await c.req.json<{ source?: unknown }>().catch(() => ({ source: undefined }));
+    if (typeof body.source !== "string" || !body.source.trim()) {
+      return c.json({ error: "source is required" }, 400);
+    }
+
+    const preview = await previewDiagram(
+      body.source,
+      await themeFontContext(db, space.themeId),
+      typstDocument(db, storage, space.id, section.id, c.req.param("path")),
+    );
+    if (preview.ok) {
+      return c.json({
+        png: preview.png.toString("base64"),
+        width: preview.width,
+        height: preview.height,
+        warnings: preview.warnings,
+      });
+    }
+    if ("transient" in preview) return c.json({ error: preview.error }, 503);
+    return c.json({ error: preview.error, warnings: preview.warnings });
   });
 
   /** Get a document rendered as HTML */
